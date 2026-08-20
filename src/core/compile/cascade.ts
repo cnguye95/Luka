@@ -81,11 +81,85 @@ export function cascadeScope(
   };
 }
 
+/**
+ * The manifest value recorded for a departed source whose cascade could not be
+ * completed, so that §6.2 sees the path leave again next compile and the
+ * cascade retries.
+ *
+ * Deliberately not a SHA-256. §6.2 identifies sources by content hash, and a
+ * restored real hash would sit in the manifest for as many runs as the failure
+ * lasts, waiting to pair as a rename against any unrelated file that happens to
+ * share those bytes — a copied template or a second empty file would silently
+ * inherit the dead path's identity and its pages. Nothing can hash to this, so
+ * the entry can only ever be read as "still gone, still owed a cascade".
+ */
+export const CASCADE_PENDING = "cascade-pending";
+
 /** A derivative left behind by a source that is no longer at `owner`. */
 export interface OrphanedDerivative {
   derivative: string;
   /** The departed source path — so a failed delete can block exactly it. */
   owner: string;
+}
+
+/**
+ * §6.1's derivative location for a source path — `<original-stem>.md` beside
+ * the original — computed without the format, which a departed path no longer
+ * offers. For a passthrough source this is the source itself, which is exactly
+ * why the sweep skips that case.
+ */
+export function derivativeLocation(path: string): string {
+  const directory = dirname(path);
+  const name = `${stem(path)}.md`;
+  return directory === "" ? name : joinPath(directory, name);
+}
+
+/** A derivative whose owner was renamed without the file itself moving. */
+export interface RepointedDerivative {
+  derivative: string;
+  from: string;
+  to: string;
+}
+
+/**
+ * Derivatives that came through a rename still naming the source's old path.
+ *
+ * The file at the *new* path's derivative location is this source's derivative
+ * whenever its `derived-from` is the old path — whether it never moved (an
+ * extension-only rename such as `data.csv` to `data.tsv` keeps the same
+ * location) or moved along with its original. Either way only the key is
+ * stale, and left that way the next compile reads the source as missing its
+ * derivative and then refuses to overwrite what now looks like a stranger's
+ * file, failing that source on every run.
+ *
+ * Repointing is the same bookkeeping §6.2 asks of a rename everywhere else,
+ * and it costs no model call.
+ */
+export async function renamedDerivatives(
+  fs: FsAdapter,
+  renames: readonly { from: string; to: string }[],
+): Promise<RepointedDerivative[]> {
+  const found: RepointedDerivative[] = [];
+
+  for (const rename of renames) {
+    const derivative = derivativeLocation(rename.to);
+    // A passthrough source is its own readable markdown and has no derivative.
+    if (derivative === rename.from || derivative === rename.to) continue;
+
+    const stat = await fs.stat(derivative);
+    if (stat === null || stat.kind !== "file") continue;
+
+    try {
+      const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
+      if (data["derived-from"] === rename.from) {
+        found.push({ derivative, from: rename.from, to: rename.to });
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return found.sort((a, b) => comparePaths(a.derivative, b.derivative));
 }
 
 /**
@@ -95,26 +169,44 @@ export interface OrphanedDerivative {
  *
  * The candidate is §6.1's location — `<original-stem>.md` beside the original —
  * computed without consulting the format, because a deleted repo directory has
- * no extension to read one from and the file is gone either way. Content is
- * what makes it safe: only a file whose `derived-from` names this exact
- * departed path is Luka's to delete (invariant 7). A passthrough source is its
- * own readable markdown and has no derivative, so it is skipped outright.
+ * no extension to read one from and the file is gone either way.
+ *
+ * Content, not the path, is what makes this safe: only a file whose
+ * `derived-from` names this exact departed path is Luka's to delete
+ * (invariant 7), so a user's own file or another source's derivative sitting
+ * at the candidate path survives. A departed `.md` is skipped outright, since
+ * its candidate is itself; a departed `.txt` is caught by the same
+ * `derived-from` check as everything else.
  */
 export async function orphanedDerivatives(
   fs: FsAdapter,
   oldPaths: readonly string[],
+  stillClaimed: ReadonlySet<string> = new Set(),
 ): Promise<OrphanedDerivative[]> {
   const found: OrphanedDerivative[] = [];
 
   for (const owner of [...oldPaths].sort(comparePaths)) {
-    const directory = dirname(owner);
-    const name = `${stem(owner)}.md`;
-    const derivative = directory === "" ? name : joinPath(directory, name);
+    const derivative = derivativeLocation(owner);
 
     if (derivative === owner) continue;
-    if (!(await fs.exists(derivative))) continue;
+    // Sources sharing a stem share this location, so a departed `data.csv` and
+    // a living `data.tsv` both point at `data.md` — and an extension-only
+    // rename makes that the *same* file under both names. The derivative of a
+    // source that still exists is never an orphan, whatever its `derived-from`
+    // still says; the run that owns it will rewrite the key.
+    if (stillClaimed.has(derivative)) continue;
 
-    const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
+    // A folder, or a file that cannot be read, is not Luka's derivative — and
+    // must not take the whole compile down before any work is done.
+    const stat = await fs.stat(derivative);
+    if (stat === null || stat.kind !== "file") continue;
+
+    let data: Record<string, unknown>;
+    try {
+      data = parseFrontmatter(decodeUtf8(await fs.read(derivative))).data;
+    } catch {
+      continue;
+    }
     if (data["derived-from"] === owner) found.push({ derivative, owner });
   }
 

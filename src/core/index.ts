@@ -5,8 +5,11 @@
 import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
 import {
+  CASCADE_PENDING,
   cascadeScope,
+  derivativeLocation,
   orphanedDerivatives,
+  renamedDerivatives,
   type ScopePreview,
 } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
@@ -39,7 +42,7 @@ import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
 import { loadManifest, saveManifest } from "./manifest";
 import { derivativePathFor, formatForPath, normalizeSource } from "./normalize/index";
-import { dirname, stem } from "./paths";
+import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
 import type { IngestManifest, LukaSettings, OperationName, PageMeta } from "./types";
@@ -165,14 +168,19 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const manifest = await loadManifest(deps.fs, deps.manifestPath);
   const discovery = await discover(deps.fs, manifest);
 
+  // The wiki as this run found it. Read once: normalization writes only into
+  // `raw/`, so this table and these citation records are still exact when the
+  // merge reaches for them below.
+  let pages = await loadPageTable(deps.fs);
+  let citations = await readCitations(deps.fs, pages);
+
   // ── Scope preview (§6.6, §8.1) ─────────────────────────────────────────
   // "with scope preview when the diff includes deletions or modifications".
   // This sits inside the lock the façade already holds, so the lock spans
   // preview → confirm → work exactly as §8.1 requires, and a second invocation
   // during the modal gets invariant 2's busy notice.
   if ((discovery.deleted.length > 0 || discovery.modified.length > 0) && options.confirm) {
-    const existing = await loadPageTable(deps.fs);
-    const preview = cascadeScope(existing, await readCitations(deps.fs, existing), discovery);
+    const preview = cascadeScope(pages, citations, discovery);
     if (!(await options.confirm(preview))) return cancelled(discovery);
   }
 
@@ -196,29 +204,60 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const failed: CompileFailure[] = [];
   let wrote = false;
 
-  // Deleted sources whose cascade could not be completed. Their manifest entry
-  // is put back at the end, so §6.2's rule 3 fires again next compile and the
-  // cascade retries — the same shape invariant 3 gives a failed ingest.
-  const blockedDeleted = new Set<string>();
+  // Departed sources whose cascade could not be completed, and why. Their
+  // manifest entry is put back at the end, so §6.2's rules see the path leave
+  // again next compile and the cascade retries — the same shape invariant 3
+  // gives a failed ingest.
+  const blockedDeleted = new Map<string, string[]>();
 
   // ── Orphaned derivatives ───────────────────────────────────────────────
   // A source that left its path takes its derivative with it: `wiki/` is
   // machine-owned and so is anything Luka wrote into `raw/` (invariant 7).
   // This runs before normalization so a new source with the same stem can
   // claim the freed derivative path in this very run.
-  for (const orphan of await orphanedDerivatives(deps.fs, [
-    ...discovery.deleted,
-    ...discovery.renamed.map((rename) => rename.from),
-  ])) {
+  // A rename that did not move the derivative only invalidated its origin key.
+  // Repointing it here, before normalization, is what keeps §6.2's promise
+  // that a rename costs no regeneration: without it the source reads as
+  // missing its derivative next run and re-extracts — or fails outright,
+  // because claiming the path would look like overwriting a stranger's file.
+  for (const entry of await renamedDerivatives(deps.fs, discovery.renamed)) {
+    try {
+      const text = decodeUtf8(await deps.fs.read(entry.derivative));
+      const parsed = parseFrontmatter(text);
+      await deps.fs.write(
+        entry.derivative,
+        serializeFrontmatter({ ...parsed.data, "derived-from": entry.to }) + parsed.body,
+      );
+      wrote = true;
+    } catch (error) {
+      failed.push({
+        path: entry.to,
+        reason: `could not repoint ${entry.derivative} — ${describe(error)}`,
+      });
+    }
+  }
+
+  const stillClaimed = new Set(
+    [
+      ...discovery.added,
+      ...discovery.modified,
+      ...discovery.unchanged,
+    ]
+      .map((source) => source.path)
+      .concat(discovery.renamed.map((rename) => rename.to))
+      .map(derivativeLocation),
+  );
+
+  for (const orphan of await orphanedDerivatives(
+    deps.fs,
+    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)],
+    stillClaimed,
+  )) {
     try {
       await deps.fs.delete(orphan.derivative);
       wrote = true;
     } catch (error) {
-      blockedDeleted.add(orphan.owner);
-      failed.push({
-        path: orphan.owner,
-        reason: `could not delete ${orphan.derivative} — ${describe(error)}`,
-      });
+      block(blockedDeleted, orphan.owner, `could not delete ${orphan.derivative} — ${describe(error)}`);
     }
   }
 
@@ -269,9 +308,6 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       failed.push({ path: result.entry.source.path, reason: result.reason });
     }
   }
-
-  let pages = await loadPageTable(deps.fs);
-  let citations = await readCitations(deps.fs, pages);
 
   // ── Renames ────────────────────────────────────────────────────────────
   // §6.2 skips *regeneration* for a rename, not bookkeeping: §4 makes the
@@ -360,11 +396,22 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     return text;
   };
 
+  // §6.6's "surviving citing sources": the file is still in the vault. Being
+  // present is enough — a source that failed to normalize or inventory this run
+  // has not gone anywhere, and deleting the page it cites because one run went
+  // badly is not recoverable the way retrying an ingest is. This is also the
+  // set `cascadeScope` calls live, so the preview and the run agree.
+  //
   // `Object.hasOwn`, not `next[path] !== undefined`: a hand-written citation
   // entry of `constructor` or `toString` would otherwise resolve to an
   // inherited member of the manifest object and read as a live source forever.
+  const present = new Set(
+    [...discovery.added, ...discovery.modified, ...discovery.unchanged]
+      .map((source) => source.path)
+      .concat(discovery.renamed.map((rename) => rename.to)),
+  );
   const isLive = (path: string): boolean =>
-    Object.hasOwn(next, path) || readable.has(path);
+    present.has(path) || Object.hasOwn(next, path) || readable.has(path);
 
   const affected = [
     ...workSet.regenerate.map((item) => ({
@@ -393,7 +440,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // This runs before the kind filter on purpose. A deleted source's own source
   // page is caught here by the same rule as any other — its only citation is
   // the raw file that just vanished — so it needs no case of its own.
-  const doomed = affected.filter((target) => target.citers.length === 0);
+  //
+  // A page this run is writing is never doomed, whatever its old block said.
+  // Doomedness is read from the citation block on disk, while a source page is
+  // queued from its `source:` key, so a page whose block was edited by hand to
+  // name only a dead path would otherwise be written and then deleted in the
+  // same run. The write is the authoritative record; it wins.
+  const writing = new Set(toWrite.map((page) => page.path));
+  const doomed = affected.filter(
+    (target) => target.citers.length === 0 && !writing.has(target.path),
+  );
   const doomedPaths = new Set(doomed.map((target) => target.path));
 
   // Entity/concept pages — one Call B each.
@@ -433,7 +489,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // Every source that queued this page must be re-inventoried to retry it.
     const reason = `page generation failed for ${result.target.title} — ${result.reason}`;
     for (const citer of result.target.citers) block(blockedBy, citer, reason);
-    blockCascade(blockedDeleted, affectedByDeleted, result.target.path);
+    blockCascade(blockedDeleted, affectedByDeleted, result.target.path, reason);
   }
 
   // ── Post-process and write ─────────────────────────────────────────────
@@ -457,24 +513,27 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // step, discarding the record for every source that succeeded and making the
   // next run re-spend every model call it already paid for. §11's rule is that
   // a failure costs one source, so this degrades the same way.
+  let pagesWritten = 0;
   for (const page of toWrite) {
     try {
       const directory = dirname(page.path);
       if (directory !== "") await deps.fs.mkdir(directory);
       await deps.fs.write(page.path, renderPage(page, index, today));
+      pagesWritten += 1;
       wrote = true;
     } catch (error) {
       const reason = `could not write ${page.path} — ${describe(error)}`;
       if (page.citers.length === 0) failed.push({ path: page.path, reason });
       for (const citer of page.citers) block(blockedBy, citer, reason);
-      blockCascade(blockedDeleted, affectedByDeleted, page.path);
+      blockCascade(blockedDeleted, affectedByDeleted, page.path, reason);
     }
   }
 
   // ── Delete (§6.6) ──────────────────────────────────────────────────────
   // After the writes and before the index, so the index is re-derived from a
-  // page table that no longer contains them. A doomed page is never also a
-  // written one: every entry in `toWrite` has at least one live citer.
+  // page table that no longer contains them. Doomed and written pages are
+  // disjoint: entity/concept pages reach `toWrite` only with a live citer, and
+  // the source pages already in it were excluded from `doomed` by path.
   let pagesDeleted = 0;
   for (const page of doomed) {
     try {
@@ -482,8 +541,9 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       pagesDeleted += 1;
       wrote = true;
     } catch (error) {
-      failed.push({ path: page.path, reason: `could not delete — ${describe(error)}` });
-      blockCascade(blockedDeleted, affectedByDeleted, page.path);
+      const reason = `could not delete ${page.path} — ${describe(error)}`;
+      if (!affectedByDeleted.has(page.path)) failed.push({ path: page.path, reason });
+      blockCascade(blockedDeleted, affectedByDeleted, page.path, reason);
     }
   }
 
@@ -506,6 +566,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   }
 
   // ── Manifest ───────────────────────────────────────────────────────────
+  // The rename pass above recorded the new path unconditionally, because a
+  // rename on its own needs no processing. When the same source was *also*
+  // modified — its derivative did not come along — that entry is a claim the
+  // run has not earned, so a failure has to take it back out (invariant 3).
+  const succeeded = new Set(ready.map((entry) => entry.source.path));
+  for (const rename of discovery.renamed) {
+    const alsoModified = discovery.modified.some((source) => source.path === rename.to);
+    if (alsoModified && !succeeded.has(rename.to)) delete next[rename.to];
+  }
+
   for (const entry of ready) {
     const blocked = blockedBy.get(entry.source.path);
     if (blocked === undefined) {
@@ -515,14 +585,23 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     }
   }
 
-  // A deletion is only recorded once its cascade completed. Putting the entry
-  // back makes §6.2 rule 3 (path present, file absent) fire again next compile,
-  // which re-runs the cascade idempotently — retry with no extra state, exactly
-  // as a failed ingest retries by not being manifested.
-  for (const path of discovery.deleted) {
-    if (!blockedDeleted.has(path)) continue;
-    next[path] = manifest[path] as string;
-    failed.push({ path, reason: "cascade incomplete — will retry next compile" });
+  // A departure is only recorded once its cascade completed. Re-entering the
+  // path makes §6.2 see it leave again next compile, which re-runs the cascade
+  // idempotently — retry with no extra state, exactly as a failed ingest
+  // retries by not being manifested.
+  //
+  // This covers the old side of a rename as well as an outright deletion: that
+  // path is a manifest key too, which is how the rename was detected, and its
+  // stale derivative is swept by the same pass.
+  //
+  // The value is `CASCADE_PENDING`, never the old hash, so the entry cannot
+  // pair as a rename against an unrelated file with the same content while it
+  // waits.
+  for (const path of [...blockedDeleted.keys()].sort(comparePaths)) {
+    if (!Object.hasOwn(manifest, path)) continue;
+    next[path] = CASCADE_PENDING;
+    const reasons = blockedDeleted.get(path) ?? [];
+    failed.push({ path, reason: [...reasons, "cascade will retry next compile"].join("; ") });
   }
 
   if (!isSameManifest(manifest, next)) {
@@ -539,7 +618,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     renamed: discovery.renamed.length,
     skipped: discovery.skipped,
     failed,
-    pagesWritten: toWrite.length,
+    pagesWritten,
     pagesDeleted,
     modelCalls: provider.stats().requests - before,
     noop: !wrote,
@@ -611,11 +690,12 @@ async function repointRenames(
  * manifest, so the deletion is rediscovered and retried next compile.
  */
 function blockCascade(
-  blocked: Set<string>,
+  blocked: Map<string, string[]>,
   affectedByDeleted: ReadonlyMap<string, string[]>,
   pagePath: string,
+  reason: string,
 ): void {
-  for (const source of affectedByDeleted.get(pagePath) ?? []) blocked.add(source);
+  for (const source of affectedByDeleted.get(pagePath) ?? []) block(blocked, source, reason);
 }
 
 /** Records why a source cannot be manifested this run, so it retries next time. */
@@ -650,10 +730,21 @@ function toMeta(page: PageToWrite): PageMeta {
  * names this source as its origin, for the same reason.
  */
 async function readableFromManifest(fs: FsAdapter, path: string): Promise<string | null> {
-  const format = formatForPath(path);
-  const derivative = format === null ? null : derivativePathFor(path, format);
+  const stat = await fs.stat(path);
+  if (stat === null) return null;
 
-  if (derivative === null) return (await fs.exists(path)) ? path : null;
+  // A repo source is a directory (§6.4), so there is no extension to read a
+  // format from — and handing back the path itself would have Call B try to
+  // read a folder. Its readable markdown is §6.1's derivative location.
+  const format = stat.kind === "folder" ? null : formatForPath(path);
+  const derivative =
+    stat.kind === "folder"
+      ? derivativeLocation(path)
+      : format === null
+        ? null
+        : derivativePathFor(path, format);
+
+  if (derivative === null) return path;
   if (!(await fs.exists(derivative))) return null;
 
   const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));

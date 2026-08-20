@@ -495,15 +495,113 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     await core(fs, new StubProvider(replyFor)).compile();
     await fs.delete("raw/only.html");
 
-    const guarded = Object.create(fs) as MemFs;
-    guarded.delete = async (path: string): Promise<void> => {
-      if (path === "raw/only.md") throw new Error("EPERM");
-      return MemFs.prototype.delete.call(fs, path);
-    };
-
+    const guarded = refusingToDelete(fs, "raw/only.md");
     const second = await core(guarded, new StubProvider(replyFor)).compile();
 
-    expect(second.failed.map((failure) => failure.path)).toContain("raw/only.html");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/only.html"]);
+    // One problem, one notice: the reason and the retry are one entry, not two.
+    const mine = second.failed.filter((failure) => failure.path === "raw/only.html");
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.reason).toContain("could not delete raw/only.md");
+    expect(mine[0]?.reason).toContain("retry next compile");
+
+    // Retry: the sweep runs again and the deletion finally records.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third).toMatchObject({ deleted: 1, failed: [] });
+    expect(await fs.exists("raw/only.md")).toBe(false);
+    expect(manifestOf(fs)).toEqual({});
+  });
+
+  it("restores the old path of a rename whose stale derivative could not be swept", async () => {
+    // The source and its derivative both moved into a subfolder, leaving a copy
+    // of the derivative at the old location. `rename.from` is a manifest key,
+    // so it can be restored; without that nothing re-detects the orphan.
+    const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    await fs.move("raw/a.html", "raw/sub/a.html");
+    await fs.write("raw/sub/a.md", fs.text("raw/a.md"));
+
+    const guarded = refusingToDelete(fs, "raw/a.md");
+    const second = await core(guarded, new StubProvider(replyFor)).compile();
+
+    // A clean rename — the derivative travelled — but the stale copy stays.
+    expect(second).toMatchObject({ renamed: 1, modified: 0 });
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/a.html"]);
+    expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/a.html", "raw/sub/a.html"]);
+    // The travelled derivative is repointed even though the sweep failed.
+    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+
+    // Next compile sees the old path vanish again — and cannot mistake it for a
+    // rename, because the restored entry is not a content hash.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third).toMatchObject({ deleted: 1, renamed: 0, failed: [] });
+    expect(await fs.exists("raw/a.md")).toBe(false);
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/sub/a.html"]);
+  });
+
+  it("does not let a blocked deletion pair as a rename with an unrelated copy", async () => {
+    // A restored entry waits in the manifest for as long as the failure lasts.
+    // Recorded as its old hash, any file with the same bytes — a copied
+    // template, a second empty note — would inherit its identity and its pages,
+    // and the cascade would never retry.
+    const fs = sharedVault();
+    await core(fs, new StubProvider(replyFor)).compile();
+    await fs.delete("raw/one.md");
+
+    const guarded = refusingToDelete(fs, "wiki/concepts/Graphs.md");
+    await core(guarded, new StubProvider(replyFor)).compile();
+    expect(Object.keys(manifestOf(fs))).toContain("raw/one.md");
+
+    // The same bytes the deleted source had, at a path that has nothing to do
+    // with it.
+    await fs.write("raw/copy.md", "Ranking and Graphs.\n");
+    const provider = new StubProvider(replyFor);
+    const third = await core(fs, provider).compile();
+
+    // Read as a rename, the new file would inherit the dead path's identity:
+    // no ingest at all, its real content never inventoried, and the pages the
+    // cascade owed a deletion silently repointed onto it.
+    expect(third).toMatchObject({ renamed: 0, added: 1, deleted: 1 });
+    expect(provider.callsFor("inventory")).toHaveLength(1);
+    expect(provider.callsFor("inventory")[0]?.user).toContain("Ranking and Graphs");
+    expect(citersOf(fs, "wiki/sources/copy.md")).toEqual(["raw/copy.md"]);
+    // The dead path is gone from every record, and the deletion is finally done.
+    expect(citersOf(fs, "wiki/concepts/Graphs.md")).toEqual(["raw/copy.md"]);
+    expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/copy.md", "raw/two.md"]);
+  });
+
+  it("does not delete a page it is also writing this run", async () => {
+    // Doomedness is read from the citation block, but a source page is queued
+    // from its `source:` key. A block edited by hand to name only a dead source
+    // must not make the run write the page and then delete it.
+    const fs = new MemFs({
+      "raw/one.md": "Notes here.\n",
+      "raw/two.md": "Graphs here.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    const page = "wiki/sources/one.md";
+    await fs.write(page, fs.text(page).replace("- [[raw/one.md]]", "- [[raw/two.md]]"));
+
+    await fs.delete("raw/two.md");
+    await fs.write("raw/one.md", "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking.\n");
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    // The write is the authoritative record, so the page survives and its block
+    // is rebuilt from the source it actually describes.
+    expect(await fs.exists(page)).toBe(true);
+    expect(citersOf(fs, page)).toEqual(["raw/one.md"]);
+    expect(fs.text("wiki/_index.md")).toContain("[[one]]");
   });
 });
+
+/** A view of the vault whose `delete` refuses one path, as a locked file would. */
+function refusingToDelete(fs: MemFs, blocked: string): MemFs {
+  const guarded = Object.create(fs) as MemFs;
+  guarded.delete = async (path: string): Promise<void> => {
+    if (path === blocked) throw new Error("EPERM");
+    return MemFs.prototype.delete.call(fs, path);
+  };
+  return guarded;
+}

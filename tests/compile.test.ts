@@ -199,14 +199,82 @@ describe("the four rules (§6.2)", () => {
     await fs.move("raw/a.html", "raw/b.html");
     const second = await core(fs).instance.compile();
 
-    // §6.2's missing-derivative rule wins over the rename shortcut, so the new
-    // path gets a derivative rather than silently having none.
-    expect(second).toMatchObject({ renamed: 0, modified: 1, deleted: 1 });
+    // The two §6.2 rules compose: it is still a rename, so the identity moves,
+    // and it is also modified, so the new path gets its own derivative rather
+    // than silently having none. Reporting the old path as deleted instead
+    // would hand §6.6's cascade a source that never went away.
+    expect(second).toMatchObject({ renamed: 1, modified: 1, deleted: 0 });
     expect(fs.text("raw/b.md")).toContain("derived-from: raw/b.html");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/b.html"]);
 
+    // The page keeps its identity — moving a file is not a reason to lose it.
+    expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
+      "wiki/sources/a.md",
+    ]);
+    expect(fs.text("wiki/sources/a.md")).toContain("source: '[[raw/b.html]]'");
+    // And the derivative left at the old name goes.
+    expect(await fs.exists("raw/a.md")).toBe(false);
+
     fs.resetCounters();
     expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+  });
+
+  it("keeps the pages of a source moved into a subfolder (§6.2, §6.6)", async () => {
+    // Moving a file leaves its derivative behind, so this always degrades to
+    // rename + modified. Before the two rules composed, the old path was
+    // reported deleted and the cascade removed every page citing it.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    const page = "wiki/sources/data.md";
+    expect(await fs.exists(page)).toBe(true);
+
+    await fs.move("raw/data.csv", "raw/sub/data.csv");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ deleted: 0, pagesDeleted: 0 });
+    expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([page]);
+    expect(fs.text(page)).toContain("source: '[[raw/sub/data.csv]]'");
+    expect(fs.text(page)).toContain("- [[raw/sub/data.csv]]");
+    expect(fs.text("raw/sub/data.md")).toContain("derived-from: raw/sub/data.csv");
+    expect(await fs.exists("raw/data.md")).toBe(false);
+  });
+
+  it("repoints, rather than sweeping, the derivative of an extension-only rename", async () => {
+    // `data.csv` and `data.tsv` share one derivative location, so the file does
+    // not move — only its origin key goes stale. Deleting it as an orphan would
+    // strand the live source with no readable markdown.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.csv");
+
+    await fs.move("raw/data.csv", "raw/data.tsv");
+    const second = await core(fs).instance.compile();
+
+    // A rename, and no regeneration: §6.2's shortcut still applies.
+    expect(second).toMatchObject({ renamed: 1, modified: 0, deleted: 0, failed: [] });
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.tsv");
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/data.tsv"]);
+
+    // And it settles — the repointed key is what makes the next run a no-op.
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("re-extracts a source whose derivative path holds a stranger's file", async () => {
+    // `hasDerivative` checks ownership, not existence: an unrelated note at the
+    // derivative location must not make the source read as fully ingested.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.md": "My own note.\n" });
+    await core(fs).instance.compile();
+
+    await fs.move("raw/a.html", "raw/b.html");
+    const second = await core(fs).instance.compile();
+
+    // The user's file is untouched and the source is not silently manifested
+    // as ingested with no readable markdown behind it.
+    expect(fs.text("raw/b.md")).toContain("My own note.");
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/b.html"]);
+    expect(Object.keys(manifestOf(fs))).not.toContain("raw/b.html");
   });
 });
 

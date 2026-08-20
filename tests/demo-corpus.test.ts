@@ -11,10 +11,13 @@ import {
   type CompileResult,
   type ScopePreview,
 } from "../src/core/index";
+import { parseCitationBlock } from "../src/core/compile/citations";
+import { loadPageTable } from "../src/core/compile/pagetable";
 import { decodeUtf8 } from "../src/core/hash";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { NodeFs } from "./helpers/nodefs";
+import type { CompletionRequest } from "../src/core/provider/types";
 import { StubProvider, inventoryReply } from "./helpers/provider";
 
 const DEMO = path.resolve(import.meta.dirname, "..", "demo", "raw");
@@ -56,25 +59,43 @@ describe("demo corpus", { timeout: SLOW }, () => {
   });
 
   /**
-   * This suite asserts M1's ingest criteria, so the extraction phases are
-   * stubbed to their quietest replies: a one-line summary and no items, which
-   * yields one source page per source and no Call B at all.
+   * The extraction phases are stubbed, but not to silence: every source names
+   * one shared concept and one entity of its own, so the demo corpus really
+   * does produce all three page kinds and M2's acceptance criteria can be
+   * asserted on the corpus §15 names rather than on a stand-in vault.
    */
+  function replyFor(request: CompletionRequest): unknown {
+    if (request.task === "vision") return "A generated fixture image, 160 by 120 pixels.";
+    if (request.task === "page-generation") {
+      const title = /Title: (.+)/.exec(request.user)?.[1] ?? "?";
+      return `${title} is discussed by the demo corpus, alongside [[Graph Retrieval]].`;
+    }
+    // The body of each source is in the prompt; its first heading-ish word is
+    // enough to give each source a distinct entity.
+    const word = /([A-Za-z]{4,})/.exec(request.user)?.[1] ?? "Demo";
+    return inventoryReply("A demo source.", [
+      { title: "Graph Retrieval", kind: "concept", aliases: ["PPR"], summary: "Retrieval." },
+      { title: `Topic ${word}`, kind: "entity", summary: "A topic." },
+    ]);
+  }
+
+  function build(): { core: ReturnType<typeof createCore>; provider: StubProvider } {
+    const provider = new StubProvider(replyFor);
+    return {
+      core: createCore({
+        fs,
+        http,
+        manifestPath: MANIFEST,
+        settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+        now: () => new Date("2026-08-19T10:00:00Z"),
+        provider,
+      }),
+      provider,
+    };
+  }
+
   function compile(options: CompileOptions = {}): Promise<CompileResult> {
-    return createCore({
-      fs,
-      http,
-      manifestPath: MANIFEST,
-      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
-      now: () => new Date("2026-08-19T10:00:00Z"),
-      provider: new StubProvider((request) =>
-        request.task === "inventory"
-          ? inventoryReply("A demo source.")
-          : request.task === "vision"
-            ? "A generated fixture image, 160 by 120 pixels."
-            : "Body.",
-      ),
-    }).compile(options);
+    return build().core.compile(options);
   }
 
   const read = async (p: string) => decodeUtf8(await fs.read(p));
@@ -169,6 +190,42 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
+  // §15's M2 criterion: "demo corpus compiles into a three-kind wiki where
+  // every page has a valid citation block and appears in `_index.md`".
+  it("compiles into a three-kind wiki, every page cited and indexed", async () => {
+    await compile();
+    const pages = await loadPageTable(fs);
+
+    expect(pages.filter((page) => page.kind === "source")).toHaveLength(
+      EXPECTED_SOURCES.length,
+    );
+    expect(pages.some((page) => page.kind === "concept")).toBe(true);
+    expect(pages.some((page) => page.kind === "entity")).toBe(true);
+
+    const index = await read("wiki/_index.md");
+    for (const page of pages) {
+      const entries = parseCitationBlock(await read(page.path)).entries;
+      expect(entries.length, `${page.path} has no citations`).toBeGreaterThan(0);
+      // Every citation names a source that really exists in the vault.
+      for (const entry of entries) expect(await fs.exists(entry)).toBe(true);
+      expect(index, `${page.title} missing from the index`).toContain(`[[${page.title}]]`);
+    }
+  });
+
+  // §15's M2 criterion: "re-compile makes zero model calls (assert via a call
+  // counter)" — on the demo corpus, against the provider's own counter.
+  it("makes zero model calls on a re-compile of the demo corpus", async () => {
+    await compile();
+
+    fs.resetCounters();
+    const { core: second, provider } = build();
+    const result = await second.compile();
+
+    expect(result).toMatchObject({ modelCalls: 0, noop: true, pagesDeleted: 0 });
+    expect(provider.stats().requests).toBe(0);
+    expect(fs.writes).toBe(0);
+  });
+
   // §15's M2 criterion: "deleting a demo source shows the preview then
   // regenerates/deletes correctly".
   it("shows the scope preview for a deleted source, then deletes its page", async () => {
@@ -186,10 +243,17 @@ describe("demo corpus", { timeout: SLOW }, () => {
     });
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ deleted: 1, added: 0, modified: 0, regenerate: [] });
-    expect(seen[0]?.mayDelete).toEqual(["wiki/sources/page.md"]);
+    expect(seen[0]).toMatchObject({ deleted: 1, added: 0, modified: 0 });
+    // Its own page loses its only citer; the concept every source names keeps
+    // the other six and regenerates from them.
+    expect(seen[0]?.mayDelete).toEqual([
+      "wiki/entities/Topic Personalized.md",
+      "wiki/sources/page.md",
+    ]);
+    expect(seen[0]?.regenerate).toEqual(["wiki/concepts/Graph Retrieval.md"]);
 
-    expect(result).toMatchObject({ deleted: 1, pagesDeleted: 1, cancelled: false, failed: [] });
+    // Its source page and the entity only it named; the shared concept lives.
+    expect(result).toMatchObject({ deleted: 1, pagesDeleted: 2, cancelled: false, failed: [] });
     expect(await fs.exists("wiki/sources/page.md")).toBe(false);
     // The derivative Luka wrote for that source goes with it.
     expect(await fs.exists("raw/page.md")).toBe(false);

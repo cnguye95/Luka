@@ -69,16 +69,23 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   const { renamed, remainingAdded, remainingDeleted } = pairRenames(added, vanished, manifest);
 
   // A rename skips regeneration, but only if the derivative already sits at the
-  // new path; otherwise the missing-derivative rule wins and it reprocesses.
+  // new path; otherwise §6.2's missing-derivative rule applies as well and the
+  // source reprocesses.
+  //
+  // The two rules compose rather than compete: it is still a rename, so the
+  // manifest path and every wiki reference follow the file, and it is *also*
+  // modified, so it re-normalizes at its new path. Reporting the old path as
+  // deleted instead would hand §6.6's cascade a source that never went away —
+  // and moving a file into a subfolder, which leaves the derivative behind and
+  // so always lands here, would delete the very pages that cite it.
   const renames: Rename[] = [];
   for (const rename of renamed) {
     const source = present.get(rename.to) as DiscoveredSource;
-    if (await hasDerivative(fs, source)) {
-      renames.push(rename);
-    } else {
-      modified.push(source);
-      remainingDeleted.push(rename.from);
-    }
+    renames.push(rename);
+    // The derivative may still carry the old path as its origin: an
+    // extension-only rename leaves it at the same location, so it is this
+    // source's derivative under its previous name. Compile repoints the key.
+    if (!(await hasDerivative(fs, source, rename.from))) modified.push(source);
   }
 
   return {
@@ -91,10 +98,32 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   };
 }
 
-async function hasDerivative(fs: FsAdapter, source: DiscoveredSource): Promise<boolean> {
+/**
+ * §6.2's missing-derivative test. Ownership, not mere existence: the file at
+ * that path counts only if its `derived-from` names this source.
+ *
+ * Sources sharing a stem share the location, and a user's own note can sit
+ * there too. Accepting a stranger's file would mark the source ingested while
+ * its readable markdown does not exist — the §6.6 sweep would then delete the
+ * real derivative as an orphan, and every later compile would read the source
+ * as unchanged and feed Call B an empty body under its label.
+ */
+async function hasDerivative(
+  fs: FsAdapter,
+  source: DiscoveredSource,
+  alsoOwnedBy?: string,
+): Promise<boolean> {
   const derivative = derivativePathFor(source.path, source.format);
   if (derivative === null) return true;
-  return fs.exists(derivative);
+  if (!(await fs.exists(derivative))) return false;
+
+  try {
+    const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
+    const origin = data["derived-from"];
+    return origin === source.path || (alsoOwnedBy !== undefined && origin === alsoOwnedBy);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -156,6 +185,14 @@ function unrepresentable(path: string): string | null {
   // which is exactly why a path carrying one fails to parse back out.
   if (/[\n\r\u2028\u2029]/.test(path)) return "path contains a line break";
   if (path.includes("\\")) return "path contains a backslash";
+  // Both readers trim — `parseCitationBlock`'s entries and `source:`'s target —
+  // so a segment padded with whitespace reads back as a different path. A file
+  // needs an extension to be a source, but a repo directory does not, so
+  // `raw/my repo ` is reachable. Under §6.6 a citer that no longer matches is
+  // not just a lost line in the record; it can cost the page.
+  if (path.split("/").some((segment) => segment !== segment.trim())) {
+    return "path segment starts or ends with whitespace";
+  }
   return null;
 }
 

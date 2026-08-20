@@ -62,13 +62,14 @@ class ScopeModal extends Modal {
   }
 
   override onClose(): void {
-    this.contentEl.empty();
-    // Esc or a click outside is a decision not to proceed; the promise has to
-    // settle either way or compile would hold the lock forever.
+    // Settle first, tidy second. Esc or a click outside is a decision not to
+    // proceed, and the promise has to settle either way or compile holds the
+    // operation lock for the rest of the session with no way back.
     if (!this.answered) {
       this.answered = true;
       this.respond(false);
     }
+    this.contentEl.empty();
   }
 }
 
