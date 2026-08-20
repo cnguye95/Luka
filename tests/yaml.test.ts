@@ -1,5 +1,72 @@
 import { describe, expect, it } from "vitest";
-import { ensureFrontmatter, parseFrontmatter, serializeFrontmatter } from "../src/core/yaml";
+import {
+  ensureFrontmatter,
+  parseFrontmatter,
+  replaceFrontmatterValue,
+  serializeFrontmatter,
+} from "../src/core/yaml";
+
+describe("replaceFrontmatterValue", () => {
+  const wrap = (inner: string, body = "Body.\n") => `---\n${inner}---\n${body}`;
+  const rewrite = (inner: string) =>
+    replaceFrontmatterValue(wrap(inner), "derived-from", "raw/new.html");
+
+  it("rewrites the value and leaves every other byte alone", () => {
+    const before = wrap("# a note\nmykey: 010\nflow: [a, b]\nderived-from: raw/old.html\n");
+    const after = replaceFrontmatterValue(before, "derived-from", "raw/new.html") as string;
+
+    expect(after).toContain("derived-from: raw/new.html");
+    expect(after).toContain("# a note");
+    expect(after).toContain("mykey: 010");
+    expect(after).toContain("flow: [a, b]");
+    expect(after.endsWith("Body.\n")).toBe(true);
+    // Reads back as the value that was written, not as text near it.
+    expect(parseFrontmatter(after).data["derived-from"]).toBe("raw/new.html");
+  });
+
+  it("quotes a value that needs it", () => {
+    const after = replaceFrontmatterValue(
+      wrap("derived-from: raw/old.html\n"),
+      "derived-from",
+      "raw/a: b.html",
+    ) as string;
+    expect(parseFrontmatter(after).data["derived-from"]).toBe("raw/a: b.html");
+  });
+
+  it("preserves CRLF line endings", () => {
+    const before = "---\r\nderived-from: raw/old.html\r\nkeep: yes\r\n---\r\nBody.\r\n";
+    const after = replaceFrontmatterValue(before, "derived-from", "raw/new.html") as string;
+    expect(after).toContain("derived-from: raw/new.html\r\n");
+    expect(after).toContain("keep: yes\r\n");
+  });
+
+  it("rewrites the document's own key, never a nested one of the same name", () => {
+    // Matching by first occurrence would rewrite the user's nested value and
+    // leave the real key stale — both wrong, and silently so.
+    const after = rewrite(
+      "provenance:\n  derived-from: raw/scan.txt\nderived-from: raw/old.html\n",
+    ) as string;
+
+    expect(after).toContain("  derived-from: raw/scan.txt");
+    expect(after).toContain("\nderived-from: raw/new.html");
+    expect(parseFrontmatter(after).data["derived-from"]).toBe("raw/new.html");
+  });
+
+  it("declines a folded or literal block value", () => {
+    expect(rewrite("derived-from: >-\n  raw/old.html\n")).toBe(null);
+    expect(rewrite("derived-from: |-\n  raw/old.html\n")).toBe(null);
+    expect(rewrite("derived-from:\n  raw/old.html\n")).toBe(null);
+  });
+
+  it("declines a quoted key it cannot match as a plain line", () => {
+    expect(rewrite("'derived-from': raw/old.html\n")).toBe(null);
+  });
+
+  it("declines when the key is absent, or only in the body", () => {
+    expect(rewrite("ingested: '2026-08-19'\n")).toBe(null);
+    expect(replaceFrontmatterValue("derived-from: raw/old.html\n", "derived-from", "x")).toBe(null);
+  });
+});
 
 describe("frontmatter", () => {
   it("reports absence without touching the body", () => {

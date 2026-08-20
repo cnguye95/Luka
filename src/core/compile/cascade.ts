@@ -123,7 +123,7 @@ export type RenameDerivativeAction =
   | { kind: "reprocess" };
 
 /** True when the file at `path` is a derivative naming `origin` as its source. */
-async function ownedBy(fs: FsAdapter, path: string, origin: string): Promise<boolean> {
+export async function ownedBy(fs: FsAdapter, path: string, origin: string): Promise<boolean> {
   const stat = await fs.stat(path);
   if (stat === null || stat.kind !== "file") return false;
   try {
@@ -150,8 +150,9 @@ async function ownedBy(fs: FsAdapter, path: string, origin: string): Promise<boo
  * not Luka's already occupying the destination. Only then does §6.2's
  * missing-derivative rule apply and the source re-normalize.
  *
- * One decision, called by discovery to classify and by compile to act, so the
- * two can never disagree about whether a rename needs work.
+ * Decided once — discovery calls it to classify, and the result is carried on
+ * the `Rename` so compile applies exactly what was classified. Re-deriving it
+ * during compile would ask a vault that compile itself has been mutating.
  */
 export async function renameDerivativeAction(
   fs: FsAdapter,
@@ -161,7 +162,12 @@ export async function renameDerivativeAction(
   // A passthrough source is its own readable markdown and writes no derivative.
   if (target === null) return { kind: "none" };
 
-  if (await ownedBy(fs, target, rename.to)) return { kind: "none" };
+  // Only a file naming the path the bytes actually came from is evidence. A
+  // derivative already naming the *new* path is not: this source arrived there
+  // only just now — that is what made it an addition to pair — so such a file
+  // was written for some earlier occupant of the path and describes a
+  // different document. Re-extracting overwrites it, which `claimDerivative`
+  // allows because the origin it names is this very source.
   if (await ownedBy(fs, target, rename.from)) return { kind: "repoint", at: target };
 
   const old = derivativeLocation(rename.from);
@@ -191,33 +197,13 @@ export async function renameDerivativeAction(
 export async function orphanedDerivatives(
   fs: FsAdapter,
   oldPaths: readonly string[],
-  stillClaimed: ReadonlySet<string> = new Set(),
 ): Promise<OrphanedDerivative[]> {
   const found: OrphanedDerivative[] = [];
 
   for (const owner of [...oldPaths].sort(comparePaths)) {
     const derivative = derivativeLocation(owner);
-
     if (derivative === owner) continue;
-    // Sources sharing a stem share this location, so a departed `data.csv` and
-    // a living `data.tsv` both point at `data.md` — and an extension-only
-    // rename makes that the *same* file under both names. The derivative of a
-    // source that still exists is never an orphan, whatever its `derived-from`
-    // still says; the run that owns it will rewrite the key.
-    if (stillClaimed.has(derivative)) continue;
-
-    // A folder, or a file that cannot be read, is not Luka's derivative — and
-    // must not take the whole compile down before any work is done.
-    const stat = await fs.stat(derivative);
-    if (stat === null || stat.kind !== "file") continue;
-
-    let data: Record<string, unknown>;
-    try {
-      data = parseFrontmatter(decodeUtf8(await fs.read(derivative))).data;
-    } catch {
-      continue;
-    }
-    if (data["derived-from"] === owner) found.push({ derivative, owner });
+    if (await ownedBy(fs, derivative, owner)) found.push({ derivative, owner });
   }
 
   return found;

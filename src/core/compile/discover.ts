@@ -4,12 +4,12 @@
 // carrying `derived-from`. A repo directory is one source and is never
 // descended into. Identity is SHA-256 of content; timestamps are never used.
 import type { FsAdapter } from "../adapters";
-import { renameDerivativeAction } from "./cascade";
+import { ownedBy, renameDerivativeAction, type RenameDerivativeAction } from "./cascade";
 import { decodeUtf8, sha256Hex } from "../hash";
 import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
 import { isRepoDirectory, repoContentHash, selectRepoFiles } from "../normalize/repo";
-import { extname, isUnder } from "../paths";
+import { comparePaths, extname, isUnder } from "../paths";
 import type { IngestManifest, SourceFormat } from "../types";
 import { parseFrontmatter } from "../yaml";
 
@@ -33,6 +33,12 @@ export interface Rename {
   hash: string;
   /** The new path's format — what decides where its derivative belongs. */
   format: SourceFormat;
+  /**
+   * What compile owes this rename's derivative, decided here against the vault
+   * as this run found it. Compile applies it rather than re-deriving it: by the
+   * time it runs, its own earlier iterations have moved files about.
+   */
+  derivative: RenameDerivativeAction;
 }
 
 export interface DiscoveryResult {
@@ -71,9 +77,15 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   // path to §6.6's cascade would delete the pages of a source that never went
   // away. This matters most when the skip rules themselves change: a path that
   // compiled cleanly yesterday must not be cascaded on today.
-  const skippedPaths = new Set(skipped.map((entry) => entry.path));
+  // A skipped *folder* is never descended into, so every source beneath it is
+  // absent from `present` too — and they are just as much still in the vault as
+  // the folder is.
   const vanished = Object.keys(manifest)
-    .filter((path) => !present.has(path) && !skippedPaths.has(path))
+    .filter(
+      (path) =>
+        !present.has(path) &&
+        !skipped.some((entry) => path === entry.path || isUnder(path, entry.path)),
+    )
     .sort();
 
   const { renamed, remainingAdded, remainingDeleted } = pairRenames(added, vanished, manifest);
@@ -88,11 +100,25 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   // one over, in place or by moving it, and §6.2 says a derivative persists
   // until its original changes — which a rename does not do. Only when there
   // is nothing usable to carry does the missing-derivative rule apply.
+  // Sorted first so the decisions below, which depend on what earlier renames
+  // in this run have claimed, do not vary with walk order.
   const renames: Rename[] = [];
-  for (const rename of renamed) {
+  const claimedDerivatives = new Set<string>();
+
+  for (const rename of [...renamed].sort((a, b) => comparePaths(a.to, b.to))) {
     const source = present.get(rename.to) as DiscoveredSource;
-    renames.push(rename);
-    const action = await renameDerivativeAction(fs, rename);
+    let action = await renameDerivativeAction(fs, rename);
+
+    // Two renames can want the same derivative location — `a.csv` and `b.html`
+    // both moving to `q.*` land on `q.md`. Only the first can carry its file
+    // there; the second has to re-extract, and deciding that here is what keeps
+    // it in the worklist. Compile discovering it later could only skip it,
+    // leaving a source manifested with no derivative of its own.
+    const at = action.kind === "move" ? action.to : action.kind === "repoint" ? action.at : null;
+    if (at !== null && claimedDerivatives.has(at)) action = { kind: "reprocess" };
+    else if (at !== null) claimedDerivatives.add(at);
+
+    renames.push({ ...rename, derivative: action });
     if (action.kind === "reprocess") modified.push(source);
   }
 
@@ -116,23 +142,14 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
  * real derivative as an orphan, and every later compile would read the source
  * as unchanged and feed Call B an empty body under its label.
  */
-async function hasDerivative(
-  fs: FsAdapter,
-  source: DiscoveredSource,
-  alsoOwnedBy?: string,
-): Promise<boolean> {
+async function hasDerivative(fs: FsAdapter, source: DiscoveredSource): Promise<boolean> {
   const derivative = derivativePathFor(source.path, source.format);
   if (derivative === null) return true;
-  if (!(await fs.exists(derivative))) return false;
-
-  try {
-    const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
-    const origin = data["derived-from"];
-    return origin === source.path || (alsoOwnedBy !== undefined && origin === alsoOwnedBy);
-  } catch {
-    return false;
-  }
+  return ownedBy(fs, derivative, source.path);
 }
+
+/** A rename before its derivative decision is taken. */
+type PairedRename = Omit<Rename, "derivative">;
 
 /**
  * Same hash gone from one path and appeared at another. Pairs are formed in
@@ -142,7 +159,7 @@ function pairRenames(
   added: readonly DiscoveredSource[],
   vanished: readonly string[],
   manifest: IngestManifest,
-): { renamed: Rename[]; remainingAdded: DiscoveredSource[]; remainingDeleted: string[] } {
+): { renamed: PairedRename[]; remainingAdded: DiscoveredSource[]; remainingDeleted: string[] } {
   const vanishedByHash = new Map<string, string[]>();
   for (const path of vanished) {
     const hash = manifest[path] as string;
@@ -151,7 +168,7 @@ function pairRenames(
     else vanishedByHash.set(hash, [path]);
   }
 
-  const renamed: Rename[] = [];
+  const renamed: PairedRename[] = [];
   const remainingAdded: DiscoveredSource[] = [];
   const claimed = new Set<string>();
 

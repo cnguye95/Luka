@@ -247,6 +247,101 @@ describe("the four rules (§6.2)", () => {
     expect(await fs.exists("raw/data.md")).toBe(false);
   });
 
+  it("does not adopt a stale derivative left at the path a rename moves into", async () => {
+    // `raw/data.md` is left over from a long-dead `raw/data.csv`. When a new
+    // file is later moved to that same path, its name matches — but the file
+    // describes a different document entirely, and nothing would ever notice.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.csv");
+    const stale = fs.text("raw/data.md");
+
+    await fs.delete("raw/data.csv");
+    await fs.write(MANIFEST, JSON.stringify({}));
+    await fs.write("raw/data.md", stale); // survives as a leftover
+
+    await fs.write("raw/notes/report.csv", "x,y,z\n9,8,7\n10,11,12\n");
+    await core(fs).instance.compile();
+    await fs.move("raw/notes/report.csv", "raw/data.csv");
+    const result = await core(fs).instance.compile();
+
+    expect(result.failed).toEqual([]);
+    // The derivative describes the file that is actually there now.
+    expect(fs.text("raw/data.md")).toContain("Rows: 2");
+    expect(fs.text("raw/data.md")).not.toBe(stale);
+  });
+
+  it("makes only one of two renames competing for a derivative path carry over", async () => {
+    // `a.csv` and `b.html` both move to the `q` stem, so both want `raw/q.md`.
+    // The loser must be re-extracted, and deciding that at discovery is what
+    // keeps it in the worklist instead of leaving it silently underivatived.
+    const fs = new MemFs({
+      "raw/a.csv": "a,b\n1,2\n",
+      "raw/b.html": "<h1>Bee</h1>\n",
+    });
+    await core(fs).instance.compile();
+
+    await fs.move("raw/a.csv", "raw/q.csv");
+    await fs.move("raw/b.html", "raw/q.html");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 2, deleted: 0 });
+    // One carries its derivative over; the other loses the stem and is
+    // reported, which is the documented collision outcome — not silently left
+    // manifested with no derivative of its own.
+    expect(fs.text("raw/q.md")).toContain("derived-from: raw/q.csv");
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/q.html"]);
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/q.csv"]);
+
+    // And the loser keeps being reported rather than reading as ingested.
+    const third = await core(fs).instance.compile();
+    expect(third.failed.map((failure) => failure.path)).toEqual(["raw/q.html"]);
+  });
+
+  it("frees a derivative path once the source that owned it is deleted", async () => {
+    // Two sources share a stem; the loser can never claim the path while the
+    // winner lives. Deleting the winner must release it, not deadlock it.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n", "raw/data.html": "<h1>Hi</h1>\n" });
+    const first = await core(fs).instance.compile();
+    expect(first.failed).toHaveLength(1);
+
+    await fs.delete("raw/data.csv");
+    const second = await core(fs).instance.compile();
+
+    // The sweep frees the path even though a live source's stem points at it,
+    // and the source that was blocked claims it in the very same run.
+    expect(second.failed).toEqual([]);
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.html");
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/data.html"]);
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("does not cascade on sources beneath a folder the skip rules now reject", async () => {
+    // A skipped folder is never descended into, so every source under it drops
+    // out of the scan — while sitting untouched in the vault. This is what a
+    // change to the skip rules looks like from an already-compiled vault, and
+    // it must not read as a deletion.
+    const fs = new MemFs({ "raw/notes /a.html": "<h1>Hi</h1>\n" });
+    await fs.write(
+      MANIFEST,
+      JSON.stringify({ "raw/notes /a.html": "0".repeat(64) }),
+    );
+    await fs.write(
+      "wiki/sources/a.md",
+      "---\nkind: source\nsource: '[[raw/notes /a.html]]'\n---\nBody.\n" +
+        "<!-- citations:start -->\n## Sources\n- [[raw/notes /a.html]]\n<!-- citations:end -->\n",
+    );
+
+    const result = await core(fs).instance.compile();
+
+    expect(result.skipped.map((entry) => entry.path)).toEqual(["raw/notes "]);
+    expect(result).toMatchObject({ deleted: 0, pagesDeleted: 0 });
+    expect(await fs.exists("wiki/sources/a.md")).toBe(true);
+  });
+
   it("does not cascade on a source that discovery skipped (§6.1)", async () => {
     // A skipped path is still sitting in the vault — §6.1 has it "surface again
     // each compile". Treating it as vanished would delete the pages of a source

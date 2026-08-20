@@ -95,10 +95,14 @@ function renderKeys(data: Record<string, unknown>): string {
  * rename. §6.2 invites the user to edit a derivative (it is the sanctioned
  * repair path for a bad extraction), so even though invariant 7 makes the file
  * Luka's to rewrite, re-serializing the block would throw away their comments
- * and restyle their YAML for the sake of one word.
+ * and restyle their YAML for the sake of one word. Any comment on the rewritten
+ * line itself goes with the value it annotated.
  *
- * Returns `null` when the key is not there as a simple `key: value` line, so
- * the caller can fall back rather than guess.
+ * Returns `null` — never a guess — unless the key is present exactly once, at
+ * the top level of the block, holding a plain single-line scalar. A nested key
+ * of the same name, a block scalar, or a quoted key all decline: rewriting the
+ * wrong line, or half of a folded value, corrupts a file the caller believes it
+ * has just corrected.
  */
 export function replaceFrontmatterValue(
   text: string,
@@ -109,13 +113,26 @@ export function replaceFrontmatterValue(
   if (!match) return null;
 
   const inner = match[2] ?? "";
-  const line = new RegExp(`^([ \\t]*${escapeForRegExp(key)}[ \\t]*:[ \\t]*)(.*)$`, "m");
-  if (!line.test(inner)) return null;
+  // Anchored at column zero: an indented `derived-from:` belongs to some
+  // mapping the user nested, not to the document.
+  const line = new RegExp(`^${escapeForRegExp(key)}[ \\t]*:[ \\t]*(.*)$`, "gm");
+  const hits = [...inner.matchAll(line)];
+  if (hits.length !== 1) return null;
 
-  const rendered = dump({ [key]: value }, { lineWidth: -1, noRefs: true })
-    .slice(key.length + 1)
-    .trim();
-  const rewritten = inner.replace(line, (_full, prefix: string) => `${prefix}${rendered}`);
+  const current = (hits[0]?.[1] ?? "").trim();
+  // `|` and `>` open a scalar that continues onto the following lines, and an
+  // empty value may do the same. Only what is wholly on this line can be
+  // replaced by rewriting this line.
+  if (current === "" || current.startsWith("|") || current.startsWith(">")) return null;
+
+  const rendered = dump(value, { lineWidth: -1, noRefs: true }).trimEnd();
+  if (rendered.includes("\n")) return null;
+
+  const at = hits[0]?.index ?? 0;
+  const rewritten =
+    inner.slice(0, at) +
+    `${key}: ${rendered}` +
+    inner.slice(at + (hits[0]?.[0].length ?? 0));
 
   return match[1] + rewritten + match[3] + text.slice(match[0].length);
 }

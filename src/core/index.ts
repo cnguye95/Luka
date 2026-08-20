@@ -9,7 +9,7 @@ import {
   cascadeScope,
   derivativeLocation,
   orphanedDerivatives,
-  renameDerivativeAction,
+  ownedBy,
   type ScopePreview,
 } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
@@ -224,8 +224,9 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   //
   // Before normalization, so a source that does have to re-extract finds its
   // derivative path settled.
+  const carriedOverFrom = new Set<string>();
   for (const rename of discovery.renamed) {
-    const action = await renameDerivativeAction(deps.fs, rename);
+    const action = rename.derivative;
     if (action.kind === "none" || action.kind === "reprocess") continue;
     const at = action.kind === "move" ? action.to : action.at;
     try {
@@ -238,34 +239,35 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         reason: `could not carry over ${at} — ${describe(error)}`,
       });
       // A half-carried derivative still names the old path, which is worse than
-      // none: the source reads as missing its derivative every run and then
-      // cannot claim the location, because what sits there belongs to a source
-      // that no longer exists. Removing it lets the next compile re-extract.
+      // none: the source reads as missing its derivative every run and cannot
+      // claim the location either, because what sits there belongs to a source
+      // that no longer exists. Removing it lets the next compile re-extract —
+      // but only if it really is the file this carry-over was handling, since
+      // a move can fail *because* something else arrived at the destination.
       try {
-        if (await deps.fs.exists(at)) await deps.fs.delete(at);
+        if (await ownedBy(deps.fs, at, rename.from)) await deps.fs.delete(at);
       } catch {
-        // Best effort; the block below is what makes the retry happen.
+        // Best effort. The withheld manifest entry is what forces the retry.
       }
-      block(blockedDeleted, rename.from, `carry-over of ${at} failed`);
+      // Nothing was carried, so the source is not ingested at its new path.
+      delete next[rename.to];
+      // And its derivative, wherever it ended up, is not this run's to sweep:
+      // deleting it here would destroy a repair the retry could still carry.
+      carriedOverFrom.add(rename.from);
     }
   }
 
-  // The derivative locations sources that still exist will actually write to.
-  // Derived from each source's *format*, not from its stem: a passthrough
-  // source claims nothing, and shielding the location its stem happens to point
-  // at would leave a real orphan permanently unsweepable — and permanently
-  // blocking that path for any later source.
-  const stillClaimed = new Set(
-    [...discovery.added, ...discovery.modified, ...discovery.unchanged]
-      .map((source) => derivativePathFor(source.path, source.format))
-      .concat(discovery.renamed.map((rename) => derivativePathFor(rename.to, rename.format)))
-      .filter((path): path is string => path !== null),
-  );
-
+  // No shield by path is needed, and an earlier one by path was actively
+  // harmful. The sweep deletes a file only when its `derived-from` still names
+  // the departed source — and the carry-over above has already repointed every
+  // file a living source is taking over, so those no longer name it. What is
+  // left really is orphaned, including at a location some other source would
+  // like to claim: freeing it is the point.
   for (const orphan of await orphanedDerivatives(
     deps.fs,
-    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)],
-    stillClaimed,
+    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)].filter(
+      (path) => !carriedOverFrom.has(path),
+    ),
   )) {
     try {
       await deps.fs.delete(orphan.derivative);
@@ -732,8 +734,12 @@ function blockCascade(
 async function repointDerivative(fs: FsAdapter, path: string, to: string): Promise<void> {
   const text = decodeUtf8(await fs.read(path));
   const rewritten = replaceFrontmatterValue(text, "derived-from", to);
-  if (rewritten === null || rewritten === text) return;
-  await fs.write(path, rewritten);
+  // `null` means the key could not be rewritten safely — a nested key of the
+  // same name, a folded value, a quoted key. Treating that as success would
+  // leave the file naming a path that no longer exists, which fails the source
+  // on every later run; the caller's recovery handles it instead.
+  if (rewritten === null) throw new Error(`could not repoint derived-from in ${path}`);
+  if (rewritten !== text) await fs.write(path, rewritten);
 }
 
 /** Records why a source cannot be manifested this run, so it retries next time. */
