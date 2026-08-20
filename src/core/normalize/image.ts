@@ -4,6 +4,7 @@
 // Anything rejected keeps its original remote link and gains a marker — the pass
 // is never destructive, and the wording is always "not fetched".
 import type { FsAdapter, HttpAdapter } from "../adapters";
+import { mapWithConcurrency } from "../concurrency";
 import { sha256Hex } from "../hash";
 import { imageNotFetched } from "../markers";
 import { extname } from "../paths";
@@ -288,22 +289,4 @@ function ascii(bytes: Uint8Array, offset: number, length: number): string {
 
 function uint24LE(view: DataView, offset: number): number {
   return view.getUint8(offset) | (view.getUint8(offset + 1) << 8) | (view.getUint8(offset + 2) << 16);
-}
-
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const index = next++;
-      if (index >= items.length) return;
-      results[index] = await fn(items[index] as T);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }

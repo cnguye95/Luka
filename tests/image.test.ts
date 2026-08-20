@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { HttpAdapter } from "../src/core/adapters";
 import { localizeInlineImages, sniffImageSize } from "../src/core/normalize/image";
 import {
   gifBytes,
@@ -169,6 +170,37 @@ describe("inline image localization (§6.3)", () => {
     });
     expect(recovered.text).not.toContain("image not fetched");
     expect(recovered.localized).toBe(1);
+  });
+
+  it("fetches at most four images at once (§6.3 fixed concurrency)", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const release: (() => void)[] = [];
+    const gated: HttpAdapter = {
+      async request() {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise<void>((resolve) => release.push(resolve));
+        inFlight -= 1;
+        return { status: 404, headers: {}, bytes: new Uint8Array() };
+      },
+    };
+
+    const text = Array.from({ length: 6 }, (_, i) => `![f${i}](https://ex.com/f${i}.png)`).join(
+      "\n\n",
+    );
+    const pending = localizeInlineImages(text, { fs: new MemFs(), http: gated, timeoutMs: 1000 });
+
+    let released = 0;
+    while (released < 6) {
+      await vi.waitFor(() => expect(release.length).toBeGreaterThan(0));
+      (release.shift() as () => void)();
+      released += 1;
+    }
+
+    const result = await pending;
+    expect(peak).toBe(4);
+    expect(result.marked).toBe(6);
   });
 
   it("preserves comments it did not write", async () => {

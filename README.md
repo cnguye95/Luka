@@ -10,9 +10,17 @@ spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 
 ## Status
 
-Milestones **M0 (scaffold)** and **M1 (ingest)** are complete. Luka currently
-normalizes what you put in `raw/` and tracks it in an ingest manifest. It does
-not yet build wiki pages, answer questions, or draw a graph — those are M2–M4.
+Milestones **M0 (scaffold)** and **M1 (ingest)** are complete, plus the first
+part of M2: the provider layer (`src/core/provider/`) — the Anthropic Messages
+API adapter behind the reliability wrapper (timeouts, retries with backoff,
+per-task token caps, JSON repair, and the call counter). Nothing calls it yet;
+wiki compilation lands with the rest of M2. Luka currently normalizes what you
+put in `raw/` and tracks it in an ingest manifest. It does not yet build wiki
+pages, answer questions, or draw a graph — those are M2–M4.
+
+To prove the provider against the real API (optional, costs a fraction of a
+cent): `ANTHROPIC_API_KEY=sk-ant-... npm test` — two live tests that are
+otherwise skipped, and never run in CI.
 
 ## What compile does today
 

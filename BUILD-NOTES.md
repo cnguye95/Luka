@@ -97,3 +97,23 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 
 - `demo/raw/paper.pdf` and `demo/raw/orphan.png` are generated fixtures rather than found files: an uncompressed two-page PDF with a real text layer, and a 160×120 RGB PNG. Both are byte-stable, so hashes in tests do not drift.
 - `demo/raw/note.md` points its figure at `luka.invalid`, a reserved TLD that can never resolve, so the "image not fetched" marker appears deterministically on every machine.
+
+## M2a — Provider layer
+
+- `CompletionRequest` adds an `images` field to §11's signature; the vision task cannot be expressed without one. Images are `{mediaType, data: bytes}` and become base64 content blocks ahead of the text.
+- Base64 is hand-rolled in `provider/anthropic.ts`: core relies on neither Buffer (Node-only) nor btoa (binary-string awkwardness), and twenty lines are cheaper than either.
+- Backoff is base 1s doubling per attempt, capped at 30s, with equal jitter (half fixed, half random); §11 says only "exponential backoff + jitter". `sleep` and `random` are injectable so tests assert exact delays.
+- `Retry-After` is honored in its seconds form only; an HTTP-date value falls back to the normal backoff rather than being parsed.
+- Effective max_tokens = min(requested, §11 task cap); a caller may go below the cap, never above.
+- The JSON repair retry re-sends the original user message with the parse error appended, at temperature 0, and counts as a model call like any other. A second parse failure throws; there is no third attempt.
+- The call counter counts transport attempts — retries and the repair call included — total and per task, exposed as `provider.stats()`. M2's "zero model calls on re-compile" acceptance check asserts against it.
+- `anthropic-version` is pinned to `2023-06-01`, the current stable Messages API version.
+- A missing API key or an empty model id fails before any HTTP attempt, so a misconfigured vault can never emit a request.
+- A 2xx response whose body is not JSON (a proxy error page, say) is non-retryable: the endpoint answered, the answer is just unusable.
+- `core/concurrency.ts` added to §3's tree: `mapWithConcurrency` moved out of `normalize/image.ts` because compile's §11 concurrency-2 fan-out needs the same helper.
+- Live functionality tests live in `tests/provider-live.test.ts`, gated on `ANTHROPIC_API_KEY` in the environment — never in CI, real Messages API round trip on demand. `tests/helpers/nodehttp.ts` (fetch + AbortController) exists for them and moves to `eval/` at M3 alongside `nodefs`.
+- The core façade exports `createProvider` and the provider types only; the raw Anthropic transport is deliberately not exported, so no future caller can reach the API around the wrapper (invariant 10 made structural). Tests import the transport by module path.
+- §11 fixes JSON tasks at temperature 0, but some current Anthropic models reject sampling parameters with a 400. A 400 naming `temperature` re-runs the call once with the parameter omitted (counted like any attempt), so remapping a JSON task onto such a model degrades gracefully instead of failing every compile.
+- A vendor `Retry-After` is honored but bounded at the same 30s cap as the backoff: an hour-long server-suggested wait would otherwise hold the single operation lock for that hour.
+- Errors that are not a typed non-retryable failure — network rejects, timeouts, unexpected throws — are treated as retryable; they cannot be reliably distinguished from transient conditions.
+- Nonsense `maxTokens` requests (zero, negative, NaN, fractional) fall back to or floor at the task cap rather than reaching the API as an invalid value.

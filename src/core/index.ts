@@ -12,7 +12,13 @@ export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
 export type { SkippedSource } from "./compile/discover";
 export { DEFAULT_SETTINGS } from "./types";
-export type { LukaSettings } from "./types";
+export type { LukaSettings, ProviderTask } from "./types";
+// The raw transport (provider/anthropic.ts) is deliberately NOT exported:
+// invariant 10 requires every provider call to pass through the wrapper, and
+// keeping the transport module-internal makes a bypass structurally awkward.
+export { createProvider } from "./provider/wrapper";
+export { MAX_TOKENS_BY_TASK, ProviderError } from "./provider/types";
+export type { CompletionRequest, LLMProvider, ProviderStats } from "./provider/types";
 
 export interface CoreDeps {
   fs: FsAdapter;
