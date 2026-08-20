@@ -8,7 +8,7 @@ import { parseCitationBlock } from "../src/core/compile/citations";
 import { loadPageTable } from "../src/core/compile/pagetable";
 import { createCore, type CompileResult, type CoreDeps } from "../src/core/index";
 import { MAX_TOKENS_BY_TASK, type CompletionRequest } from "../src/core/provider/types";
-import { DEFAULT_SETTINGS } from "../src/core/types";
+import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
 import { StubProvider, fatalError, inventoryReply, retryableError } from "./helpers/provider";
@@ -167,7 +167,7 @@ describe("compile, end to end (§6, invariant 12)", () => {
     expect(call?.images[0]?.mediaType).toBe("image/png");
     expect(call?.images[0]?.bytes).toEqual(PNG);
 
-    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, string>;
+    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
     expect(Object.keys(manifest).sort()).toEqual(["raw/board.png", "raw/note.md", "raw/plain.txt"]);
   });
 
@@ -663,7 +663,7 @@ describe("failure handling (invariant 3, §11)", () => {
     const result = await core(fs, provider).compile();
 
     expect(result.failed.map((f) => f.path)).toEqual(["raw/note.md"]);
-    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, string>;
+    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
     expect(manifest["raw/note.md"]).toBeUndefined();
     // The sources that did succeed are manifested.
     expect(manifest["raw/plain.txt"]).toBeDefined();
@@ -681,7 +681,7 @@ describe("failure handling (invariant 3, §11)", () => {
 
     // note.md is the only source that named Personalized PageRank.
     expect(result.failed.map((f) => f.path)).toEqual(["raw/note.md"]);
-    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, string>;
+    const manifest = JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
     expect(manifest["raw/note.md"]).toBeUndefined();
     expect(manifest["raw/board.png"]).toBeDefined();
   });

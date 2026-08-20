@@ -11,7 +11,7 @@ import { parseCitationBlock } from "../src/core/compile/citations";
 import { loadPageTable } from "../src/core/compile/pagetable";
 import { BusyError, createCore, type CoreDeps, type ScopePreview } from "../src/core/index";
 import type { CompletionRequest } from "../src/core/provider/types";
-import { DEFAULT_SETTINGS } from "../src/core/types";
+import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
 import { StubProvider, fatalError, inventoryReply } from "./helpers/provider";
@@ -30,8 +30,8 @@ function core(fs: MemFs, provider: StubProvider, overrides: Partial<CoreDeps> = 
   });
 }
 
-function manifestOf(fs: MemFs): Record<string, string> {
-  return JSON.parse(fs.text(MANIFEST)) as Record<string, string>;
+function manifestOf(fs: MemFs): Record<string, ManifestEntry> {
+  return JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
 }
 
 /**

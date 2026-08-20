@@ -51,7 +51,11 @@ export { BusyError } from "./lock";
 export type { ScopePreview } from "./compile/cascade";
 export type { SkippedSource } from "./compile/discover";
 export { DEFAULT_SETTINGS } from "./types";
-export type { LukaSettings, ProviderTask } from "./types";
+export type { IngestManifest, LukaSettings, ManifestEntry, ProviderTask } from "./types";
+// §7.1's node set — "every manifest source's readable markdown" — is exactly
+// this value per entry. Exported here rather than from manifest.ts so callers
+// outside core keep going through the one façade.
+export { readablePathOf } from "./manifest";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
 // invariant 10 requires every provider call to pass through the wrapper, and
 // keeping the transport module-internal makes a bypass structurally awkward.

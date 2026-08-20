@@ -14,7 +14,7 @@ import {
 import { parseCitationBlock } from "../src/core/compile/citations";
 import { loadPageTable } from "../src/core/compile/pagetable";
 import { decodeUtf8 } from "../src/core/hash";
-import { DEFAULT_SETTINGS } from "../src/core/types";
+import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { NodeFs } from "./helpers/nodefs";
 import type { CompletionRequest } from "../src/core/provider/types";
@@ -109,9 +109,9 @@ describe("demo corpus", { timeout: SLOW }, () => {
     // included — §6.1's vision row makes it a source with its own page.
     expect(result.skipped).toEqual([]);
 
-    const manifest = JSON.parse(await read(MANIFEST)) as Record<string, string>;
+    const manifest = JSON.parse(await read(MANIFEST)) as Record<string, ManifestEntry>;
     expect(Object.keys(manifest).sort()).toEqual(EXPECTED_SOURCES);
-    for (const hash of Object.values(manifest)) expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    for (const entry of Object.values(manifest)) expect(entry.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("annotates passthrough sources in place without converting them", async () => {
@@ -266,7 +266,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(await fs.exists("raw/page.md")).toBe(false);
     expect(await read("wiki/_index.md")).not.toContain("[[page]]");
 
-    const manifest = JSON.parse(await read(MANIFEST)) as Record<string, string>;
+    const manifest = JSON.parse(await read(MANIFEST)) as Record<string, ManifestEntry>;
     expect(Object.keys(manifest).sort()).toEqual(
       EXPECTED_SOURCES.filter((source) => source !== "raw/page.html"),
     );

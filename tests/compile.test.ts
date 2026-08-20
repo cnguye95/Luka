@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCore } from "../src/core/index";
-import { DEFAULT_SETTINGS } from "../src/core/types";
+import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";
 import { pngBytes } from "./helpers/images";
 import { StubHttp, type StubRoute } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
@@ -34,8 +34,8 @@ function core(fs: MemFs, routes: Record<string, StubRoute> = {}) {
   return { instance, http, provider };
 }
 
-function manifestOf(fs: MemFs): Record<string, string> {
-  return JSON.parse(fs.text(MANIFEST)) as Record<string, string>;
+function manifestOf(fs: MemFs): Record<string, ManifestEntry> {
+  return JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
 }
 
 describe("first run", () => {
@@ -94,14 +94,14 @@ describe("the four rules (§6.2)", () => {
   it("reprocesses a modified source and records its new hash", async () => {
     const fs = new MemFs({ "raw/note.md": "one\n" });
     await core(fs).instance.compile();
-    const before = manifestOf(fs)["raw/note.md"];
+    const before = manifestOf(fs)["raw/note.md"].hash;
 
     await fs.write("raw/note.md", "---\ningested: '2026-08-19'\nsource-format: md\n---\ntwo\n");
     const second = await core(fs).instance.compile();
 
     expect(second).toMatchObject({ modified: 1, unchanged: 0 });
     // Writing the new hash back is what stops it reprocessing forever.
-    expect(manifestOf(fs)["raw/note.md"]).not.toBe(before);
+    expect(manifestOf(fs)["raw/note.md"].hash).not.toBe(before);
 
     fs.resetCounters();
     expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
@@ -122,7 +122,7 @@ describe("the four rules (§6.2)", () => {
   it("treats the same hash at a new path as a rename and skips regeneration", async () => {
     const fs = new MemFs({ "raw/a.md": "content\n" });
     const first = await core(fs).instance.compile();
-    const hash = manifestOf(fs)["raw/a.md"];
+    const entry = manifestOf(fs)["raw/a.md"];
 
     await fs.move("raw/a.md", "raw/renamed.md");
     fs.resetCounters();
@@ -130,7 +130,7 @@ describe("the four rules (§6.2)", () => {
     const second = await instance.compile();
 
     expect(second).toMatchObject({ renamed: 1, added: 0, modified: 0, deleted: 0 });
-    expect(manifestOf(fs)).toEqual({ "raw/renamed.md": hash });
+    expect(manifestOf(fs)).toEqual({ "raw/renamed.md": entry });
     // §6.2's "skip regeneration": no model call, and the source file itself is
     // untouched. Only the wiki's references to the old path are repointed.
     expect(provider.stats().requests).toBe(0);
