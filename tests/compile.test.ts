@@ -76,15 +76,21 @@ describe("the four rules (§6.2)", () => {
     expect(http.requests).toEqual([]);
   });
 
-  it("reprocesses a modified source", async () => {
+  it("reprocesses a modified source and records its new hash", async () => {
     const fs = new MemFs({ "raw/note.md": "one\n" });
     await core(fs).instance.compile();
+    const before = manifestOf(fs)["raw/note.md"];
 
     await fs.write("raw/note.md", "---\ningested: '2026-08-19'\nsource-format: md\n---\ntwo\n");
     const second = await core(fs).instance.compile();
 
     expect(second).toMatchObject({ modified: 1, unchanged: 0 });
-    expect(manifestOf(fs)["raw/note.md"]).toBeDefined();
+    // Writing the new hash back is what stops it reprocessing forever.
+    expect(manifestOf(fs)["raw/note.md"]).not.toBe(before);
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
   });
 
   it("drops a deleted source from the manifest", async () => {
@@ -111,6 +117,70 @@ describe("the four rules (§6.2)", () => {
     expect(manifestOf(fs)).toEqual({ "raw/renamed.md": hash });
     // The only write is the manifest itself; the file was not re-annotated.
     expect(fs.writes).toBe(1);
+  });
+
+  it("reprocesses a renamed source whose derivative is not at the new path", async () => {
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    expect(await fs.exists("raw/a.md")).toBe(true);
+
+    await fs.move("raw/a.html", "raw/b.html");
+    const second = await core(fs).instance.compile();
+
+    // §6.2's missing-derivative rule wins over the rename shortcut, so the new
+    // path gets a derivative rather than silently having none.
+    expect(second).toMatchObject({ renamed: 0, modified: 1, deleted: 1 });
+    expect(fs.text("raw/b.md")).toContain("derived-from: raw/b.html");
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/b.html"]);
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+  });
+});
+
+describe("in-place annotation stays within the three sanctioned writes (invariant 7)", () => {
+  it("adds Luka's keys to a source that already has its own frontmatter", async () => {
+    const fs = new MemFs({ "raw/note.md": "---\ntitle: Mine\ntags: [a, b]\n---\nBody.\n" });
+    await core(fs).instance.compile();
+
+    const text = fs.text("raw/note.md");
+    expect(text).toContain("ingested: '2026-08-19'");
+    expect(text).toContain("source-format: md");
+    expect(text).toContain("title: Mine");
+    expect(text).toContain("tags: [a, b]");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("ingests a file whose bytes are not valid UTF-8 without rewriting them", async () => {
+    // "café\n" as Windows-1252: 0xE9 is not a valid UTF-8 sequence, and a
+    // non-fatal decode would replace it with U+FFFD.
+    const legacy = new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0x0a]);
+    const fs = new MemFs({ "raw/legacy.txt": legacy });
+
+    const result = await core(fs).instance.compile();
+
+    expect(result.added).toBe(1);
+    expect(fs.files.get("raw/legacy.txt")).toEqual(legacy);
+    expect(fs.writes).toBe(1); // the manifest only
+  });
+
+  it("keeps a byte order mark when it annotates", async () => {
+    const bom = [0xef, 0xbb, 0xbf];
+    const fs = new MemFs({
+      "raw/bom.md": new Uint8Array([...bom, ...new TextEncoder().encode("# Hi\n")]),
+    });
+    await core(fs).instance.compile();
+
+    const bytes = fs.files.get("raw/bom.md") as Uint8Array;
+    expect([...bytes.subarray(0, 3)]).toEqual(bom);
+    expect(fs.text("raw/bom.md")).toContain("source-format: md");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
   });
 });
 

@@ -1,7 +1,7 @@
 import { Notice } from "obsidian";
 import type { CompileResult } from "../core/index";
 
-const SUMMARY_MS = 10_000;
+const NOTICE_MS = 10_000;
 
 export function notify(message: string, durationMs = 6000): Notice {
   return new Notice(`Luka: ${message}`, durationMs);
@@ -12,35 +12,27 @@ export function progressNotice(message: string): Notice {
   return new Notice(`Luka: ${message}`, 0);
 }
 
+/**
+ * Invariant 4: ingest problems surface as inline markers in the affected file.
+ * There is no ingest report and no aggregate count, so nothing here counts or
+ * rolls up problems. The two notices that do exist are the ones the spec asks
+ * for by name: §6.1's single notice naming unsupported files, and §11's
+ * per-source notice when a source is skipped after failing.
+ */
 export function reportCompile(result: CompileResult): void {
-  new Notice(summarize(result), SUMMARY_MS);
+  notify(completionMessage(result), NOTICE_MS);
 
-  // handoff.md §6.1: unsupported files get one notice naming them.
   if (result.skipped.length > 0) {
-    const names = result.skipped.map((skipped) => `${skipped.path} (${skipped.reason})`);
-    new Notice(`Luka skipped ${result.skipped.length} file(s):\n${names.join("\n")}`, SUMMARY_MS);
+    const names = result.skipped.map((skipped) => `${skipped.path} — ${skipped.reason}`);
+    new Notice(`Luka skipped:\n${names.join("\n")}`, NOTICE_MS);
   }
 
-  if (result.failed.length > 0) {
-    const names = result.failed.map((failure) => `${failure.path} — ${failure.reason}`);
-    new Notice(
-      `Luka could not ingest ${result.failed.length} source(s):\n${names.join(
-        "\n",
-      )}\nThey will be retried on the next compile.`,
-      SUMMARY_MS,
-    );
+  for (const failure of result.failed) {
+    notify(`could not ingest ${failure.path} — ${failure.reason}`, NOTICE_MS);
   }
 }
 
-export function summarize(result: CompileResult): string {
-  const counts: string[] = [];
-  if (result.added > 0) counts.push(`${result.added} new`);
-  if (result.modified > 0) counts.push(`${result.modified} changed`);
-  if (result.renamed > 0) counts.push(`${result.renamed} renamed`);
-  if (result.deleted > 0) counts.push(`${result.deleted} removed`);
-
-  if (counts.length === 0) {
-    return `Luka: nothing to do — ${result.unchanged} source(s) unchanged.`;
-  }
-  return `Luka: ingested ${counts.join(", ")}; ${result.unchanged} unchanged.`;
+function completionMessage(result: CompileResult): string {
+  const worked = result.added + result.modified + result.renamed + result.deleted > 0;
+  return worked ? "compile finished." : "nothing to do — no sources changed.";
 }

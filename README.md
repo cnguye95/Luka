@@ -95,4 +95,4 @@ With `demo/raw/` copied to `raw/` in the test vault:
 - [ ] A second **Luka: Compile** reports "nothing to do" and modifies no files.
 - [ ] Editing `raw/note.md` and compiling again reports one changed source.
 - [ ] Triggering Compile twice in quick succession shows
-      "Luka: busy: compile" rather than running twice.
+      "Luka is busy: compile" rather than running twice.

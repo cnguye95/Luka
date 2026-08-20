@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 import { BusyError, createCore, type Core } from "../core/index";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../core/types";
 import { registerCommands } from "./commands";
@@ -44,8 +44,9 @@ export default class LukaPlugin extends Plugin {
       reportCompile(result);
     } catch (error) {
       progress.hide();
-      // Invariant 2: a second invocation is refused, never queued.
-      if (error instanceof BusyError) notify(`busy: ${error.operation}`);
+      // Invariant 2: a second invocation is refused, never queued, and the
+      // notice text is specified verbatim — BusyError.message already is it.
+      if (error instanceof BusyError) new Notice(error.message, 6000);
       else notify(`compile failed — ${error instanceof Error ? error.message : String(error)}`);
     }
   }

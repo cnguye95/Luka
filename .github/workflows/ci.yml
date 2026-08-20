@@ -15,5 +15,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check:boundary
+      - run: npm run lint
       - run: npm run build
       - run: npm test
+      # The eval harness (§13) joins this job at M3.

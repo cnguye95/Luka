@@ -7,7 +7,7 @@
 import type { FsAdapter } from "../adapters";
 import { concatBytes, decodeUtf8, sha256Hex, utf8 } from "../hash";
 import { repoFileOmitted } from "../markers";
-import { basename, dirname, extname, isUnder, joinPath } from "../paths";
+import { basename, comparePaths, dirname, extname, isUnder, joinPath } from "../paths";
 
 export const REPO_MARKER_FILE = ".luka-repo";
 
@@ -129,7 +129,7 @@ async function walkBreadthFirst(fs: FsAdapter, root: string): Promise<string[]> 
   while (level.length > 0) {
     const next: string[] = [];
     for (const directory of level) {
-      const entries = (await fs.list(directory)).sort((a, b) => a.path.localeCompare(b.path));
+      const entries = (await fs.list(directory)).sort((a, b) => comparePaths(a.path, b.path));
       for (const entry of entries) {
         if (entry.kind === "folder") {
           if (!EXCLUDED_DIRECTORIES.has(basename(entry.path))) next.push(entry.path);

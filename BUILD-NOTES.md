@@ -12,7 +12,7 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 - Bundle format is CJS with `obsidian`, `electron`, `@codemirror/*`, `@lezer/*` and Node builtins external — the standard Obsidian plugin bundling contract.
 - Build output is not minified: it aids debugging inside Obsidian and no size constraint is specified.
 - `.gitattributes` forces LF for text and marks binaries, so SHA-256 content hashes (§6.2) are identical across checkouts and platforms.
-- Fixed §17 parameters (image concurrency/minimums, repo caps, dataset head sample, snapshot cap, lexical weights) are module-local constants rather than settings fields, since §17 marks them not user-tunable. `PPR_EPSILON` is exported from `core/types.ts` because §12 lists ε in the advanced settings block while §17 marks it fixed — it is a constant, shown but not editable.
+- Fixed §17 parameters are module-local constants rather than settings fields, since §17 marks them not user-tunable. Implemented so far: image fetch concurrency and minimums, repo caps, dataset head sample. The snapshot cap and the lexical weights arrive with the milestones that use them (M4 and M3). `PPR_EPSILON` is exported from `core/types.ts` because §12 lists ε in the advanced settings block while §17 marks it fixed — it is a constant, shown but not editable.
 - Default model ids (§11 says "pick current model ids at build time"): `inventory` and `seed-selection` → `claude-haiku-4-5-20251001` (current small Anthropic model); `page-generation`, `synthesis`, `vision` → `claude-sonnet-5` (current mid-tier).
 - Settings tab at M0 exposes only the API key and the task→model map, matching M0's acceptance criteria; the remaining §12 fields land with the milestones that consume them.
 - `FsAdapter` is bytes-first (`read` → `Uint8Array`, `write` accepts string or bytes) with `delete` added: §3 lists read/write/list/stat/move/exists/mkdir, but deletion is required by the §6.6 cascade and there is no other way to express it.
@@ -45,7 +45,10 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 ### Normalization
 
 - A derivative may only overwrite another derivative of the same origin. If the target path holds a user-placed file, or a derivative of a different source, that source fails rather than performing an unsanctioned write to `raw/` (invariant 7).
-- Frontmatter is written only when the document has no `---` block at all; a file with its own frontmatter is left untouched.
+- Frontmatter annotation adds only the keys the document is missing, and splices them in as text between the existing fences. Existing keys are never re-serialized: a js-yaml load/dump round trip deletes comments, restyles flow sequences, reorders keys, and retypes scalars (`010` becomes `10`), all of which invariant 7 forbids in a user-placed file. (Supersedes an earlier entry here that had annotation skip any file with a `---` block at all; that reading would have permanently blocked `ingested`/`source-format` on filed answer notes, which arrive carrying frontmatter per §8.3.)
+- A frontmatter block that does not parse, or that holds a sequence or a bare scalar rather than a mapping, is left completely untouched — there is no way to add a key to it without rewriting content the user owns. The file is still ingested; it simply is not annotated.
+- Passthrough annotation happens only when the file's bytes survive a UTF-8 round trip. `TextDecoder` is non-fatal and replaces invalid sequences with U+FFFD, so writing a decoded legacy-encoded file back would silently destroy it. A file that does not round-trip is ingested and left exactly as the user wrote it.
+- A UTF-8 byte order mark is stripped before annotation and put back afterwards; it is part of the file the user placed, so removing it would be a fourth unsanctioned write.
 - `origin-url` is always omitted at M1: a locally dropped file has no known origin.
 - A derivative names its original in `derived-from` and repeats it as a plain path, never as a wikilink, so derivatives contribute no graph edges.
 - pdf.js takes ownership of the buffer handed to it and detaches it, which silently made the PDF's manifest hash the hash of an empty input and reprocessed it on every compile. `pdf.ts` now passes a copy, and `normalize/index.ts` takes the hash before normalization runs.
@@ -67,7 +70,16 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 - "the prose does not reference it" is read as: neither the alt text nor the filename stem (3 characters or more) appears anywhere in the body outside image syntax.
 - A network failure is recorded coarsely as "network error" or "timeout" rather than quoting the underlying message, so the annotation a source receives does not vary with platform or DNS resolver.
 - The asset extension comes from the content-type first, the URL second, and `.img` as a last resort. Assets are written to `raw/assets/<sha256>.<ext>` and links are rewritten to that full vault-relative path.
-- Marker insertion is idempotent: an identical marker already following the reference is left alone, so re-processing an edited source cannot stack duplicates.
+- The run of comments following an image reference is rewritten from scratch on each pass: Luka's own `image not fetched` markers there are dropped and re-derived. A marker therefore never outlives the problem it describes (an image that later fetches loses its marker) and never stacks a second copy when the failure reason changes. Comments Luka did not write are preserved.
+- "Discard (with marker)" is implemented as "leave the remote link in place and mark it". §4 fixes the wording as "not fetched, never removed", so nothing is removed from the document; the reference simply stays remote.
+- An absent `Content-Type` is treated as uncertain rather than disqualifying, per §6.3's "when uncertain, keep".
+- Image fetches reuse the §17 provider timeout (120s) because §6.3 specifies "fetch with timeout" without a value. This is the largest stall a single compile can incur: unreachable images at concurrency 4 hold the operation lock while they time out.
+- Path ordering everywhere uses code-point comparison, never `localeCompare`. Walk order is the input to the repo identity hash (§6.4), so a locale- or ICU-dependent collation would make the same repository hash differently on two machines and read as modified after a vault sync. §7.2's "node order lexicographic by path" will want the same helper.
+- Repo derivatives are not run through image localization, unlike the html/pdf/dataset derivatives: all repo content sits inside code fences, where rewriting an image reference would corrupt the displayed source.
+- The repo total-size cap is greedy rather than a hard stop — an over-budget file is marked and skipped, and a later smaller file may still be included.
+- `.htm` is accepted as an html source alongside `.html`.
+- A root `README*` is included regardless of extension, which is the only way §6.4's "include README* first" can cover an extensionless `README`. It therefore bypasses the extension whitelist.
+- Notices carry no counts of ingest problems: invariant 4 says there is no ingest report and no aggregate count. Compile reports only that it finished or had nothing to do; unsupported files get §6.1's single naming notice, and a failed source gets one notice of its own per §11.
 
 ### Datasets
 

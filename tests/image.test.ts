@@ -145,6 +145,37 @@ describe("inline image localization (§6.3)", () => {
     const once = await run("![x](https://ex.com/x.png)\n", routes);
     const twice = await run(once.text, routes);
     expect(twice.text).toBe(once.text);
-    expect(twice.marked).toBe(0);
+  });
+
+  it("replaces the marker rather than stacking one when the reason changes", async () => {
+    const once = await run("![x](https://ex.com/x.png)\n", {
+      "https://ex.com/x.png": { status: 404 },
+    });
+    const twice = await run(once.text, { "https://ex.com/x.png": { status: 500 } });
+
+    expect(twice.text).toContain("HTTP 500");
+    expect(twice.text).not.toContain("HTTP 404");
+    expect(twice.text.match(/image not fetched/g)).toHaveLength(1);
+  });
+
+  it("drops a stale marker once the image can be fetched", async () => {
+    const failed = await run("![x](https://ex.com/x.png)\n", {
+      "https://ex.com/x.png": { status: 503 },
+    });
+    expect(failed.text).toContain("image not fetched");
+
+    const recovered = await run(failed.text, {
+      "https://ex.com/x.png": { headers: PNG_HEADERS, bytes: pngBytes(600, 400) },
+    });
+    expect(recovered.text).not.toContain("image not fetched");
+    expect(recovered.localized).toBe(1);
+  });
+
+  it("preserves comments it did not write", async () => {
+    const result = await run(
+      "![x](https://ex.com/x.png)\n<!-- my own note -->\n",
+      { "https://ex.com/x.png": { status: 404 } },
+    );
+    expect(result.text).toContain("<!-- my own note -->");
   });
 });

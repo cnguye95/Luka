@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   imageNotFetched,
-  insertMarkerAfterLine,
   linkOutsideRetrievedSet,
   normalizationSuspect,
   repoFileOmitted,
@@ -29,17 +28,4 @@ describe("markers", () => {
     expect(imageNotFetched("a.png", "too small")).not.toContain("removed");
   });
 
-  it("inserts a marker after the referencing line", () => {
-    const lines = ["![fig](https://x/a.png)", "after"];
-    expect(insertMarkerAfterLine(lines, 0, "<!-- m -->")).toEqual([
-      "![fig](https://x/a.png)",
-      "<!-- m -->",
-      "after",
-    ]);
-  });
-
-  it("is idempotent, so re-processing cannot stack duplicates", () => {
-    const lines = ["![fig](https://x/a.png)", "<!-- m -->", "after"];
-    expect(insertMarkerAfterLine(lines, 0, "<!-- m -->")).toEqual(lines);
-  });
 });

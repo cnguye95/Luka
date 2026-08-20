@@ -65,6 +65,19 @@ describe("repo selection", () => {
 });
 
 describe("repo identity", () => {
+  it("orders by code point, not by the host's locale collation", async () => {
+    // localeCompare puts "a.md" before "B.md"; code-point order does not. The
+    // walk order is the hash input, so it must not vary with locale or ICU build.
+    const fs = new MemFs({
+      [`${ROOT}/.luka-repo`]: "",
+      [`${ROOT}/B.ts`]: "b\n",
+      [`${ROOT}/a.ts`]: "a\n",
+      [`${ROOT}/C.ts`]: "c\n",
+    });
+    const files = await selectRepoFiles(fs, ROOT);
+    expect(files.map((f) => f.relative)).toEqual(["B.ts", "C.ts", "a.ts"]);
+  });
+
   it("is deterministic across runs and independent of insertion order", async () => {
     const a = await repoContentHash(await selectRepoFiles(repo(), ROOT));
     const shuffled = new MemFs({

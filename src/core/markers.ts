@@ -20,19 +20,3 @@ export function truncatedForContextBudget(): string {
 export function linkOutsideRetrievedSet(target: string): string {
   return `<!-- link outside retrieved set: ${target} -->`;
 }
-
-/**
- * Inserts `marker` on the line after `lineIndex`, unless it is already there.
- * Annotation has to be idempotent: a source that is re-processed (because the
- * user edited it) must not accumulate a second copy of the same marker.
- */
-export function insertMarkerAfterLine(
-  lines: string[],
-  lineIndex: number,
-  marker: string,
-): string[] {
-  if (lines[lineIndex + 1]?.trim() === marker) return lines;
-  const out = lines.slice();
-  out.splice(lineIndex + 1, 0, marker);
-  return out;
-}

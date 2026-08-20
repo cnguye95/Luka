@@ -60,15 +60,18 @@ export async function localizeInlineImages(
   const rebuilt: string[] = [];
   let localized = 0;
   let marked = 0;
+  let index = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] as string;
+  while (index < lines.length) {
+    const line = lines[index] as string;
     const pending: string[] = [];
+    let hadRemoteImage = false;
 
     const rewritten = line.replace(IMAGE_MARKDOWN, (full, alt: string, url: string) => {
       if (!isRemote(url)) return full;
       const decision = decisions.get(url);
       if (!decision) return full;
+      hadRemoteImage = true;
       if (decision.keep) {
         localized += 1;
         return full.replace(url, decision.assetPath);
@@ -78,12 +81,21 @@ export async function localizeInlineImages(
     });
 
     rebuilt.push(rewritten);
-    for (const marker of pending) {
-      // Re-processing an already-annotated source must not stack duplicates.
-      if (alreadyMarked(lines, i, marker)) continue;
-      rebuilt.push(marker);
-      marked += 1;
+    index += 1;
+    if (!hadRemoteImage) continue;
+
+    // This run of comments belongs to the line just emitted. Luka's own image
+    // markers in it are rewritten from scratch, so a marker never outlives the
+    // problem it describes and never stacks a second copy when the reason
+    // changes. Comments Luka did not write are preserved.
+    const foreign: string[] = [];
+    while (index < lines.length && isComment(lines[index] as string)) {
+      const comment = lines[index] as string;
+      if (!isImageMarker(comment)) foreign.push(comment);
+      index += 1;
     }
+    rebuilt.push(...pending, ...foreign);
+    marked += pending.length;
   }
 
   return { text: rebuilt.join("\n"), localized, marked };
@@ -255,14 +267,13 @@ function failureKind(error: unknown): string {
   return /timeout|timed out|abort/i.test(message) ? "timeout" : "network error";
 }
 
-/** True when this exact marker already sits in the comment run after `index`. */
-function alreadyMarked(lines: readonly string[], index: number, marker: string): boolean {
-  for (let i = index + 1; i < lines.length; i++) {
-    const line = (lines[i] as string).trim();
-    if (!line.startsWith("<!--") || !line.endsWith("-->")) return false;
-    if (line === marker) return true;
-  }
-  return false;
+function isComment(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("<!--") && trimmed.endsWith("-->");
+}
+
+function isImageMarker(line: string): boolean {
+  return line.trim().startsWith("<!-- image not fetched:");
 }
 
 function startsWith(bytes: Uint8Array, signature: readonly number[]): boolean {

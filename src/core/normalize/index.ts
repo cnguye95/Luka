@@ -5,7 +5,15 @@
 // hashed *afterwards* (§6.2). Every other format writes a derivative next to
 // the original and the manifest hash is taken over the untouched original.
 import type { FsAdapter, HttpAdapter } from "../adapters";
-import { decodeUtf8, sha256Hex, utf8 } from "../hash";
+import {
+  BOM_BYTES,
+  bytesEqual,
+  concatBytes,
+  decodeUtf8,
+  hasBom,
+  sha256Hex,
+  utf8,
+} from "../hash";
 import { dirname, extname, joinPath, stem } from "../paths";
 import type { SourceFormat } from "../types";
 import { ensureFrontmatter, parseFrontmatter, serializeFrontmatter } from "../yaml";
@@ -78,17 +86,29 @@ export async function normalizeSource(
 
   if (isPassthrough(format)) {
     // The three sanctioned in-place writes (invariant 7), applied as one write.
-    const original = decodeUtf8(bytes);
+    //
+    // Annotation rewrites the whole file, so it is only safe when the bytes
+    // survive a UTF-8 round trip. TextDecoder is non-fatal: it replaces every
+    // invalid sequence with U+FFFD, so writing a decoded legacy-encoded file
+    // back would silently destroy it. Such a source is still ingested — it is
+    // simply left exactly as the user wrote it.
+    const bom = hasBom(bytes);
+    const content = bom ? bytes.subarray(BOM_BYTES.length) : bytes;
+    const original = decodeUtf8(content);
+    const unchanged = { hash: await sha256Hex(bytes), derivativePath: null, wrote: false };
+    if (!bytesEqual(utf8(original), content)) return unchanged;
+
     const annotated = ensureFrontmatter(original, {
       ingested: deps.today,
       "source-format": format,
     });
     const { text } = await localizeInlineImages(annotated, deps);
-    if (text === original) {
-      return { hash: await sha256Hex(bytes), derivativePath: null, wrote: false };
-    }
-    await deps.fs.write(path, text);
-    return { hash: await sha256Hex(utf8(text)), derivativePath: null, wrote: true };
+    if (text === original) return unchanged;
+
+    // The byte order mark is part of the file the user placed, so it is put back.
+    const written = bom ? concatBytes([BOM_BYTES, utf8(text)]) : utf8(text);
+    await deps.fs.write(path, written);
+    return { hash: await sha256Hex(written), derivativePath: null, wrote: true };
   }
 
   // Taken before normalization: the original is never annotated, so its bytes

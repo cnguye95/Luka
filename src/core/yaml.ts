@@ -1,20 +1,35 @@
 // Frontmatter read/write (handoff.md §4).
 //
-// Serialization must be byte-stable: a passthrough source is hashed *after* its
-// frontmatter is written (§6.2), so any drift here would make every compile see
-// the file as modified again.
+// Two hard constraints shape this module.
+//
+// Invariant 7: a user-placed file receives exactly three sanctioned in-place
+// writes, one of which is "frontmatter written where absent". Keys the user
+// wrote are theirs — this module never re-serializes them, because a
+// load/dump round trip silently drops YAML comments, restyles flow sequences,
+// reorders keys, and retypes scalars (`010` becomes `10`). New keys are
+// spliced in as text and every existing byte is left exactly as written.
+//
+// §6.2: a passthrough source is hashed *after* annotation, so serialization
+// must be byte-stable or every compile would see the file as modified again.
 import { dump, load } from "js-yaml";
 
 export interface ParsedFrontmatter {
   /** Whether the document opened with a `---` fence at all. */
   present: boolean;
-  /** `{}` for an absent, empty, or unparseable block. */
+  /**
+   * Whether the block is a YAML mapping Luka may add keys to. False for a
+   * malformed block, and for one holding a sequence or a bare scalar — both
+   * are content this module must not touch.
+   */
+  mergeable: boolean;
+  /** `{}` unless the block is a mapping. */
   data: Record<string, unknown>;
   /** Everything after the closing fence. */
   body: string;
 }
 
-const FENCE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/;
+/** Groups: opening fence, inner YAML, closing fence. */
+const FENCE = /^(---[ \t]*\r?\n)([\s\S]*?)(\r?\n?---[ \t]*(?:\r?\n|$))/;
 
 /** The order §4 lists these keys in; anything else is appended alphabetically. */
 const KEY_ORDER = [
@@ -35,22 +50,31 @@ const KEY_ORDER = [
 
 export function parseFrontmatter(text: string): ParsedFrontmatter {
   const match = FENCE.exec(text);
-  if (!match) return { present: false, data: {}, body: text };
+  if (!match) return { present: false, mergeable: false, data: {}, body: text };
 
-  let data: Record<string, unknown> = {};
+  const inner = match[2] ?? "";
+  const body = text.slice(match[0].length);
+
+  // An empty block is a mapping with no keys, and is safe to add to.
+  if (inner.trim() === "") return { present: true, mergeable: true, data: {}, body };
+
   try {
-    const parsed = load(match[1] ?? "");
+    const parsed = load(inner);
     if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      data = parsed as Record<string, unknown>;
+      return { present: true, mergeable: true, data: parsed as Record<string, unknown>, body };
     }
   } catch {
-    // A source with a malformed block is still a source; treat its keys as absent.
+    // Falls through: a block Luka cannot read is a block Luka must not edit.
   }
-  return { present: true, data, body: text.slice(match[0].length) };
+  return { present: true, mergeable: false, data: {}, body };
 }
 
 /** The complete block including both fences and a trailing newline. */
 export function serializeFrontmatter(data: Record<string, unknown>): string {
+  return `---\n${renderKeys(data)}---\n`;
+}
+
+function renderKeys(data: Record<string, unknown>): string {
   const ordered: Record<string, unknown> = {};
   for (const key of KEY_ORDER) {
     if (data[key] !== undefined) ordered[key] = data[key];
@@ -58,13 +82,39 @@ export function serializeFrontmatter(data: Record<string, unknown>): string {
   for (const key of Object.keys(data).sort()) {
     if (ordered[key] === undefined && data[key] !== undefined) ordered[key] = data[key];
   }
-  if (Object.keys(ordered).length === 0) return "---\n---\n";
+  if (Object.keys(ordered).length === 0) return "";
   // lineWidth -1 disables wrapping so long values cannot reflow between runs.
-  return `---\n${dump(ordered, { lineWidth: -1, noRefs: true })}---\n`;
+  return dump(ordered, { lineWidth: -1, noRefs: true });
 }
 
-/** Writes the block only when the document has none (invariant 7). */
+/**
+ * Adds the keys of `data` that the document does not already have, and nothing
+ * else. Returns `text` unchanged when there is nothing to add, so re-running
+ * annotation is a no-op down to the byte.
+ *
+ * A document with no frontmatter gains a block. A document whose block is
+ * malformed, or holds a sequence or scalar rather than a mapping, is returned
+ * untouched — there is no way to add a key to it without rewriting content the
+ * user owns.
+ */
 export function ensureFrontmatter(text: string, data: Record<string, unknown>): string {
-  if (parseFrontmatter(text).present) return text;
-  return serializeFrontmatter(data) + text;
+  const match = FENCE.exec(text);
+  if (!match) {
+    const block = renderKeys(data);
+    return block === "" ? text : `---\n${block}---\n${text}`;
+  }
+
+  const parsed = parseFrontmatter(text);
+  if (!parsed.mergeable) return text;
+
+  const missing: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined && parsed.data[key] === undefined) missing[key] = value;
+  }
+
+  const addition = renderKeys(missing);
+  if (addition === "") return text;
+
+  // Spliced between the fences: match[2] carries the user's bytes verbatim.
+  return match[1] + addition + match[2] + match[3] + parsed.body;
 }

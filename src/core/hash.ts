@@ -13,6 +13,19 @@ export function decodeUtf8(bytes: Uint8Array): string {
   return decoder.decode(bytes);
 }
 
+/** UTF-8 byte order mark. Editors on Windows emit it; it must survive annotation. */
+export const BOM_BYTES = new Uint8Array([0xef, 0xbb, 0xbf]);
+
+export function hasBom(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+}
+
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
   let total = 0;
   for (const chunk of chunks) total += chunk.length;

@@ -53,6 +53,15 @@ export function isUnder(path: string, ancestor: string): boolean {
   return p === a || p.startsWith(`${a}/`);
 }
 
+/**
+ * Code-point ordering, deliberately not `localeCompare`. Path order feeds the
+ * repo identity hash (§6.4) and §7.2's "node order lexicographic by path", so it
+ * must not vary with the host's locale or ICU build.
+ */
+export function comparePaths(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** handoff.md invariant 8: a leading `_` marks infrastructure. */
 export function isInfrastructure(path: string): boolean {
   return basename(path).startsWith("_");
