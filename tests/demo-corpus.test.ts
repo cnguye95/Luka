@@ -112,6 +112,23 @@ describe("demo corpus", { timeout: SLOW }, () => {
     const manifest = JSON.parse(await read(MANIFEST)) as Record<string, ManifestEntry>;
     expect(Object.keys(manifest).sort()).toEqual(EXPECTED_SOURCES);
     for (const entry of Object.values(manifest)) expect(entry.hash).toMatch(/^[0-9a-f]{64}$/);
+
+    // Ownership is recorded, never inferred: a converting source's entry names
+    // the exact file Luka wrote for it — including the repo directory, whose
+    // path has no extension to derive one from — and a passthrough source, which
+    // is its own readable markdown, names nothing.
+    const owned = Object.fromEntries(
+      Object.entries(manifest).map(([source, entry]) => [source, entry.derivative ?? null]),
+    );
+    expect(owned).toEqual({
+      "raw/note.md": null,
+      "raw/notes.txt": null,
+      "raw/orphan.png": "raw/orphan.md",
+      "raw/page.html": "raw/page.md",
+      "raw/paper.pdf": "raw/paper.md",
+      "raw/runs.csv": "raw/runs.md",
+      "raw/toy-repo": "raw/toy-repo.md",
+    });
   });
 
   it("annotates passthrough sources in place without converting them", async () => {

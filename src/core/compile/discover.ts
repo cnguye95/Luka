@@ -4,7 +4,7 @@
 // carrying `derived-from`. A repo directory is one source and is never
 // descended into. Identity is SHA-256 of content; timestamps are never used.
 import type { FsAdapter } from "../adapters";
-import { ownedBy, renameDerivativeAction, type RenameDerivativeAction } from "./cascade";
+import { renameDerivativeAction, type RenameDerivativeAction } from "./cascade";
 import { decodeUtf8, sha256Hex } from "../hash";
 import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
@@ -60,10 +60,10 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   const unchanged: DiscoveredSource[] = [];
 
   for (const source of sources) {
-    const recorded = manifest[source.path]?.hash;
+    const recorded = manifest[source.path];
     if (recorded === undefined) {
       added.push(source);
-    } else if (recorded !== source.hash || !(await hasDerivative(fs, source))) {
+    } else if (recorded.hash !== source.hash || !(await hasDerivative(fs, source, recorded))) {
       // §6.2: a manifested source whose derivative went missing reprocesses as modified.
       modified.push(source);
     } else {
@@ -135,19 +135,23 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 }
 
 /**
- * §6.2's missing-derivative test. Ownership, not mere existence: the file at
- * that path counts only if its `derived-from` names this source.
+ * §6.2's missing-derivative test — a lookup, not an inference. The entry names
+ * the file Luka wrote, so no candidate path is guessed from the stem and no
+ * frontmatter is parsed: the ownership question that made both necessary was
+ * answered when the derivative was written.
  *
- * Sources sharing a stem share the location, and a user's own note can sit
- * there too. Accepting a stranger's file would mark the source ingested while
- * its readable markdown does not exist — the §6.6 sweep would then delete the
- * real derivative as an orphan, and every later compile would read the source
- * as unchanged and feed Call B an empty body under its label.
+ * A converting source carrying no pointer at all is an entry written before
+ * ownership was recorded. Its derivative cannot be located, so the
+ * missing-derivative rule applies and it reprocesses once, which records one.
  */
-async function hasDerivative(fs: FsAdapter, source: DiscoveredSource): Promise<boolean> {
-  const derivative = derivativePathFor(source.path, source.format);
-  if (derivative === null) return true;
-  return ownedBy(fs, derivative, source.path);
+async function hasDerivative(
+  fs: FsAdapter,
+  source: DiscoveredSource,
+  entry: ManifestEntry,
+): Promise<boolean> {
+  // A passthrough source is its own readable markdown and owes no derivative.
+  if (derivativePathFor(source.path, source.format) === null) return true;
+  return entry.derivative !== undefined && (await fs.exists(entry.derivative));
 }
 
 /** A rename before its derivative decision is taken. */

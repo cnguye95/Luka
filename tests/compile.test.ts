@@ -245,6 +245,14 @@ describe("the four rules (§6.2)", () => {
     expect(fs.text("raw/sub/data.md")).toContain("derived-from: raw/sub/data.csv");
     expect(fs.text("raw/sub/data.md")).toContain("HAND REPAIRED.");
     expect(await fs.exists("raw/data.md")).toBe(false);
+    // And the entry names where it travelled to. A pointer left at the old
+    // location would read as a missing derivative next compile and re-extract
+    // over the repair — at a model call the rename exists to avoid.
+    expect(manifestOf(fs)["raw/sub/data.csv"]?.derivative).toBe("raw/sub/data.md");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
   });
 
   it("keeps a repaired derivative when the rename's re-extraction is refused", async () => {
@@ -694,6 +702,34 @@ describe("source discovery", () => {
     expect(provider.stats().byTask.vision).toBe(1);
     expect(fs.text("raw/photo.md")).toContain("derived-from: raw/photo.png");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/photo.png"]);
+  });
+
+  it("re-extracts once from a manifest written before ownership was recorded", async () => {
+    // The old shape was `path -> hash`, which names no derivative — so a
+    // converting source's cannot be located and §6.2's missing-derivative rule
+    // fires. That costs one re-extraction, which records the pointer. A
+    // passthrough source has no derivative to name and is unaffected.
+    const fs = new MemFs({ "raw/page.html": "<h1>Hi</h1>\n", "raw/note.md": "Body.\n" });
+    await core(fs).instance.compile();
+    const recorded = manifestOf(fs);
+    expect(recorded["raw/page.html"]?.derivative).toBe("raw/page.md");
+
+    await fs.write(
+      MANIFEST,
+      JSON.stringify(
+        Object.fromEntries(Object.entries(recorded).map(([path, entry]) => [path, entry.hash])),
+      ),
+    );
+
+    const second = await core(fs).instance.compile();
+    expect(second).toMatchObject({ modified: 1, unchanged: 1, added: 0, deleted: 0 });
+    // The re-extraction restores exactly the entries the old file had lost.
+    expect(manifestOf(fs)).toEqual(recorded);
+
+    // One wave, not a loop: the recorded pointer is what settles the vault.
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 2, noop: true });
+    expect(fs.writes).toBe(0);
   });
 
   it("reprocesses when a derivative has gone missing", async () => {

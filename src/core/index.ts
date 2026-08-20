@@ -6,8 +6,9 @@ import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
 import {
   cascadeScope,
-  derivativeLocation,
   orphanedDerivatives,
+  ownedBy,
+  type RenameDerivativeAction,
   type ScopePreview,
 } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
@@ -38,12 +39,24 @@ import {
 } from "./compile/pagetable";
 import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
-import { CASCADE_PENDING, isSameManifest, loadManifest, saveManifest } from "./manifest";
-import { derivativePathFor, formatForPath, normalizeSource } from "./normalize/index";
+import {
+  CASCADE_PENDING,
+  isPending,
+  isSameManifest,
+  loadManifest,
+  saveManifest,
+} from "./manifest";
+import { formatForPath, isPassthrough, normalizeSource } from "./normalize/index";
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
-import type { IngestManifest, LukaSettings, OperationName, PageMeta } from "./types";
+import type {
+  IngestManifest,
+  LukaSettings,
+  ManifestEntry,
+  OperationName,
+  PageMeta,
+} from "./types";
 import { parseFrontmatter, replaceFrontmatterValue, serializeFrontmatter } from "./yaml";
 
 export type { FsAdapter, HttpAdapter } from "./adapters";
@@ -178,6 +191,12 @@ interface NormalizedSource {
   source: DiscoveredSource;
   hash: string;
   readablePath: string;
+  /**
+   * The derivative this normalization wrote, or `null` for a passthrough source
+   * that is its own readable markdown. Recorded in the manifest rather than
+   * re-derived later: this is the one moment ownership is known for certain.
+   */
+  derivativePath: string | null;
 }
 
 async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<CompileResult> {
@@ -207,11 +226,11 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
   const next: IngestManifest = { ...manifest };
   for (const rename of discovery.renamed) {
-    // The entry travels whole: its hash is `rename.hash` by definition (that is
-    // how the rename was detected) and its derivative pointer follows the file.
-    const carried = manifest[rename.from] ?? { hash: rename.hash };
+    // The hash is `rename.hash` by definition — that is how the rename was
+    // detected — and the pointer is wherever this run's carry leaves the file,
+    // which discovery's classification already decided.
     delete next[rename.from];
-    next[rename.to] = carried;
+    next[rename.to] = entryFor(rename.hash, carriedDerivative(rename.derivative));
   }
   for (const path of discovery.deleted) delete next[path];
 
@@ -354,6 +373,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         source,
         hash: outcome.hash,
         readablePath: readablePathFor(source.path, source.format, outcome.derivativePath),
+        derivativePath: outcome.derivativePath,
       });
       if (outcome.wrote) wrote = true;
     } catch (error) {
@@ -481,7 +501,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const bodyOfSource = async (path: string): Promise<string> => {
     const cached = bodies.get(path);
     if (cached !== undefined) return cached;
-    const target = readable.get(path) ?? (await readableFromManifest(deps.fs, path));
+    const target = readable.get(path) ?? (await readableFromManifest(deps.fs, next, path));
     // §6.5 gives Call B "the full normalized bodies of *all* citing sources".
     // A citer whose markdown cannot be found is not an empty source: passing
     // "" would have the model write a page grounded in a subset while code
@@ -700,7 +720,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   for (const entry of ready) {
     const blocked = blockedBy.get(entry.source.path);
     if (blocked === undefined) {
-      next[entry.source.path] = { hash: entry.hash };
+      next[entry.source.path] = entryFor(entry.hash, entry.derivativePath ?? undefined);
     } else {
       failed.push({ path: entry.source.path, reason: blocked.join("; ") });
     }
@@ -721,10 +741,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   for (const path of [...blockedDeleted.keys()].sort(comparePaths)) {
     const previous = manifest[path];
     if (previous === undefined) continue;
-    next[path] =
-      previous.derivative === undefined
-        ? { hash: CASCADE_PENDING }
-        : { hash: CASCADE_PENDING, derivative: previous.derivative };
+    next[path] = entryFor(CASCADE_PENDING, previous.derivative);
     const reasons = blockedDeleted.get(path) ?? [];
     failed.push({ path, reason: [...reasons, "cascade will retry next compile"].join("; ") });
   }
@@ -842,6 +859,36 @@ async function repointDerivative(fs: FsAdapter, path: string, to: string): Promi
   if (rewritten !== text) await fs.write(path, rewritten);
 }
 
+/**
+ * A manifest entry, with the `derivative` key present only when there is a
+ * pointer to record. Entries are built here rather than spread from an older
+ * one, so no stale pointer can ride along unnoticed.
+ */
+function entryFor(hash: string, derivative: string | undefined): ManifestEntry {
+  return derivative === undefined ? { hash } : { hash, derivative };
+}
+
+/**
+ * Where a renamed source's derivative will be once this run's carry lands —
+ * discovery's classification, read for its destination rather than re-derived.
+ *
+ * A re-extracting rename records no pointer: the replacement does not exist
+ * yet, so a run that fails after this point must leave an entry that still
+ * reads as a source owed a derivative. `none` is a passthrough source, which
+ * owes none at all.
+ */
+function carriedDerivative(action: RenameDerivativeAction): string | undefined {
+  switch (action.kind) {
+    case "repoint":
+      return action.at;
+    case "move":
+      return action.to;
+    case "none":
+    case "reprocess":
+      return undefined;
+  }
+}
+
 /** Records why a source cannot be manifested this run, so it retries next time. */
 function block(blockedBy: Map<string, string[]>, citer: string, reason: string): void {
   const reasons = blockedBy.get(citer) ?? [];
@@ -866,34 +913,38 @@ function toMeta(page: PageToWrite): PageMeta {
  * unchanged source still cites a page being regenerated (§6.5's "*all* citing
  * sources").
  *
- * The format decides the answer, so it is read from the path rather than
- * guessed at: a passthrough source IS its own readable markdown, and guessing
- * `<stem>.md` for one would hand back an unrelated neighbour's file — a vault
- * holding both `notes.txt` and `notes.md` would feed the wrong document to
- * Call B under the right document's label. A derivative is accepted only if it
- * names this source as its origin, for the same reason.
+ * The entry names the file, so nothing is guessed. The old version derived a
+ * `<stem>.md` candidate from the path, which in a vault holding both
+ * `notes.txt` and `notes.md` could hand Call B one document under the other
+ * one's label; it also had to stat the source to tell a repo directory from a
+ * file, which the recorded pointer makes unnecessary.
  */
-async function readableFromManifest(fs: FsAdapter, path: string): Promise<string | null> {
-  const stat = await fs.stat(path);
-  if (stat === null) return null;
+async function readableFromManifest(
+  fs: FsAdapter,
+  manifest: IngestManifest,
+  path: string,
+): Promise<string | null> {
+  // `Object.hasOwn`, not `!== undefined`: a hand-written citation entry of
+  // `constructor` or `toString` would otherwise resolve to an inherited member
+  // of the manifest object and be read as a manifested source.
+  if (!Object.hasOwn(manifest, path)) return null;
+  const entry = manifest[path] as ManifestEntry;
+  // A pending source has left the vault entirely; there is nothing to read.
+  if (isPending(entry)) return null;
 
-  // A repo source is a directory (§6.4), so there is no extension to read a
-  // format from — and handing back the path itself would have Call B try to
-  // read a folder. Its readable markdown is §6.1's derivative location.
-  const format = stat.kind === "folder" ? null : formatForPath(path);
-  // An extension Luka does not support is not readable markdown, whatever it
-  // is. Handing back the path would put its raw bytes in a Call B prompt under
-  // a source's label.
-  if (stat.kind !== "folder" && format === null) return null;
+  if (entry.derivative === undefined) {
+    // Only a passthrough source is its own readable markdown. A *converting*
+    // source with no pointer is an entry written before ownership was recorded,
+    // so its derivative has not been located — and handing back the source
+    // itself would put a PDF's raw bytes in a Call B prompt under its label.
+    const format = formatForPath(path);
+    return format !== null && isPassthrough(format) ? path : null;
+  }
 
-  const derivative =
-    format === null ? derivativeLocation(path) : derivativePathFor(path, format);
-
-  if (derivative === null) return path;
-  if (!(await fs.exists(derivative))) return null;
-
-  const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
-  return data["derived-from"] === path ? derivative : null;
+  // Invariant II: `derived-from` is read as a guard before serving a file as a
+  // source's content, never to locate one. Whatever sits at that path, it is
+  // not this source's normalized body unless it still says so.
+  return (await ownedBy(fs, entry.derivative, path)) ? entry.derivative : null;
 }
 
 /** `null` when the file does not exist, so a comparison can stand in for it. */
