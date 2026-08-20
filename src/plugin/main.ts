@@ -5,6 +5,7 @@ import { registerCommands } from "./commands";
 import { ObsidianFs } from "./fs-obsidian";
 import { ObsidianHttp } from "./http-obsidian";
 import { notify, progressNotice, reportCompile } from "./notices";
+import { confirmScope } from "./scope-modal";
 import { LukaSettingTab } from "./settings";
 
 const FALLBACK_PLUGIN_DIR = ".obsidian/plugins/luka";
@@ -36,6 +37,9 @@ export default class LukaPlugin extends Plugin {
           const message = progressMessage(event);
           if (message !== null) progress.setMessage(message);
         },
+        // §8.1: the lock is already held around this, so the preview cannot go
+        // stale while the modal is open.
+        confirm: (preview) => confirmScope(this.app, preview),
       });
       progress.hide();
       reportCompile(result);

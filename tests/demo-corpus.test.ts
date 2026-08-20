@@ -5,7 +5,12 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createCore, type CompileResult } from "../src/core/index";
+import {
+  createCore,
+  type CompileOptions,
+  type CompileResult,
+  type ScopePreview,
+} from "../src/core/index";
 import { decodeUtf8 } from "../src/core/hash";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
@@ -55,7 +60,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
    * stubbed to their quietest replies: a one-line summary and no items, which
    * yields one source page per source and no Call B at all.
    */
-  function compile(): Promise<CompileResult> {
+  function compile(options: CompileOptions = {}): Promise<CompileResult> {
     return createCore({
       fs,
       http,
@@ -69,7 +74,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
             ? "A generated fixture image, 160 by 120 pixels."
             : "Body.",
       ),
-    }).compile();
+    }).compile(options);
   }
 
   const read = async (p: string) => decodeUtf8(await fs.read(p));
@@ -162,5 +167,55 @@ describe("demo corpus", { timeout: SLOW }, () => {
 
     expect(await compile()).toMatchObject({ noop: true, unchanged: EXPECTED_SOURCES.length });
     expect(fs.writes).toBe(0);
+  });
+
+  // §15's M2 criterion: "deleting a demo source shows the preview then
+  // regenerates/deletes correctly".
+  it("shows the scope preview for a deleted source, then deletes its page", async () => {
+    await compile();
+    expect(await fs.exists("wiki/sources/page.md")).toBe(true);
+
+    await fs.delete("raw/page.html");
+
+    const seen: ScopePreview[] = [];
+    const result = await compile({
+      confirm: (preview) => {
+        seen.push(preview);
+        return true;
+      },
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ deleted: 1, added: 0, modified: 0, regenerate: [] });
+    expect(seen[0]?.mayDelete).toEqual(["wiki/sources/page.md"]);
+
+    expect(result).toMatchObject({ deleted: 1, pagesDeleted: 1, cancelled: false, failed: [] });
+    expect(await fs.exists("wiki/sources/page.md")).toBe(false);
+    // The derivative Luka wrote for that source goes with it.
+    expect(await fs.exists("raw/page.md")).toBe(false);
+    expect(await read("wiki/_index.md")).not.toContain("[[page]]");
+
+    const manifest = JSON.parse(await read(MANIFEST)) as Record<string, string>;
+    expect(Object.keys(manifest).sort()).toEqual(
+      EXPECTED_SOURCES.filter((source) => source !== "raw/page.html"),
+    );
+
+    // And the vault settles: the compile after a cascade is a no-op.
+    fs.resetCounters();
+    expect(await compile()).toMatchObject({ noop: true, pagesDeleted: 0 });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("changes nothing when the scope preview is declined", async () => {
+    await compile();
+    await fs.delete("raw/page.html");
+
+    fs.resetCounters();
+    const result = await compile({ confirm: () => false });
+
+    expect(result).toMatchObject({ cancelled: true, noop: true, deleted: 1 });
+    expect(fs.writes).toBe(0);
+    expect(await fs.exists("wiki/sources/page.md")).toBe(true);
+    expect(await fs.exists("raw/page.md")).toBe(true);
   });
 });

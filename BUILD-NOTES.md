@@ -224,3 +224,43 @@ A review scoped to where M2c's new callers meet older committed modules, rather 
 - Running headers are counted by *pages* rather than occurrences, so a phrase repeated three times on one page reads as prose rather than as a header.
 - The marker heads the derivative's **body**, not the file, so the frontmatter block stays first and Obsidian still parses it. It is re-derived with the derivative on every run, so it can never go stale or stack.
 - The running-header search returns only a page count, never the winning line. The marker reports the count, so which of two equally-repeated lines "wins" is unobservable — and keeping the winner would mean deciding a tie no caller can see. It would also invite putting arbitrary extracted text into an HTML comment, where a `-->` inside a PDF would break out of the marker.
+
+## M2d — Cascade and scope preview
+
+### What the cascade is
+
+- The cascade cannot chain, so §6.6's "runs to completion" is one pass over the page table and its "visited set" is that pass keyed by page path. Pages cite *sources*, never other pages — a wikilink between pages is §4's future-article signal, not a citation — so deleting a page can never orphan another one. A page cited by three deleted sources enters the queue once.
+- Scope is computed twice, deliberately. `cascadeScope` is **advisory**: a pure function over (page table, citation records, diff) that answers "what would this touch" without normalizing, calling a model, or writing, and it is what `previewCompile` and the confirm gate report. The **authoritative** decision stays M2c's `citerUnion` against the manifest this run will write. That split is what makes §6.6's second list a "may": a modified or new source whose inventory re-cites a page has added itself to the union by then, and the page regenerates instead of being deleted.
+- A deleted source's own source page needs no rule of its own. §4 gives it exactly one citation — its own raw file — which has just left the manifest, so the uniform zero-citer rule deletes it like any other page.
+- Only deletion can empty a citer set. §6.5's record survives on the source still *existing*, not on it still *mentioning* the page (M2c's reading of "surviving entries"), so a modified source that dropped a topic still cites that page, and the page regenerates from the source's new text rather than being deleted. Revoking a modified source's citations instead would let one non-deterministic Call A delete a page the source still discusses.
+- `pagesDeleted` and `cancelled` join `pagesWritten` on `CompileResult`; §15's acceptance check reads the first, and the plugin's notice reads the second.
+- `ScopePreview` carries page *paths*; the modal displays the stem, since §4 makes the filename the title.
+
+### Ordering
+
+- Doomed pages are dropped from the title index the link post-pass builds, so a page written this run cannot resolve a link against a page that is about to leave the vault — and cannot lose an alias contest to one.
+- Page deletions run after the write loop and before the index is re-derived, because the index re-reads the page table from disk; deletions therefore reach `wiki/_index.md` with no change to the index step at all. Doomed and written pages are disjoint by construction: everything in `toWrite` has at least one live citer.
+- The orphaned-derivative sweep runs before normalization, so a new source with the same stem can claim the freed derivative path in the same run rather than failing to claim it.
+
+### Derivatives and deletion safety
+
+- A derivative orphaned by a source leaving its path is deleted — both halves of "leaving": deletion, and the old side of a rename. This supersedes M1's "the now-stale derivative at the old name is left alone", which deferred exactly this to the cascade.
+- The candidate is computed as `<stem>.md` beside the departed path without consulting the format: a deleted repo directory has no extension to read a format from, and the file is gone either way. Safety comes from content, not from the path — only a file whose `derived-from` names that exact departed path is Luka's to delete (invariant 7), so a user file or another source's derivative sitting there is never touched.
+
+### Confirm and cancellation
+
+- The confirm gate fires on §8.1's literal wording — the diff includes deletions or modifications — and only when a callback was supplied. An adds-only or pure-rename diff never confirms.
+- Confirm is a callback inside `CompileOptions` rather than an exposed acquire/release pair or a third façade method. The core's single `lock.run("compile", …)` then spans preview → confirm → work exactly as §8.1 requires, a second invocation during the modal gets invariant 2's notice verbatim, and there is no lock a caller can forget to release.
+- No callback means proceed unconfirmed. Tests and the headless eval harness want that; the modal is the plugin's concern, and §5's core contract has no UI in it.
+- `previewCompile` deliberately does **not** take the lock: it does no work and writes nothing, the same reason §9's pane is never blocked by it. §8.1's flow does not use it — compile's own callback is what holds the lock — so it exists for §5's contract and for M4's pane.
+- A declined preview returns `CompileResult{cancelled: true, noop: true}` carrying the diff counts, with zero model calls, zero writes and the manifest untouched. The gate sits before the first write, so "nothing happened" is structural rather than undone.
+
+### Retry after an interrupted cascade
+
+- A deleted source's manifest entry is removed only if its cascade completed. If a page it affected fails to regenerate, fails to be written, or fails to be deleted — or if its orphaned derivative could not be removed — the entry is put back, so §6.2's rule 3 (path present, file absent) fires again next compile and the cascade re-runs idempotently. Without this the deletion is unrecoverable: the entry is gone, nothing re-detects it, and the stale citation survives forever.
+- This is the same shape invariant 3 already gives a failed ingest — retry expressed entirely through the manifest, with no extra state — and it degrades the same way: a blocked cascade costs one source, not the run.
+- A rename whose stale derivative could not be deleted is reported in `failed` but has no entry to restore; the old path is not in the manifest to begin with.
+
+### Known cosmetic edge
+
+- When a source is deleted and an unrelated new source in the same run wants the doomed page's title, the new page takes the §8.4 suffix (`a-2`) even though `a` frees up moments later. Titles are allocated before the merge and the doomed set is only known after it; subtracting the preview's "may delete" list from the claimed titles instead would let a rescued page collide with a new page at the same path, which trades a cosmetic suffix for a lost page.

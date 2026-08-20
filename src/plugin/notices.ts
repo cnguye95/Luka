@@ -20,6 +20,13 @@ export function progressNotice(message: string): Notice {
  * per-source notice when a source is skipped after failing.
  */
 export function reportCompile(result: CompileResult): void {
+  // A declined scope preview did nothing, so there is nothing to report but
+  // the fact that it did nothing.
+  if (result.cancelled) {
+    notify("compile cancelled — nothing was changed.");
+    return;
+  }
+
   notify(completionMessage(result), NOTICE_MS);
 
   if (result.skipped.length > 0) {

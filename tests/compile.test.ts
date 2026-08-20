@@ -170,13 +170,12 @@ describe("the four rules (§6.2)", () => {
     expect(second).toMatchObject({ renamed: 0, added: 1, deleted: 1 });
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/renamed.md"]);
 
-    // The page for the deleted source is left behind for the §6.6 cascade to
-    // remove — it has no surviving citer. That cascade is M2d; until it lands,
-    // the stale page is expected, and this test records that boundary.
+    // The page for the deleted source has no surviving citer, so §6.6's
+    // cascade removes it; the new path gets its own page.
     expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
-      "wiki/sources/a.md",
       "wiki/sources/renamed.md",
     ]);
+    expect(second.pagesDeleted).toBe(1);
   });
 
   it("does not create a second page when a renamed source is later edited", async () => {

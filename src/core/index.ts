@@ -1,11 +1,21 @@
 // The façade the plugin, tests and eval all drive (handoff.md §5).
-// At M2c this exposes the full single-pass compile: discover → normalize →
-// extract (Call A) → generate (Call B) → post-process → index. The §6.6
-// deletion cascade and §5's previewCompile arrive at M2d.
+// At M2d this exposes the full compile — discover → normalize → extract
+// (Call A) → generate (Call B) → post-process → index — with §6.6's cascade
+// folded through it, plus the scope preview §5 names.
 import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
+import {
+  cascadeScope,
+  orphanedDerivatives,
+  type ScopePreview,
+} from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
-import { discover, type DiscoveredSource, type SkippedSource } from "./compile/discover";
+import {
+  discover,
+  type DiscoveredSource,
+  type DiscoveryResult,
+  type SkippedSource,
+} from "./compile/discover";
 import {
   citerUnion,
   generatePageBody,
@@ -37,6 +47,7 @@ import { parseFrontmatter, serializeFrontmatter } from "./yaml";
 
 export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
+export type { ScopePreview } from "./compile/cascade";
 export type { SkippedSource } from "./compile/discover";
 export { DEFAULT_SETTINGS } from "./types";
 export type { LukaSettings, ProviderTask } from "./types";
@@ -78,10 +89,14 @@ export interface CompileResult {
   failed: CompileFailure[];
   /** Wiki pages written this run. */
   pagesWritten: number;
+  /** Wiki pages the §6.6 cascade deleted — their last citer is gone. */
+  pagesDeleted: number;
   /** Provider calls this run — invariant 12's deterministic count. */
   modelCalls: number;
   /** True when the run wrote nothing at all. */
   noop: boolean;
+  /** True when the scope preview was declined; nothing was read past discovery. */
+  cancelled: boolean;
 }
 
 export type ProgressEvent =
@@ -94,10 +109,20 @@ export type ProgressEvent =
 
 export interface CompileOptions {
   onProgress?: (event: ProgressEvent) => void;
+  /**
+   * §8.1's confirm step. Called — inside the operation lock, before any work —
+   * whenever the diff includes deletions or modifications, which is exactly
+   * when §6.6 asks for the scope preview. Returning false abandons the run
+   * having written nothing. Omitting it proceeds unconfirmed, which is what
+   * tests and the headless eval harness want; the modal is the plugin's.
+   */
+  confirm?: (preview: ScopePreview) => Promise<boolean> | boolean;
 }
 
 export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
+  /** §5's read-only scope preview: no lock, no model call, no write. */
+  previewCompile(): Promise<ScopePreview>;
   readonly busyWith: OperationName | null;
 }
 
@@ -105,10 +130,23 @@ export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
   return {
     compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(deps, options)),
+    // Deliberately outside the lock: it does no work and writes nothing, so it
+    // can answer while a compile runs — the same reason §9's pane is never
+    // blocked by the lock. §8.1's flow does not use it; compile's own confirm
+    // callback holds the lock across preview → confirm → work.
+    previewCompile: () => runPreview(deps),
     get busyWith(): OperationName | null {
       return lock.busyWith;
     },
   };
+}
+
+/** §5's `previewCompile`. Every step here reads; none of them writes. */
+async function runPreview(deps: CoreDeps): Promise<ScopePreview> {
+  const manifest = await loadManifest(deps.fs, deps.manifestPath);
+  const discovery = await discover(deps.fs, manifest);
+  const pages = await loadPageTable(deps.fs);
+  return cascadeScope(pages, await readCitations(deps.fs, pages), discovery);
 }
 
 /** A source that normalized successfully and is ready for Call A. */
@@ -126,6 +164,17 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
   const manifest = await loadManifest(deps.fs, deps.manifestPath);
   const discovery = await discover(deps.fs, manifest);
+
+  // ── Scope preview (§6.6, §8.1) ─────────────────────────────────────────
+  // "with scope preview when the diff includes deletions or modifications".
+  // This sits inside the lock the façade already holds, so the lock spans
+  // preview → confirm → work exactly as §8.1 requires, and a second invocation
+  // during the modal gets invariant 2's busy notice.
+  if ((discovery.deleted.length > 0 || discovery.modified.length > 0) && options.confirm) {
+    const existing = await loadPageTable(deps.fs);
+    const preview = cascadeScope(existing, await readCitations(deps.fs, existing), discovery);
+    if (!(await options.confirm(preview))) return cancelled(discovery);
+  }
 
   const next: IngestManifest = { ...manifest };
   for (const rename of discovery.renamed) {
@@ -146,6 +195,32 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const work = [...discovery.added, ...discovery.modified];
   const failed: CompileFailure[] = [];
   let wrote = false;
+
+  // Deleted sources whose cascade could not be completed. Their manifest entry
+  // is put back at the end, so §6.2's rule 3 fires again next compile and the
+  // cascade retries — the same shape invariant 3 gives a failed ingest.
+  const blockedDeleted = new Set<string>();
+
+  // ── Orphaned derivatives ───────────────────────────────────────────────
+  // A source that left its path takes its derivative with it: `wiki/` is
+  // machine-owned and so is anything Luka wrote into `raw/` (invariant 7).
+  // This runs before normalization so a new source with the same stem can
+  // claim the freed derivative path in this very run.
+  for (const orphan of await orphanedDerivatives(deps.fs, [
+    ...discovery.deleted,
+    ...discovery.renamed.map((rename) => rename.from),
+  ])) {
+    try {
+      await deps.fs.delete(orphan.derivative);
+      wrote = true;
+    } catch (error) {
+      blockedDeleted.add(orphan.owner);
+      failed.push({
+        path: orphan.owner,
+        reason: `could not delete ${orphan.derivative} — ${describe(error)}`,
+      });
+    }
+  }
 
   // ── Normalize ──────────────────────────────────────────────────────────
   // Serial, and deliberately so: normalization writes files, and the §11
@@ -247,12 +322,24 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     items: inventories.get(entry.source.path)?.items ?? [],
   }));
 
-  // §6.5: "Also queued: every page citing a modified/deleted source." The
-  // deleted half is M2d's cascade; the modified half is this run's business.
-  const touched = new Set(discovery.modified.map((source) => source.path));
-  const requeued = pages
-    .filter((page) => (citations.get(page.path) ?? []).some((path) => touched.has(path)))
-    .map((page) => page.path);
+  // §6.5: "Also queued: every page citing a modified/deleted source." §6.6's
+  // cascade is exactly this queue plus the zero-citer rule below — modification
+  // and deletion use one machinery, and one pass over the page table is the
+  // visited set, since a page cited twice enters the queue once.
+  const deleted = new Set(discovery.deleted);
+  const touched = new Set([...discovery.modified.map((source) => source.path), ...deleted]);
+  const requeued: string[] = [];
+  // Which deleted sources put each page in the queue, so a page that fails to
+  // regenerate or delete blocks exactly the sources whose cascade it was.
+  const affectedByDeleted = new Map<string, string[]>();
+
+  for (const page of pages) {
+    const entries = citations.get(page.path) ?? [];
+    if (!entries.some((path) => touched.has(path))) continue;
+    requeued.push(page.path);
+    const causes = entries.filter((path) => deleted.has(path));
+    if (causes.length > 0) affectedByDeleted.set(page.path, causes);
+  }
 
   const workSet = mergeInventories(pages, entries, requeued, claimed);
 
@@ -279,8 +366,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const isLive = (path: string): boolean =>
     Object.hasOwn(next, path) || readable.has(path);
 
-  // Entity/concept pages — one Call B each.
-  const generationTargets = [
+  const affected = [
     ...workSet.regenerate.map((item) => ({
       path: item.page.path,
       title: item.page.title,
@@ -297,7 +383,23 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       summary: item.summary,
       citers: citerUnion([], item.citers, isLive),
     })),
-  ].filter((target) => target.kind !== "source");
+  ];
+
+  // §6.6: "a page with zero remaining source citations is deleted". The citer
+  // union is what decides it, which is what makes the preview's list a "may":
+  // a modified or new source whose inventory named this page again has already
+  // added itself above, and the page regenerates instead.
+  //
+  // This runs before the kind filter on purpose. A deleted source's own source
+  // page is caught here by the same rule as any other — its only citation is
+  // the raw file that just vanished — so it needs no case of its own.
+  const doomed = affected.filter((target) => target.citers.length === 0);
+  const doomedPaths = new Set(doomed.map((target) => target.path));
+
+  // Entity/concept pages — one Call B each.
+  const generationTargets = affected.filter(
+    (target) => target.citers.length > 0 && target.kind !== "source",
+  );
 
   const generated = await mapWithConcurrency(
     generationTargets,
@@ -331,13 +433,20 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // Every source that queued this page must be re-inventoried to retry it.
     const reason = `page generation failed for ${result.target.title} — ${result.reason}`;
     for (const citer of result.target.citers) block(blockedBy, citer, reason);
+    blockCascade(blockedDeleted, affectedByDeleted, result.target.path);
   }
 
   // ── Post-process and write ─────────────────────────────────────────────
   // The title index covers existing pages plus everything written this run, so
   // a link to a page created in the same compile resolves immediately.
+  // A doomed page is dropped from the table first: it is about to leave the
+  // vault, and a link resolved against it would point at nothing. Left in, it
+  // would also outrank a live page for a shared alias.
   const index = buildTitleIndex([
-    ...pages.filter((page) => !toWrite.some((written) => written.path === page.path)),
+    ...pages.filter(
+      (page) =>
+        !doomedPaths.has(page.path) && !toWrite.some((written) => written.path === page.path),
+    ),
     ...toWrite.map(toMeta),
   ]);
 
@@ -358,6 +467,23 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       const reason = `could not write ${page.path} — ${describe(error)}`;
       if (page.citers.length === 0) failed.push({ path: page.path, reason });
       for (const citer of page.citers) block(blockedBy, citer, reason);
+      blockCascade(blockedDeleted, affectedByDeleted, page.path);
+    }
+  }
+
+  // ── Delete (§6.6) ──────────────────────────────────────────────────────
+  // After the writes and before the index, so the index is re-derived from a
+  // page table that no longer contains them. A doomed page is never also a
+  // written one: every entry in `toWrite` has at least one live citer.
+  let pagesDeleted = 0;
+  for (const page of doomed) {
+    try {
+      await deps.fs.delete(page.path);
+      pagesDeleted += 1;
+      wrote = true;
+    } catch (error) {
+      failed.push({ path: page.path, reason: `could not delete — ${describe(error)}` });
+      blockCascade(blockedDeleted, affectedByDeleted, page.path);
     }
   }
 
@@ -389,6 +515,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     }
   }
 
+  // A deletion is only recorded once its cascade completed. Putting the entry
+  // back makes §6.2 rule 3 (path present, file absent) fire again next compile,
+  // which re-runs the cascade idempotently — retry with no extra state, exactly
+  // as a failed ingest retries by not being manifested.
+  for (const path of discovery.deleted) {
+    if (!blockedDeleted.has(path)) continue;
+    next[path] = manifest[path] as string;
+    failed.push({ path, reason: "cascade incomplete — will retry next compile" });
+  }
+
   if (!isSameManifest(manifest, next)) {
     emit({ phase: "writing-manifest" });
     await saveManifest(deps.fs, deps.manifestPath, next);
@@ -404,8 +540,28 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     skipped: discovery.skipped,
     failed,
     pagesWritten: toWrite.length,
+    pagesDeleted,
     modelCalls: provider.stats().requests - before,
     noop: !wrote,
+    cancelled: false,
+  };
+}
+
+/** §8.1's declined preview: the diff, and the fact that nothing was done. */
+function cancelled(discovery: DiscoveryResult): CompileResult {
+  return {
+    added: discovery.added.length,
+    modified: discovery.modified.length,
+    unchanged: discovery.unchanged.length,
+    deleted: discovery.deleted.length,
+    renamed: discovery.renamed.length,
+    skipped: discovery.skipped,
+    failed: [],
+    pagesWritten: 0,
+    pagesDeleted: 0,
+    modelCalls: 0,
+    noop: true,
+    cancelled: true,
   };
 }
 
@@ -448,6 +604,18 @@ async function repointRenames(
   }
 
   return wrote;
+}
+
+/**
+ * A page the cascade could not finish with keeps its deleted sources in the
+ * manifest, so the deletion is rediscovered and retried next compile.
+ */
+function blockCascade(
+  blocked: Set<string>,
+  affectedByDeleted: ReadonlyMap<string, string[]>,
+  pagePath: string,
+): void {
+  for (const source of affectedByDeleted.get(pagePath) ?? []) blocked.add(source);
 }
 
 /** Records why a source cannot be manifested this run, so it retries next time. */
