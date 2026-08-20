@@ -170,7 +170,7 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 - A source page's title comes from the file stem, sanitized and uniquified. Call A's schema is fixed by §6.5 and carries no title for the source itself, so the stem is the only name available.
 - Source pages are named **before** the merge and their titles are passed into it as reserved names. §4 requires titles unique across all of `wiki/`, and the two halves of a run allocate from one title space: without this, a source `raw/Obsidian.md` and a concept the model calls "Obsidian" both produce a page titled "Obsidian", and the link post-pass then resolves `[[Obsidian]]` to whichever the title index happened to keep.
 - `PageMeta` gains an optional `source` key, unwrapped from §4's `source: "[[raw/<file>]]"`. It is how a re-ingested source finds its existing page and keeps that page's title stable across recompiles.
-- "Surviving entries" in §6.5's citer union is read as "present in the manifest this run will write". Deleted paths are already dropped from it, so the union expresses §6.6's delete signal (a page with zero remaining citers) without the cascade being built yet.
+- "Surviving entries" in §6.5's citer union is read as "present in the manifest this run will write". Deleted paths are already dropped from it, so the union expresses §6.6's delete signal (a page with zero remaining citers) without the cascade being built yet. (Superseded at M2d: once an empty union deletes the page rather than trimming a line, "surviving" has to mean the file is still in the vault — see the `isLive` entry below.)
 - The citer union is existing-then-new with duplicates removed, so a page's oldest sources stay first and the Call B prompt does not churn between runs.
 - The title index used for the link post-pass covers existing pages plus every page written this run, so a link to a page created in the same compile resolves immediately rather than waiting a compile.
 
@@ -180,9 +180,9 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 - Invariant 3 is extended past normalization: a source is manifested only when its normalization, its inventory, and *every* entity/concept page its inventory queued all succeeded. A failed Call B therefore un-manifests exactly the sources that would have to be re-inventoried to retry it — retry with no extra state.
 - A source whose Call B failed still gets its own source page written. That page describes the source, which ingested and inventoried fine, and writing it is idempotent — the next compile rewrites it identically. Only the manifest entry is withheld, which is what makes the retry happen.
 - The provider is constructed in `createCore` and injected into `CoreDeps` as an optional test seam. The seam is at wrapper level, never transport level, so invariant 10 stays structural.
-- A compile that queues no pages writes no index. `wiki/_index.md` is only regenerated when at least one page was written, so an unchanged vault still performs literally zero writes.
+- A compile that queues no pages writes no index. `wiki/_index.md` is only regenerated when at least one page was written, so an unchanged vault still performs literally zero writes. (Superseded later in this same milestone — see "re-derived on **every** compile" below, which keeps the zero-write property by comparing bytes instead of skipping the step.)
 - `CompileResult` gains `modelCalls` (this run's delta against `provider.stats()`) and `pagesWritten`. §15's "assert via a call counter" reads the former.
-- An unchanged source that still cites a regenerating page has its readable markdown located by trying `<stem>.md` and then the source itself; its format is not in hand at that point.
+- An unchanged source that still cites a regenerating page has its readable markdown located by trying `<stem>.md` and then the source itself; its format is not in hand at that point. (Superseded twice: by the M2c seam fix, which reads the format from the path and requires the derivative to name this source, and again at M2d for repo sources, which are directories with no extension to read a format from.)
 
 ### Fixes from the M2c audit
 
@@ -239,7 +239,7 @@ A review scoped to where M2c's new callers meet older committed modules, rather 
 ### Ordering
 
 - Doomed pages are dropped from the title index the link post-pass builds, so a page written this run cannot resolve a link against a page that is about to leave the vault — and cannot lose an alias contest to one.
-- Page deletions run after the write loop and before the index is re-derived, because the index re-reads the page table from disk; deletions therefore reach `wiki/_index.md` with no change to the index step at all. Doomed and written pages are disjoint by construction: everything in `toWrite` has at least one live citer.
+- Page deletions run after the write loop and before the index is re-derived, because the index re-reads the page table from disk; deletions therefore reach `wiki/_index.md` with no change to the index step at all. Doomed and written pages are disjoint by construction: everything in `toWrite` has at least one live citer. (That argument was true but insufficient — doom is read from a different record than the one a source page is queued from. Superseded by the by-path exclusion below.)
 - The orphaned-derivative sweep runs before normalization, so a new source with the same stem can claim the freed derivative path in the same run rather than failing to claim it.
 
 ### Derivatives and deletion safety
@@ -259,7 +259,7 @@ A review scoped to where M2c's new callers meet older committed modules, rather 
 
 - A deleted source's manifest entry is removed only if its cascade completed. If a page it affected fails to regenerate, fails to be written, or fails to be deleted — or if its orphaned derivative could not be removed — the entry is put back, so §6.2's rule 3 (path present, file absent) fires again next compile and the cascade re-runs idempotently. Without this the deletion is unrecoverable: the entry is gone, nothing re-detects it, and the stale citation survives forever.
 - This is the same shape invariant 3 already gives a failed ingest — retry expressed entirely through the manifest, with no extra state — and it degrades the same way: a blocked cascade costs one source, not the run.
-- A rename whose stale derivative could not be deleted is reported in `failed` but has no entry to restore; the old path is not in the manifest to begin with.
+- A rename whose stale derivative could not be deleted is reported in `failed` but has no entry to restore; the old path is not in the manifest to begin with. (Wrong, and superseded below: the old path is a manifest key — that is how the rename was detected.)
 
 ### Fixes from the M2d reviews
 
@@ -283,12 +283,24 @@ Three independently scoped reviews — the diff itself, an audit against §2/§5
 - **The completion notice names the number of pages removed.** The user approved a list of pages that only *might* go; saying how many actually went closes that loop. This is not invariant 4's forbidden ingest report — it counts what compile did, not the problems it found.
 - **§15's first two M2 criteria are now asserted on the demo corpus itself.** They were proven on a synthetic vault while the demo suite stubbed Call A to zero items — so "compiles into a three-kind wiki" was never exercised there, and its zero-call assertion checked `http.requests`, which a stubbed provider never touches anyway.
 
+### Fixes from the second M2d review round
+
+The first round's fixes reached into M1's discovery code, so a second round was scoped at that risk. It found that one of those fixes was itself destructive.
+
+- **A renamed source keeps its derivative instead of re-extracting it.** The first round had a rename whose derivative did not travel classified as *also modified*, which re-normalized at the new path and let the sweep delete the old file. That is what an ordinary folder move looks like — and §6.2 says a derivative "persists until the original changes", calling a hand-edited one "the sanctioned repair path for bad extractions". A rename does not change the original: identical bytes are how it was detected. So compile now carries the derivative over, moving the file when the rename moved its location, and a folder move costs zero model calls and preserves the repair. `reprocess` is the last resort — nothing usable to carry, or a file that is not Luka's already sitting at the destination — and only then does the missing-derivative rule apply.
+- **One decision, two callers.** `renameDerivativeAction` is called by discovery to classify and by compile to act, so the two cannot disagree about whether a rename needs work. `Rename` gains the new path's `format`, which is what decides where the derivative belongs; without it compile would have to guess a format for a path it never classified.
+- **Repointing rewrites one line, not the block.** `replaceFrontmatterValue` splices the new `derived-from` value in place. A full re-serialize would drop the user's comments, reorder their keys and retype their scalars — exactly the damage M1's annotator was built to avoid — on a file §6.2 invites them to edit. Invariant 7 would permit the rewrite; there is just no reason to spend it on one word.
+- **`IngestManifest`'s doc comment now names the sentinel.** §3 describes the file as path → SHA-256, and `CASCADE_PENDING` widened that. §7.1's graph node set and §10's health check both read the manifest as "these files exist and are ingested" and must skip such an entry; the type is where they will look.
+- **All four of §15's M2 criteria now run on the demo corpus.** The delete criterion's "regenerates" half was asserted only by inference, and "modified source reprocesses" was proven only on a synthetic vault.
+
 ### Known limitations, accepted
 
 - `previewCompile` is deliberately lock-free, so a preview taken *while* a compile runs can read a half-written vault, and a page deleted between its `list` and its `read` makes it reject. Nothing calls it in the plugin today — §8.1's flow uses compile's own confirm callback — but M4's pane will, and that is where the tolerance belongs.
 - Deletions are permanent, not routed to Obsidian's trash. `FsAdapter` has only `delete`, the spec never mentions trash, and a derivative is already overwritten wholesale when its original changes — so a trash concept would be new scope (§0), not the smaller option.
 - The scope preview lists pages, not the derivatives the sweep will remove. §6.6 enumerates what the preview shows, so a third list is scope the spec did not ask for; the README checklist covers the behaviour for a human tester.
 - A failed page deletion leaves `wiki/_index.md` naming a page that this run's other pages resolved their links as though gone. It self-heals on the retry the manifest restore forces.
+- Checking derivative *ownership* rather than existence costs a read and a YAML parse per unchanged converting source per compile, where it used to cost one `exists`. Reads are not writes: an unchanged vault still performs literally zero writes, which is what §6.2 and M1's acceptance criterion actually require.
+- A rename that changes a source's format class — `data.csv` to `data.txt`, where the new path is a passthrough that writes no derivative — leaves the old derivative in place rather than sweeping it. The sweep spares any location a live source could claim, and it cannot tell that this particular source will never claim it. A stale file, not a lost one.
 
 ### Known cosmetic edge
 

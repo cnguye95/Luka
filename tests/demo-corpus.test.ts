@@ -255,6 +255,13 @@ describe("demo corpus", { timeout: SLOW }, () => {
     // Its source page and the entity only it named; the shared concept lives.
     expect(result).toMatchObject({ deleted: 1, pagesDeleted: 2, cancelled: false, failed: [] });
     expect(await fs.exists("wiki/sources/page.md")).toBe(false);
+    // "regenerates … correctly": the surviving concept really was rewritten
+    // from its remaining citers, and no longer names the deleted source.
+    const survivor = parseCitationBlock(await read("wiki/concepts/Graph Retrieval.md")).entries;
+    expect(survivor).not.toContain("raw/page.html");
+    expect(survivor.sort()).toEqual(
+      EXPECTED_SOURCES.filter((source) => source !== "raw/page.html"),
+    );
     // The derivative Luka wrote for that source goes with it.
     expect(await fs.exists("raw/page.md")).toBe(false);
     expect(await read("wiki/_index.md")).not.toContain("[[page]]");
@@ -267,6 +274,28 @@ describe("demo corpus", { timeout: SLOW }, () => {
     // And the vault settles: the compile after a cascade is a no-op.
     fs.resetCounters();
     expect(await compile()).toMatchObject({ noop: true, pagesDeleted: 0 });
+    expect(fs.writes).toBe(0);
+  });
+
+  // §15's M2 criterion: "modified source reprocesses".
+  it("reprocesses a modified demo source and only the pages citing it", async () => {
+    await compile();
+    const note = await read("raw/note.md");
+
+    await fs.write("raw/note.md", `${note}\nA new paragraph about ranking.\n`);
+
+    const { core: second, provider } = build();
+    const result = await second.compile({ confirm: () => true });
+
+    expect(result).toMatchObject({ modified: 1, added: 0, deleted: 0, failed: [] });
+    // One inventory call — the changed source — and no others.
+    expect(provider.callsFor("inventory")).toHaveLength(1);
+    expect(provider.callsFor("inventory")[0]?.user).toContain("A new paragraph about ranking.");
+    expect(await read("wiki/sources/note.md")).toContain("A demo source.");
+
+    // And it settles.
+    fs.resetCounters();
+    expect(await compile()).toMatchObject({ noop: true, unchanged: EXPECTED_SOURCES.length });
     expect(fs.writes).toBe(0);
   });
 

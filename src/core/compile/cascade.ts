@@ -18,8 +18,9 @@
 // deleted: a modified or new source's inventory can still re-cite one.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
+import { derivativePathFor } from "../normalize/index";
 import { comparePaths, dirname, joinPath, stem } from "../paths";
-import type { PageMeta } from "../types";
+import type { PageMeta, SourceFormat } from "../types";
 import { parseFrontmatter } from "../yaml";
 import type { DiscoveryResult } from "./discover";
 
@@ -114,52 +115,61 @@ export function derivativeLocation(path: string): string {
   return directory === "" ? name : joinPath(directory, name);
 }
 
-/** A derivative whose owner was renamed without the file itself moving. */
-export interface RepointedDerivative {
-  derivative: string;
-  from: string;
-  to: string;
+/** What a rename requires of the source's derivative. */
+export type RenameDerivativeAction =
+  | { kind: "none" }
+  | { kind: "repoint"; at: string }
+  | { kind: "move"; from: string; to: string }
+  | { kind: "reprocess" };
+
+/** True when the file at `path` is a derivative naming `origin` as its source. */
+async function ownedBy(fs: FsAdapter, path: string, origin: string): Promise<boolean> {
+  const stat = await fs.stat(path);
+  if (stat === null || stat.kind !== "file") return false;
+  try {
+    const { data } = parseFrontmatter(decodeUtf8(await fs.read(path)));
+    return data["derived-from"] === origin;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Derivatives that came through a rename still naming the source's old path.
+ * Where a renamed source's derivative stands, and what this run owes it.
  *
- * The file at the *new* path's derivative location is this source's derivative
- * whenever its `derived-from` is the old path — whether it never moved (an
- * extension-only rename such as `data.csv` to `data.tsv` keeps the same
- * location) or moved along with its original. Either way only the key is
- * stale, and left that way the next compile reads the source as missing its
- * derivative and then refuses to overwrite what now looks like a stranger's
- * file, failing that source on every run.
+ * §6.2 says a rename updates the manifest path and skips regeneration, and it
+ * separately says a derivative "persists until the original changes" — the
+ * sanctioned repair path for a bad extraction. A rename does not change the
+ * original: identical bytes are how it was detected. So the derivative is
+ * carried over rather than rebuilt, whether it sits where the new path expects
+ * it (`repoint` — an extension-only rename never moves it) or was left at the
+ * old path's location (`move`, then repoint), which is what an ordinary folder
+ * move produces.
  *
- * Repointing is the same bookkeeping §6.2 asks of a rename everywhere else,
- * and it costs no model call.
+ * `reprocess` is the last resort: nothing usable to carry, or a file that is
+ * not Luka's already occupying the destination. Only then does §6.2's
+ * missing-derivative rule apply and the source re-normalize.
+ *
+ * One decision, called by discovery to classify and by compile to act, so the
+ * two can never disagree about whether a rename needs work.
  */
-export async function renamedDerivatives(
+export async function renameDerivativeAction(
   fs: FsAdapter,
-  renames: readonly { from: string; to: string }[],
-): Promise<RepointedDerivative[]> {
-  const found: RepointedDerivative[] = [];
+  rename: { from: string; to: string; format: SourceFormat },
+): Promise<RenameDerivativeAction> {
+  const target = derivativePathFor(rename.to, rename.format);
+  // A passthrough source is its own readable markdown and writes no derivative.
+  if (target === null) return { kind: "none" };
 
-  for (const rename of renames) {
-    const derivative = derivativeLocation(rename.to);
-    // A passthrough source is its own readable markdown and has no derivative.
-    if (derivative === rename.from || derivative === rename.to) continue;
+  if (await ownedBy(fs, target, rename.to)) return { kind: "none" };
+  if (await ownedBy(fs, target, rename.from)) return { kind: "repoint", at: target };
 
-    const stat = await fs.stat(derivative);
-    if (stat === null || stat.kind !== "file") continue;
-
-    try {
-      const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
-      if (data["derived-from"] === rename.from) {
-        found.push({ derivative, from: rename.from, to: rename.to });
-      }
-    } catch {
-      continue;
-    }
+  const old = derivativeLocation(rename.from);
+  if (old !== target && !(await fs.exists(target)) && (await ownedBy(fs, old, rename.from))) {
+    return { kind: "move", from: old, to: target };
   }
 
-  return found.sort((a, b) => comparePaths(a.derivative, b.derivative));
+  return { kind: "reprocess" };
 }
 
 /**

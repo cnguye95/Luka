@@ -191,32 +191,37 @@ describe("the four rules (§6.2)", () => {
     expect(sourcePages).toEqual(["wiki/sources/a.md"]);
   });
 
-  it("reprocesses a renamed source whose derivative is not at the new path", async () => {
+  it("carries a renamed source's derivative over rather than re-extracting it", async () => {
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
-    await core(fs).instance.compile();
+    const { instance, provider } = core(fs);
+    await instance.compile();
     expect(await fs.exists("raw/a.md")).toBe(true);
 
+    // §6.2: a derivative "persists until the original changes", and a rename
+    // does not change the original — identical bytes are how it was detected.
+    // So the file moves with its source and only its origin key is rewritten.
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
     await fs.move("raw/a.html", "raw/b.html");
+
+    const before = provider.stats().requests;
     const second = await core(fs).instance.compile();
 
-    // The two §6.2 rules compose: it is still a rename, so the identity moves,
-    // and it is also modified, so the new path gets its own derivative rather
-    // than silently having none. Reporting the old path as deleted instead
-    // would hand §6.6's cascade a source that never went away.
-    expect(second).toMatchObject({ renamed: 1, modified: 1, deleted: 0 });
+    expect(second).toMatchObject({ renamed: 1, modified: 0, deleted: 0, modelCalls: 0 });
+    expect(provider.stats().requests).toBe(before);
+    expect(await fs.exists("raw/a.md")).toBe(false);
     expect(fs.text("raw/b.md")).toContain("derived-from: raw/b.html");
-    expect(Object.keys(manifestOf(fs))).toEqual(["raw/b.html"]);
+    // The user's repair survives the move — losing it is what re-extracting did.
+    expect(fs.text("raw/b.md")).toContain("HAND REPAIRED.");
 
     // The page keeps its identity — moving a file is not a reason to lose it.
     expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
       "wiki/sources/a.md",
     ]);
     expect(fs.text("wiki/sources/a.md")).toContain("source: '[[raw/b.html]]'");
-    // And the derivative left at the old name goes.
-    expect(await fs.exists("raw/a.md")).toBe(false);
 
     fs.resetCounters();
     expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
   });
 
   it("keeps the pages of a source moved into a subfolder (§6.2, §6.6)", async () => {
@@ -227,16 +232,43 @@ describe("the four rules (§6.2)", () => {
     await core(fs).instance.compile();
     const page = "wiki/sources/data.md";
     expect(await fs.exists(page)).toBe(true);
+    await fs.write("raw/data.md", `${fs.text("raw/data.md")}\nHAND REPAIRED.\n`);
 
     await fs.move("raw/data.csv", "raw/sub/data.csv");
     const second = await core(fs).instance.compile();
 
-    expect(second).toMatchObject({ deleted: 0, pagesDeleted: 0 });
+    expect(second).toMatchObject({ deleted: 0, pagesDeleted: 0, modified: 0, modelCalls: 0 });
     expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([page]);
     expect(fs.text(page)).toContain("source: '[[raw/sub/data.csv]]'");
     expect(fs.text(page)).toContain("- [[raw/sub/data.csv]]");
+    // The derivative travelled with its source, contents and all.
     expect(fs.text("raw/sub/data.md")).toContain("derived-from: raw/sub/data.csv");
+    expect(fs.text("raw/sub/data.md")).toContain("HAND REPAIRED.");
     expect(await fs.exists("raw/data.md")).toBe(false);
+  });
+
+  it("leaves the rest of a repaired derivative's frontmatter byte-for-byte", async () => {
+    // §6.2 invites the user to edit a derivative, so repointing one key must
+    // not restyle their YAML: a load/dump round trip drops comments, reorders
+    // keys and retypes scalars (`010` becomes `10`).
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+
+    const original = fs.text("raw/data.md");
+    await fs.write(
+      "raw/data.md",
+      original.replace("---\n", "---\n# my note\nmykey: 010\nflow: [a, b]\n"),
+    );
+
+    await fs.move("raw/data.csv", "raw/data.tsv");
+    await core(fs).instance.compile();
+
+    const after = fs.text("raw/data.md");
+    expect(after).toContain("# my note");
+    expect(after).toContain("mykey: 010");
+    expect(after).toContain("flow: [a, b]");
+    expect(after).toContain("derived-from: raw/data.tsv");
+    expect(after).not.toContain("derived-from: raw/data.csv");
   });
 
   it("repoints, rather than sweeping, the derivative of an extension-only rename", async () => {

@@ -4,6 +4,7 @@
 // carrying `derived-from`. A repo directory is one source and is never
 // descended into. Identity is SHA-256 of content; timestamps are never used.
 import type { FsAdapter } from "../adapters";
+import { renameDerivativeAction } from "./cascade";
 import { decodeUtf8, sha256Hex } from "../hash";
 import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
@@ -30,6 +31,8 @@ export interface Rename {
   from: string;
   to: string;
   hash: string;
+  /** The new path's format — what decides where its derivative belongs. */
+  format: SourceFormat;
 }
 
 export interface DiscoveryResult {
@@ -68,24 +71,22 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 
   const { renamed, remainingAdded, remainingDeleted } = pairRenames(added, vanished, manifest);
 
-  // A rename skips regeneration, but only if the derivative already sits at the
-  // new path; otherwise §6.2's missing-derivative rule applies as well and the
-  // source reprocesses.
+  // A rename is always a rename: the manifest path and every wiki reference
+  // follow the file. Reporting the old path as deleted instead would hand
+  // §6.6's cascade a source that never went away, and a plain folder move —
+  // which always leaves the derivative behind — would delete the pages citing
+  // it.
   //
-  // The two rules compose rather than compete: it is still a rename, so the
-  // manifest path and every wiki reference follow the file, and it is *also*
-  // modified, so it re-normalizes at its new path. Reporting the old path as
-  // deleted instead would hand §6.6's cascade a source that never went away —
-  // and moving a file into a subfolder, which leaves the derivative behind and
-  // so always lands here, would delete the very pages that cite it.
+  // Whether it is *also* modified depends on the derivative. Compile can carry
+  // one over, in place or by moving it, and §6.2 says a derivative persists
+  // until its original changes — which a rename does not do. Only when there
+  // is nothing usable to carry does the missing-derivative rule apply.
   const renames: Rename[] = [];
   for (const rename of renamed) {
     const source = present.get(rename.to) as DiscoveredSource;
     renames.push(rename);
-    // The derivative may still carry the old path as its origin: an
-    // extension-only rename leaves it at the same location, so it is this
-    // source's derivative under its previous name. Compile repoints the key.
-    if (!(await hasDerivative(fs, source, rename.from))) modified.push(source);
+    const action = await renameDerivativeAction(fs, rename);
+    if (action.kind === "reprocess") modified.push(source);
   }
 
   return {
@@ -155,7 +156,7 @@ function pairRenames(
       continue;
     }
     claimed.add(from);
-    renamed.push({ from, to: source.path, hash: source.hash });
+    renamed.push({ from, to: source.path, hash: source.hash, format: source.format });
   }
 
   return {

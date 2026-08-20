@@ -88,6 +88,43 @@ function renderKeys(data: Record<string, unknown>): string {
 }
 
 /**
+ * Rewrites the value of a single existing key, leaving every other byte of the
+ * document alone — including the rest of the frontmatter.
+ *
+ * Used to point a derivative's `derived-from` at its source's new path after a
+ * rename. §6.2 invites the user to edit a derivative (it is the sanctioned
+ * repair path for a bad extraction), so even though invariant 7 makes the file
+ * Luka's to rewrite, re-serializing the block would throw away their comments
+ * and restyle their YAML for the sake of one word.
+ *
+ * Returns `null` when the key is not there as a simple `key: value` line, so
+ * the caller can fall back rather than guess.
+ */
+export function replaceFrontmatterValue(
+  text: string,
+  key: string,
+  value: string,
+): string | null {
+  const match = FENCE.exec(text);
+  if (!match) return null;
+
+  const inner = match[2] ?? "";
+  const line = new RegExp(`^([ \\t]*${escapeForRegExp(key)}[ \\t]*:[ \\t]*)(.*)$`, "m");
+  if (!line.test(inner)) return null;
+
+  const rendered = dump({ [key]: value }, { lineWidth: -1, noRefs: true })
+    .slice(key.length + 1)
+    .trim();
+  const rewritten = inner.replace(line, (_full, prefix: string) => `${prefix}${rendered}`);
+
+  return match[1] + rewritten + match[3] + text.slice(match[0].length);
+}
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * Adds the keys of `data` that the document does not already have, and nothing
  * else. Returns `text` unchanged when there is nothing to add, so re-running
  * annotation is a no-op down to the byte.

@@ -58,7 +58,14 @@ export interface GraphSnapshot {
   edges: GraphEdge[];
 }
 
-/** Vault-relative path → SHA-256 of the source's content (handoff.md §3, §6.2). */
+/**
+ * Vault-relative path → SHA-256 of the source's content (handoff.md §3, §6.2).
+ *
+ * One value is deliberately not a hash: `CASCADE_PENDING` marks a source that
+ * left the vault but whose §6.6 cascade could not be completed. Readers that
+ * treat an entry as "this file exists and is ingested" — §7.1's graph node set
+ * and §10's health check — must skip it.
+ */
 export type IngestManifest = Record<string, string>;
 
 /** Names of the operations that contend for the single global lock (invariant 2). */

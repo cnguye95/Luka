@@ -9,7 +9,7 @@ import {
   cascadeScope,
   derivativeLocation,
   orphanedDerivatives,
-  renamedDerivatives,
+  renameDerivativeAction,
   type ScopePreview,
 } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
@@ -46,7 +46,7 @@ import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
 import type { IngestManifest, LukaSettings, OperationName, PageMeta } from "./types";
-import { parseFrontmatter, serializeFrontmatter } from "./yaml";
+import { parseFrontmatter, replaceFrontmatterValue, serializeFrontmatter } from "./yaml";
 
 export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
@@ -215,24 +215,27 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // machine-owned and so is anything Luka wrote into `raw/` (invariant 7).
   // This runs before normalization so a new source with the same stem can
   // claim the freed derivative path in this very run.
-  // A rename that did not move the derivative only invalidated its origin key.
-  // Repointing it here, before normalization, is what keeps §6.2's promise
-  // that a rename costs no regeneration: without it the source reads as
-  // missing its derivative next run and re-extracts — or fails outright,
-  // because claiming the path would look like overwriting a stranger's file.
-  for (const entry of await renamedDerivatives(deps.fs, discovery.renamed)) {
+  // A renamed source keeps its derivative rather than rebuilding it: §6.2 says
+  // a derivative persists until its original changes, and a rename does not
+  // change the original — identical bytes are how it was detected. Carrying it
+  // over costs no model call and preserves a hand-repaired extraction, which
+  // §6.2 calls the sanctioned repair path. Discovery used this same decision
+  // to conclude the source needs no reprocessing, so the two cannot disagree.
+  //
+  // Before normalization, so a source that does have to re-extract finds its
+  // derivative path settled.
+  for (const rename of discovery.renamed) {
+    const action = await renameDerivativeAction(deps.fs, rename);
+    if (action.kind === "none" || action.kind === "reprocess") continue;
+    const at = action.kind === "move" ? action.to : action.at;
     try {
-      const text = decodeUtf8(await deps.fs.read(entry.derivative));
-      const parsed = parseFrontmatter(text);
-      await deps.fs.write(
-        entry.derivative,
-        serializeFrontmatter({ ...parsed.data, "derived-from": entry.to }) + parsed.body,
-      );
+      if (action.kind === "move") await deps.fs.move(action.from, action.to);
+      await repointDerivative(deps.fs, at, rename.to);
       wrote = true;
     } catch (error) {
       failed.push({
-        path: entry.to,
-        reason: `could not repoint ${entry.derivative} — ${describe(error)}`,
+        path: rename.to,
+        reason: `could not carry over ${at} — ${describe(error)}`,
       });
     }
   }
@@ -696,6 +699,19 @@ function blockCascade(
   reason: string,
 ): void {
   for (const source of affectedByDeleted.get(pagePath) ?? []) block(blocked, source, reason);
+}
+
+/**
+ * Points a carried-over derivative at its source's new path, touching only that
+ * one line. A user may have repaired this file by hand (§6.2), so the rest of
+ * their frontmatter — comments, key order, scalar styles — is left alone; a
+ * full re-serialize would restyle all of it for the sake of one value.
+ */
+async function repointDerivative(fs: FsAdapter, path: string, to: string): Promise<void> {
+  const text = decodeUtf8(await fs.read(path));
+  const rewritten = replaceFrontmatterValue(text, "derived-from", to);
+  if (rewritten === null || rewritten === text) return;
+  await fs.write(path, rewritten);
 }
 
 /** Records why a source cannot be manifested this run, so it retries next time. */
