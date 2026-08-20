@@ -1,0 +1,16 @@
+run,vault_nodes,link_pairs,mode,recall_at_5,notes
+1,12,9,A,0.41,lexical only
+2,18,24,A,0.48,below node threshold
+3,20,30,B,0.63,first graph run
+4,24,41,B,0.66,
+5,27,48,B,0.71,seeds from index
+6,31,59,B,0.69,one bad seed
+7,35,70,B,0.74,
+8,38,79,B,0.77,follow-up round on
+9,42,91,B,0.78,
+10,45,101,B,0.80,
+11,49,113,B,0.79,alias collision
+12,52,124,B,0.82,
+13,56,137,B,0.84,
+14,60,150,B,0.85,
+15,63,159,B,0.86,best so far

@@ -1,0 +1,12 @@
+Reading notes
+
+The argument for compiling a wiki rather than accumulating documents is that
+the links are the index. A pile of PDFs has no structure a retriever can walk;
+a wiki has one, written by the same model that read the sources.
+
+Luka takes that literally. The wikilink graph is not a visualization of the
+retrieval mechanism, it is the retrieval mechanism, and the graph pane exists
+so that the ranking can be inspected instead of assumed.
+
+Plain text sources are passed through rather than converted. The only thing
+compile changes here is the frontmatter block at the top.

@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 357 >>
+stream
+BT /F1 12 Tf 72 720 Td (Compiling A Wiki From Source Documents) Tj ET
+BT /F1 12 Tf 72 702 Td (Andrej Karpathy describes a workflow in which an LLM compiles dropped) Tj ET
+BT /F1 12 Tf 72 684 Td (documents into a linked wiki, and the links become the retrieval index.) Tj ET
+BT /F1 12 Tf 72 666 Td (Luka implements that workflow as an Obsidian plugin.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 369 >>
+stream
+BT /F1 12 Tf 72 720 Td (Retrieval Without Embeddings) Tj ET
+BT /F1 12 Tf 72 702 Td (Personalized PageRank over the wikilink graph replaces the usual vector) Tj ET
+BT /F1 12 Tf 72 684 Td (search. Seeds come from one model call against the index document; the) Tj ET
+BT /F1 12 Tf 72 666 Td (ranking itself is deterministic power iteration over an undirected graph.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000655 00000 n 
+0000000781 00000 n 
+0000001201 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1271
+%%EOF

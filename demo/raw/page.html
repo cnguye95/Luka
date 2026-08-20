@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Personalized PageRank in one page</title>
+    <style>body { font-family: Georgia, serif; max-width: 40em; }</style>
+  </head>
+  <body>
+    <h1>Personalized PageRank in one page</h1>
+
+    <p>PageRank scores a node by the stationary distribution of a random
+      walker on the graph. <strong>Personalized</strong> PageRank changes
+      exactly one thing: when the walker teleports, it lands on a chosen seed
+      set rather than on a uniformly random node.</p>
+
+    <h2>The update</h2>
+
+    <p>Each iteration mixes a damped walk over the degree-normalized adjacency
+      matrix with a teleport back to the personalization vector. Damping
+      decides how far influence spreads from the seeds before it decays.</p>
+
+    <ul>
+      <li>A node with no edges propagates nothing and holds teleport mass only.</li>
+      <li>Convergence is measured as the L1 distance between successive vectors.</li>
+      <li>Fixing the node order makes the whole computation reproducible.</li>
+    </ul>
+
+    <h2>Why it suits a wiki</h2>
+
+    <p>The links a writer chooses are a much stronger signal than incidental
+      word overlap, and they are already there. Nothing has to be embedded,
+      chunked, or re-indexed when a page changes.</p>
+
+    <script>console.log("this script is stripped during normalization");</script>
+  </body>
+</html>
