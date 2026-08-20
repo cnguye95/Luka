@@ -39,4 +39,28 @@ describe("mapWithConcurrency", () => {
     await expect(mapWithConcurrency([1, 2], 10, async (n) => n)).resolves.toEqual([1, 2]);
     await expect(mapWithConcurrency([], 4, async () => "x")).resolves.toEqual([]);
   });
+
+  it("passes each item its own input position, not its completion order", async () => {
+    // Compile's progress notices are numbered from this index (§6 phases), so
+    // a per-worker counter — or anything derived from finishing order — would
+    // make the count jump around. The delays are staggered so completion order
+    // deliberately disagrees with input order.
+    const delays = [30, 0, 20, 5];
+    const seen: [string, number][] = [];
+
+    await mapWithConcurrency(delays, 2, async (ms, index) => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      seen.push([`item-${ms}`, index]);
+    });
+
+    // Whatever order they finished in, every item carries its input position.
+    expect([...seen].sort()).toEqual([
+      ["item-0", 1],
+      ["item-20", 2],
+      ["item-30", 0],
+      ["item-5", 3],
+    ]);
+    // And completion order really did differ, or the test proves nothing.
+    expect(seen.map(([name]) => name)).not.toEqual(delays.map((ms) => `item-${ms}`));
+  });
 });

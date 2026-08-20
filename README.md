@@ -11,16 +11,20 @@ spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 ## Status
 
 Milestones **M0 (scaffold)** and **M1 (ingest)** are complete, plus the first
-part of M2: the provider layer (`src/core/provider/`) — the Anthropic Messages
-API adapter behind the reliability wrapper (timeouts, retries with backoff,
-per-task token caps, JSON repair, and the call counter). Nothing calls it yet;
-wiki compilation lands with the rest of M2. Luka currently normalizes what you
-put in `raw/` and tracks it in an ingest manifest. It does not yet build wiki
-pages, answer questions, or draw a graph — those are M2–M4.
+most of M2: compile now normalizes what you put in `raw/`, extracts an
+inventory of entities and concepts from each source, and writes a linked
+three-kind wiki with citation blocks and a generated index. Still to come are
+the deletion cascade and the scope preview (the rest of M2), then answering
+questions and drawing the graph (M3–M4).
 
-To prove the provider against the real API (optional, costs a fraction of a
-cent): `ANTHROPIC_API_KEY=sk-ant-... npm test` — two live tests that are
-otherwise skipped, and never run in CI.
+To prove the pipeline against the real API (optional, a few cents):
+
+```
+ANTHROPIC_API_KEY=sk-ant-... npm test                              # provider smoke tests
+ANTHROPIC_API_KEY=sk-ant-... npx vitest run tests/compile-live.test.ts   # a real end-to-end compile
+```
+
+Both are skipped without the key, and neither ever runs in CI.
 
 ## What compile does today
 
@@ -33,7 +37,18 @@ changed by content hash, and normalizes only that:
 | `.html` | `<name>.md` beside it, converted |
 | `.pdf` | `<name>.md` beside it, from the text layer |
 | `.csv`, `.tsv` | `<name>.md` descriptor card; the original is kept |
+| `.png`, `.jpg`, `.gif`, `.webp` | `<name>.md` describing it, from a vision pass; the original is kept |
 | a repository directory | `<dirname>.md` with the selected files concatenated |
+
+It then reads each changed source once to inventory the entities and concepts
+it names, merges those inventories against the pages you already have, and
+writes a page per entity and concept under `wiki/`, plus one page per source.
+Code writes the frontmatter, resolves the links, and appends the citation block;
+the model writes only the prose. `wiki/_index.md` is regenerated at the end.
+
+An image dropped straight into `raw/` becomes a source with its own page — a
+photo of a whiteboard is worth as much as a document. Images merely *referenced*
+by another source are fetched into `raw/assets/` and get no page of their own.
 
 A directory under `raw/` is treated as a **repository** — one source, not many —
 when it contains either `.git/` or an empty file named `.luka-repo` that you
@@ -44,9 +59,10 @@ Remote images referenced by a source are fetched into `raw/assets/`. Anything
 that fails to fetch, is too small, or looks decorative keeps its original link
 and gains a comment marker explaining why — nothing is ever silently removed.
 
-Images placed directly in `raw/` and files with unsupported extensions are
-skipped with a notice naming them, and are deliberately not recorded, so they
-resurface on the next compile rather than disappearing quietly.
+Files with unsupported extensions are skipped with a notice naming them, and are
+deliberately not recorded, so they resurface on the next compile rather than
+disappearing quietly. The same is true of a source whose extraction failed: it
+is never recorded, so the next compile simply tries it again.
 
 Nothing runs on a timer or a file watcher. Compile happens when you ask for it.
 
@@ -87,8 +103,7 @@ Automated tests cover `src/core` only; the Obsidian surface is checked by hand.
 
 With `demo/raw/` copied to `raw/` in the test vault:
 
-- [ ] **Luka: Compile** reports six new sources and one skipped file
-      (`raw/orphan.png`).
+- [ ] **Luka: Compile** reports seven new sources and nothing skipped.
 - [ ] `raw/note.md` and `raw/notes.txt` gained an `ingested` / `source-format`
       block at the top and are otherwise unchanged.
 - [ ] `raw/note.md` shows
@@ -98,9 +113,35 @@ With `demo/raw/` copied to `raw/` in the test vault:
       each carrying `derived-from`.
 - [ ] `raw/paper.md` contains the PDF's text, confirming pdf.js works inside the
       Electron renderer.
-- [ ] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the six
+- [ ] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the seven
       sources.
 - [ ] A second **Luka: Compile** reports "nothing to do" and modifies no files.
 - [ ] Editing `raw/note.md` and compiling again reports one changed source.
 - [ ] Triggering Compile twice in quick succession shows
       "Luka is busy: compile" rather than running twice.
+
+### M2c
+
+Needs a real API key in settings. The first compile of `demo/raw/` costs a few
+cents and takes a minute or two.
+
+- [ ] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
+- [ ] `wiki/sources/` holds one page per source, each with a
+      `source: "[[raw/...]]"` key and a citation block naming its own raw file.
+- [ ] `wiki/entities/` and `wiki/concepts/` hold pages whose bodies are prose
+      with `[[wikilinks]]`, and whose citation blocks name the sources they came
+      from.
+- [ ] No wiki page contains frontmatter, a citation list, or a heading written
+      by the model — code writes all four (invariant 5).
+- [ ] `wiki/_index.md` opens with `# Index` and lists every page under
+      *Sources*, *Entities* or *Concepts*.
+- [ ] Ctrl/Cmd-clicking a `[[link]]` in a generated page opens the page it
+      names, or offers to create it (an unresolved link is a future-article
+      signal, not a bug).
+- [ ] A second **Luka: Compile** reports "nothing to do" and makes no API calls
+      (watch the console or your Anthropic usage page).
+- [ ] Editing one source and recompiling regenerates only the pages that cite
+      it.
+- [ ] Removing the API key and compiling a changed source surfaces one failure
+      notice per source and leaves the manifest untouched, so the next compile
+      with a key restored picks them up again.

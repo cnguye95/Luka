@@ -48,6 +48,7 @@ function toPage(path: string, text: string): PageMeta | null {
   // A file under wiki/ without a recognizable kind is not a page Luka wrote.
   if (typeof kind !== "string" || !KINDS.includes(kind as PageKind)) return null;
 
+  const source = sourceTarget(data["source"]);
   return {
     path,
     title: stem(path),
@@ -55,7 +56,23 @@ function toPage(path: string, text: string): PageMeta | null {
     aliases: toStringArray(data["aliases"]),
     summary: typeof data["summary"] === "string" ? data["summary"] : "",
     updated: typeof data["updated"] === "string" ? data["updated"] : "",
+    ...(source === null ? {} : { source }),
   };
+}
+
+/**
+ * §4 writes a source page's origin as `source: "[[raw/<file>]]"`. The brackets
+ * are there to make the graph an edge (§7.1); the path inside is what a
+ * re-ingested source matches against, so it is unwrapped here.
+ */
+function sourceTarget(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = /^\s*\[\[(.+)\]\]\s*$/.exec(value);
+  // The whole capture is the path: code writes `[[<path>]]` with no display
+  // text, and `|` is legal in a filename, so splitting on it would truncate
+  // the path and orphan the page from the source it describes.
+  const target = (match ? (match[1] as string) : value).trim();
+  return target === "" ? null : target;
 }
 
 function toStringArray(value: unknown): string[] {

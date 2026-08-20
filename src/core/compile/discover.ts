@@ -169,12 +169,6 @@ async function collectSources(
         skipped.push({ path: entry.path, reason: "unsupported file type" });
         continue;
       }
-      if (format === "image") {
-        // Orphan images need the vision pass, which arrives in M2.
-        skipped.push({ path: entry.path, reason: "image sources are not ingested yet" });
-        continue;
-      }
-
       const bytes = await fs.read(entry.path);
       // Only Luka writes derivatives, and it only ever writes `.md`.
       if (extname(entry.path) === ".md") {

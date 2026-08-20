@@ -4,19 +4,34 @@ import { DEFAULT_SETTINGS } from "../src/core/types";
 import { pngBytes } from "./helpers/images";
 import { StubHttp, type StubRoute } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
+import { StubProvider, inventoryReply } from "./helpers/provider";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 
+/**
+ * This suite is about ingest mechanics — the four rules, the three sanctioned
+ * in-place writes, discovery. The extraction phases are stubbed to the quietest
+ * possible replies (a summary, no items) so they contribute a source page and
+ * nothing else, and every assertion here stays about ingest.
+ */
 function core(fs: MemFs, routes: Record<string, StubRoute> = {}) {
   const http = new StubHttp(routes);
+  const provider = new StubProvider((request) =>
+    request.task === "inventory"
+      ? inventoryReply("A source.")
+      : request.task === "vision"
+        ? "An image."
+        : "Body.",
+  );
   const instance = createCore({
     fs,
     http,
     manifestPath: MANIFEST,
-    settings: DEFAULT_SETTINGS,
+    settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
     now: () => new Date("2026-08-19T10:00:00Z"),
+    provider,
   });
-  return { instance, http };
+  return { instance, http, provider };
 }
 
 function manifestOf(fs: MemFs): Record<string, string> {
@@ -106,17 +121,75 @@ describe("the four rules (§6.2)", () => {
 
   it("treats the same hash at a new path as a rename and skips regeneration", async () => {
     const fs = new MemFs({ "raw/a.md": "content\n" });
-    await core(fs).instance.compile();
+    const first = await core(fs).instance.compile();
     const hash = manifestOf(fs)["raw/a.md"];
 
     await fs.move("raw/a.md", "raw/renamed.md");
     fs.resetCounters();
-    const second = await core(fs).instance.compile();
+    const { instance, provider } = core(fs);
+    const second = await instance.compile();
 
     expect(second).toMatchObject({ renamed: 1, added: 0, modified: 0, deleted: 0 });
     expect(manifestOf(fs)).toEqual({ "raw/renamed.md": hash });
-    // The only write is the manifest itself; the file was not re-annotated.
-    expect(fs.writes).toBe(1);
+    // §6.2's "skip regeneration": no model call, and the source file itself is
+    // untouched. Only the wiki's references to the old path are repointed.
+    expect(provider.stats().requests).toBe(0);
+    expect(fs.text("raw/renamed.md")).toBe(
+      "---\ningested: '2026-08-19'\nsource-format: md\n---\ncontent\n",
+    );
+    expect(first.pagesWritten).toBe(1);
+  });
+
+  it("repoints the wiki at a renamed source rather than orphaning its page (§6.2, §4)", async () => {
+    const fs = new MemFs({ "raw/a.md": "content\n" });
+    await core(fs).instance.compile();
+    const pagePath = "wiki/sources/a.md";
+    expect(fs.text(pagePath)).toContain("source: '[[raw/a.md]]'");
+
+    await fs.move("raw/a.md", "raw/renamed.md");
+    await core(fs).instance.compile();
+
+    // The page keeps its title — a rename is not a reason to rename a page —
+    // but its source key and its citation block follow the file.
+    expect(fs.text(pagePath)).toContain("source: '[[raw/renamed.md]]'");
+    expect(fs.text(pagePath)).toContain("- [[raw/renamed.md]]");
+    expect(fs.text(pagePath)).not.toContain("raw/a.md");
+  });
+
+  it("treats a move that also changes the content as two events, not a rename (§4)", async () => {
+    // §4: "delete-then-add at a different path is two events". The hash differs,
+    // so rename pairing must NOT fire — otherwise the new content would inherit
+    // the old file's identity and never be re-extracted.
+    const fs = new MemFs({ "raw/a.md": "one\n" });
+    await core(fs).instance.compile();
+
+    await fs.delete("raw/a.md");
+    await fs.write("raw/renamed.md", "totally different\n");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 0, added: 1, deleted: 1 });
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/renamed.md"]);
+
+    // The page for the deleted source is left behind for the §6.6 cascade to
+    // remove — it has no surviving citer. That cascade is M2d; until it lands,
+    // the stale page is expected, and this test records that boundary.
+    expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
+      "wiki/sources/a.md",
+      "wiki/sources/renamed.md",
+    ]);
+  });
+
+  it("does not create a second page when a renamed source is later edited", async () => {
+    const fs = new MemFs({ "raw/a.md": "content\n" });
+    await core(fs).instance.compile();
+
+    await fs.move("raw/a.md", "raw/renamed.md");
+    await core(fs).instance.compile();
+    await fs.write("raw/renamed.md", "---\ningested: '2026-08-19'\nsource-format: md\n---\nedited\n");
+    await core(fs).instance.compile();
+
+    const sourcePages = fs.paths().filter((path) => path.startsWith("wiki/sources/"));
+    expect(sourcePages).toEqual(["wiki/sources/a.md"]);
   });
 
   it("reprocesses a renamed source whose derivative is not at the new path", async () => {
@@ -163,8 +236,13 @@ describe("in-place annotation stays within the three sanctioned writes (invarian
     const result = await core(fs).instance.compile();
 
     expect(result.added).toBe(1);
+    // The point of the test: the user's bytes are returned exactly as placed.
     expect(fs.files.get("raw/legacy.txt")).toEqual(legacy);
-    expect(fs.writes).toBe(1); // the manifest only
+
+    // And the source is genuinely unchanged on the next run, not re-annotated.
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
   });
 
   it("keeps a byte order mark when it annotates", async () => {
@@ -207,14 +285,27 @@ describe("source discovery", () => {
   });
 
   it("skips unsupported files without manifesting them, so they resurface", async () => {
-    const fs = new MemFs({ "raw/archive.zip": "PK\n", "raw/photo.png": pngBytes(600, 400) });
+    const fs = new MemFs({ "raw/archive.zip": "PK\n" });
     const first = await core(fs).instance.compile();
 
-    expect(first.skipped.map((s) => s.path)).toEqual(["raw/archive.zip", "raw/photo.png"]);
+    expect(first.skipped.map((s) => s.path)).toEqual(["raw/archive.zip"]);
     expect(first.added).toBe(0);
 
     const second = await core(fs).instance.compile();
-    expect(second.skipped).toHaveLength(2);
+    expect(second.skipped).toHaveLength(1);
+  });
+
+  it("ingests an orphan image as a source through the vision pass (§6.1)", async () => {
+    const fs = new MemFs({ "raw/photo.png": pngBytes(600, 400) });
+    const { instance, provider } = core(fs);
+
+    const result = await instance.compile();
+
+    expect(result.skipped).toEqual([]);
+    expect(result.added).toBe(1);
+    expect(provider.stats().byTask.vision).toBe(1);
+    expect(fs.text("raw/photo.md")).toContain("derived-from: raw/photo.png");
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/photo.png"]);
   });
 
   it("reprocesses when a derivative has gone missing", async () => {

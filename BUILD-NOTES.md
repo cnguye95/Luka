@@ -141,3 +141,74 @@ One line per decision made where `handoff.md` was silent (§0). Newest section l
 - A title that sanitizes to nothing becomes "Untitled" rather than producing an unnameable page.
 - `renderIndex` always emits all three §4 headings even when a section is empty, and sorts entries by title using code-point comparison so the file does not churn across locales. §7.4 step 1 reuses this exact renderer rather than a second copy.
 - A file under `wiki/` whose frontmatter has no recognizable `kind` is not a page: it is skipped rather than guessed at.
+
+## M2c — Extraction and generation
+
+### Call A (inventory)
+
+- A reply that is not the documented top-level shape (`source_summary` string, `items` array) throws, which fails the source: §11 skips it with a notice and invariant 3 retries it next compile. An individual malformed *item* is dropped instead — one bad entry should not cost the user the whole document.
+- `aliases` given as a bare string, or a list containing non-strings and blanks, is coerced rather than rejected; models produce both shapes and the alternative is losing a real page.
+- Summaries and `source_summary` are flattened to one line at the point the model's words enter the system. Both reach `wiki/_index.md`, which §7.4 step 1 feeds to the seed call, and invariant 5 gives the model prose only — never structure.
+- Temperature is not set here: §11 fixes JSON tasks at 0 and the wrapper applies it, so this module cannot get it wrong.
+
+### Merge and dedup
+
+- Matching goes through M2b's `buildTitleIndex` rather than a second table. It is already the case-insensitive title+alias table §6.5 names, and already resolves competing aliases deterministically.
+- An item's title is matched before its aliases, and its aliases in the order the model gave them, so the result never depends on Map iteration order.
+- The title is matched both as written and as sanitized. Sanitization is what names the file, so a model saying "Mercury/planet" must find the existing "Mercuryplanet" rather than queue a second page for one filename.
+- §6.5's "kind ignored" is read as entity-vs-concept. **Source pages are not match candidates**: they are assembled by code from their own file's summary and have no Call B, so matching one would strand the citer on a page that never regenerates. They still hold their titles, so a new page cannot take a filename one occupies.
+- Within a run, a second source naming the same new thing merges into the first page: citers union, aliases union case-insensitively, the first encounter fixes title and kind, and the latest non-empty summary wins.
+- A page never carries its own title as an alias.
+- When an item matches an existing page, the matched name itself is offered as a new alias — "Mercury" hitting "Mercury (element)" through an alias is a handle worth keeping — unless the page already has it.
+- Sources are processed in path order and the work-set is sorted by page path, so the same vault produces the same work-set regardless of which source finished first.
+
+### Call B and page assembly
+
+- The prompt carries the page identity (title, kind, aliases) and then whole sources in citation order under the context budget, each behind a `--- source: <path> ---` delimiter. The head's own cost is subtracted from the budget so the assembled prompt stays under it without a second packing pass.
+- Temperature is left unset for Call B: §11 fixes it only for JSON tasks, and there is no reason to pin prose generation to a value the spec does not name.
+- The model's reply is used as prose and nothing more. It is not scanned for stray headers or frontmatter — the prompt forbids them, and a citation block it writes anyway is stripped by `withCitationBlock`, which already replaces every block it finds.
+- A source page's title comes from the file stem, sanitized and uniquified. Call A's schema is fixed by §6.5 and carries no title for the source itself, so the stem is the only name available.
+- Source pages are named **before** the merge and their titles are passed into it as reserved names. §4 requires titles unique across all of `wiki/`, and the two halves of a run allocate from one title space: without this, a source `raw/Obsidian.md` and a concept the model calls "Obsidian" both produce a page titled "Obsidian", and the link post-pass then resolves `[[Obsidian]]` to whichever the title index happened to keep.
+- `PageMeta` gains an optional `source` key, unwrapped from §4's `source: "[[raw/<file>]]"`. It is how a re-ingested source finds its existing page and keeps that page's title stable across recompiles.
+- "Surviving entries" in §6.5's citer union is read as "present in the manifest this run will write". Deleted paths are already dropped from it, so the union expresses §6.6's delete signal (a page with zero remaining citers) without the cascade being built yet.
+- The citer union is existing-then-new with duplicates removed, so a page's oldest sources stay first and the Call B prompt does not churn between runs.
+- The title index used for the link post-pass covers existing pages plus every page written this run, so a link to a page created in the same compile resolves immediately rather than waiting a compile.
+
+### Pipeline and failure semantics
+
+- Normalization stays serial; the §11 concurrency budget of 2 governs model calls, and normalization writes files. Call A and Call B each fan out through `mapWithConcurrency` at `compileConcurrency`.
+- Invariant 3 is extended past normalization: a source is manifested only when its normalization, its inventory, and *every* entity/concept page its inventory queued all succeeded. A failed Call B therefore un-manifests exactly the sources that would have to be re-inventoried to retry it — retry with no extra state.
+- A source whose Call B failed still gets its own source page written. That page describes the source, which ingested and inventoried fine, and writing it is idempotent — the next compile rewrites it identically. Only the manifest entry is withheld, which is what makes the retry happen.
+- The provider is constructed in `createCore` and injected into `CoreDeps` as an optional test seam. The seam is at wrapper level, never transport level, so invariant 10 stays structural.
+- A compile that queues no pages writes no index. `wiki/_index.md` is only regenerated when at least one page was written, so an unchanged vault still performs literally zero writes.
+- `CompileResult` gains `modelCalls` (this run's delta against `provider.stats()`) and `pagesWritten`. §15's "assert via a call counter" reads the former.
+- An unchanged source that still cites a regenerating page has its readable markdown located by trying `<stem>.md` and then the source itself; its format is not in hand at that point.
+
+### Fixes from the M2c audit
+
+- A citation entry and a `source:` value are **paths, not wikilinks with display text**, so neither is split on `|` any more. `|` is legal in a filename on macOS and Linux, and code never writes display text into either place; splitting truncated `raw/a|b.md` to `raw/a`, which then failed the citer union and silently dropped the source from the one record §6.5 calls persistent. (`resolveLinks` still splits, correctly — there `[[Title|Display]]` really is prose syntax, and `raw/` targets are exempt from rewriting anyway.)
+- §6.2's "skip regeneration" for a rename is read as skipping *model work*, not bookkeeping. §4 makes the vault path a source's identity, so a rename now repoints the `source:` key and every citation entry naming the old path — a pure text rewrite, zero model calls. Without it the source page kept a dead `source:` key, was never matched again, and the next edit created a duplicate page while the index advertised both.
+- A source dropped whole by the context budget now gets §6.5's truncation marker naming it. Dropping a source is the budget forcing truncation just as much as a tail cut is; without the marker the model wrote a page grounded in a subset of its sources while code wrote a citation block claiming all of them.
+- The model's titles and aliases are flattened to one line alongside summaries. An alias with a newline serialized as a YAML block scalar in page frontmatter — the model determining the structure of a block invariant 5 gives to code — and `loadPageTable` reads those aliases back on every compile.
+- `wiki/_index.md` is re-derived on **every** compile per §6.5's post-process order, not only when a page was written. Zero writes on an unchanged vault is preserved by comparing the rendered bytes against the file rather than by skipping the step. An empty vault with no index still writes nothing, so compiling nothing does not create `wiki/`.
+- `mapWithConcurrency` now passes the item's index to its callback. The two M2c fan-outs were recovering it with `indexOf`, which is both O(n) and wrong under concurrency — progress notices could count backwards.
+
+### Test infrastructure
+
+- `StubProvider` stubs **transport** (`RawProvider`) and runs through the real §11 wrapper, rather than implementing `LLMProvider` directly. The first version sat *above* JSON parsing, the repair retry, the retry budget, the max_tokens caps and `ProviderError` — so invariant 12's call-count assertions were checked against a counter structurally incapable of the inflation the real provider shows, and every failure test threw a bare `Error` production never produces. A stub more forgiving than the real thing is a stub that manufactures confidence.
+- Because the wrapper does not pass the task down to transport, the stub gives each task a distinct model id (`stub-<task>`) and recovers the task from it. This is also what lets a test assert the temperature and cap a JSON task actually reaches the wire with.
+- `tests/demo-corpus.test.ts` gets a 30s timeout and a retrying temp-dir teardown. It is the only suite that touches a real filesystem and runs pdf.js, so a compile there costs seconds; the 5s default has no headroom on a loaded machine, and a timeout mid-write is itself what produces Windows `ENOTEMPTY` cleanup failures.
+
+### Vision pass and images
+
+- `derivativePathFor` now returns `<stem>.md` for `image`, which makes an orphan image a source with its own wiki page (§6.1's vision row). Inline images are unaffected: they are localized into `raw/assets/` and are never sources.
+- Media types are mapped from exactly §6.1's five orphan extensions (`.png .jpg .jpeg .gif .webp`). Anything else throws rather than guessing a type the API would reject.
+- The vision prompt leads with faithful transcription of visible text — a photograph of a whiteboard is the case that makes orphan images worth ingesting at all — then structure, then description.
+- An empty vision reply throws rather than writing an empty derivative, so the source retries next compile.
+
+### Smell test
+
+- Thresholds, all of which §6.5 leaves open: fewer than 200 characters per page on average is "short output"; a line of 4+ characters appearing on 3+ distinct pages is a running header; and more than 60% of lines lacking terminal punctuation is a high fragment ratio, judged only once the document has 20+ non-empty lines.
+- Running headers are counted by *pages* rather than occurrences, so a phrase repeated three times on one page reads as prose rather than as a header.
+- The marker heads the derivative's **body**, not the file, so the frontmatter block stays first and Obsidian still parses it. It is re-derived with the derivative on every run, so it can never go stale or stack.
+- The running-header search returns only a page count, never the winning line. The marker reports the count, so which of two equally-repeated lines "wins" is unobservable — and keeping the winner would mean deciding a tie no caller can see. It would also invite putting arbitrary extracted text into an HTML comment, where a `-->` inside a PDF would break out of the marker.

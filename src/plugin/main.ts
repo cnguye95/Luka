@@ -1,5 +1,5 @@
 import { Notice, Plugin } from "obsidian";
-import { BusyError, createCore, type Core } from "../core/index";
+import { BusyError, createCore, type Core, type ProgressEvent } from "../core/index";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../core/types";
 import { registerCommands } from "./commands";
 import { ObsidianFs } from "./fs-obsidian";
@@ -33,11 +33,8 @@ export default class LukaPlugin extends Plugin {
     try {
       const result = await this.core.compile({
         onProgress: (event) => {
-          if (event.phase === "normalizing") {
-            progress.setMessage(
-              `Luka: ingesting ${event.index + 1}/${event.total} — ${event.path}`,
-            );
-          }
+          const message = progressMessage(event);
+          if (message !== null) progress.setMessage(message);
         },
       });
       progress.hide();
@@ -62,5 +59,21 @@ export default class LukaPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+}
+
+/** `null` for phases with nothing useful to say beyond "still working". */
+function progressMessage(event: ProgressEvent): string | null {
+  switch (event.phase) {
+    case "normalizing":
+      return `Luka: ingesting ${event.index + 1}/${event.total} — ${event.path}`;
+    case "inventory":
+      return `Luka: reading ${event.index + 1}/${event.total} — ${event.path}`;
+    case "generating":
+      return `Luka: writing ${event.index + 1}/${event.total} — ${event.title}`;
+    case "writing-index":
+      return "Luka: writing the index…";
+    default:
+      return null;
   }
 }

@@ -47,9 +47,11 @@ export function parseCitationBlock(body: string): ParsedCitations {
   for (const line of authoritative[0].split("\n")) {
     const entry = ENTRY.exec(line.trim());
     if (!entry) continue;
-    const target = entry[1] as string;
-    const pipe = target.indexOf("|");
-    entries.push((pipe === -1 ? target : target.slice(0, pipe)).trim());
+    // The whole capture is the path. `|` is a legal filename character on
+    // macOS and Linux, and code never writes display text into an entry, so
+    // splitting here would truncate `raw/a|b.md` to `raw/a` — a path that no
+    // longer survives the citer union, silently losing the source.
+    entries.push((entry[1] as string).trim());
   }
 
   // Every block is stripped, so regeneration cannot accumulate them.

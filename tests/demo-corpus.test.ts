@@ -10,6 +10,7 @@ import { decodeUtf8 } from "../src/core/hash";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { NodeFs } from "./helpers/nodefs";
+import { StubProvider, inventoryReply } from "./helpers/provider";
 
 const DEMO = path.resolve(import.meta.dirname, "..", "demo", "raw");
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
@@ -17,13 +18,20 @@ const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 const EXPECTED_SOURCES = [
   "raw/note.md",
   "raw/notes.txt",
+  "raw/orphan.png",
   "raw/page.html",
   "raw/paper.pdf",
   "raw/runs.csv",
   "raw/toy-repo",
 ];
 
-describe("demo corpus", () => {
+// This is the one suite that touches a real filesystem and runs pdf.js, so a
+// compile here costs seconds rather than milliseconds. The default 5s timeout
+// leaves no headroom on a loaded machine, and a timeout mid-write is also what
+// produces the ENOTEMPTY cleanup failures on Windows.
+const SLOW = 30_000;
+
+describe("demo corpus", { timeout: SLOW }, () => {
   let vault: string;
   let fs: NodeFs;
   let http: StubHttp;
@@ -37,16 +45,30 @@ describe("demo corpus", () => {
   });
 
   afterEach(async () => {
-    await rm(vault, { recursive: true, force: true });
+    // Windows keeps handles briefly after the last write, so a single rmdir
+    // can lose a race with itself; retries make teardown reliable.
+    await rm(vault, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
 
+  /**
+   * This suite asserts M1's ingest criteria, so the extraction phases are
+   * stubbed to their quietest replies: a one-line summary and no items, which
+   * yields one source page per source and no Call B at all.
+   */
   function compile(): Promise<CompileResult> {
     return createCore({
       fs,
       http,
       manifestPath: MANIFEST,
-      settings: DEFAULT_SETTINGS,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
       now: () => new Date("2026-08-19T10:00:00Z"),
+      provider: new StubProvider((request) =>
+        request.task === "inventory"
+          ? inventoryReply("A demo source.")
+          : request.task === "vision"
+            ? "A generated fixture image, 160 by 120 pixels."
+            : "Body.",
+      ),
     }).compile();
   }
 
@@ -57,7 +79,9 @@ describe("demo corpus", () => {
 
     expect(result.added).toBe(EXPECTED_SOURCES.length);
     expect(result.failed).toEqual([]);
-    expect(result.skipped.map((s) => s.path)).toEqual(["raw/orphan.png"]);
+    // Every file in the demo corpus is a supported format, the orphan image
+    // included — §6.1's vision row makes it a source with its own page.
+    expect(result.skipped).toEqual([]);
 
     const manifest = JSON.parse(await read(MANIFEST)) as Record<string, string>;
     expect(Object.keys(manifest).sort()).toEqual(EXPECTED_SOURCES);

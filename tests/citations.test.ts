@@ -146,9 +146,13 @@ describe("shapes a real vault produces", () => {
     expect(parseCitationBlock(block).entries).toEqual(["raw/a.md"]);
   });
 
-  it("strips display text from an entry so it can match a manifest path", () => {
-    const block = "<!-- citations:start -->\n## Sources\n- [[raw/a.md|The Paper]]\n<!-- citations:end -->";
-    expect(parseCitationBlock(block).entries).toEqual(["raw/a.md"]);
+  it("round-trips a path containing a pipe, which is a legal filename", () => {
+    // `|` reads as display-text syntax in prose, but a citation entry is a
+    // path and code never writes display text into one. Splitting here would
+    // truncate `raw/a|b.md` to `raw/a`, which then fails the citer union and
+    // silently drops the source — the §6.5 record is the only copy.
+    const rendered = renderCitationBlock(["raw/a|b.md"]);
+    expect(parseCitationBlock(rendered).entries).toEqual(["raw/a|b.md"]);
   });
 
   it("drops an entry containing a newline rather than writing it unreadably", () => {

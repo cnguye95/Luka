@@ -14,7 +14,9 @@ import {
   sha256Hex,
   utf8,
 } from "../hash";
-import { dirname, extname, joinPath, stem } from "../paths";
+import { normalizationSuspect } from "../markers";
+import { basename, dirname, extname, joinPath, stem } from "../paths";
+import type { LLMProvider } from "../provider/types";
 import type { SourceFormat } from "../types";
 import { ensureFrontmatter, parseFrontmatter, serializeFrontmatter } from "../yaml";
 import { datasetToMarkdown } from "./dataset";
@@ -22,6 +24,7 @@ import { htmlToMarkdown } from "./html";
 import { localizeInlineImages } from "./image";
 import { pdfToMarkdown } from "./pdf";
 import { repoContentHash, repoToMarkdown, selectRepoFiles } from "./repo";
+import { smellPdfExtraction } from "./smell";
 
 const FORMAT_BY_EXTENSION: Record<string, SourceFormat> = {
   ".md": "md",
@@ -46,9 +49,16 @@ export function isPassthrough(format: SourceFormat): boolean {
   return format === "md" || format === "txt";
 }
 
-/** `<original-stem>.md` beside the original; `null` when the format writes none. */
+/**
+ * `<original-stem>.md` beside the original; `null` when the format writes none.
+ *
+ * An orphan image writes one: §6.1's vision row keeps the original and adds a
+ * markdown description, which makes the image a source like any other and
+ * earns it a wiki page. Inline images never reach here — they are localized
+ * into `raw/assets/` and are not sources at all.
+ */
 export function derivativePathFor(path: string, format: SourceFormat): string | null {
-  if (isPassthrough(format) || format === "image") return null;
+  if (isPassthrough(format)) return null;
   const directory = dirname(path);
   const name = `${stem(path)}.md`;
   return directory === "" ? name : joinPath(directory, name);
@@ -60,6 +70,8 @@ export interface NormalizeDeps {
   timeoutMs: number;
   /** ISO date recorded as `ingested`. */
   today: string;
+  /** Required by the §6.1 vision row; unused by every other format. */
+  provider: LLMProvider;
 }
 
 export interface NormalizeOutcome {
@@ -120,20 +132,79 @@ export async function normalizeSource(
     case "html":
       body = htmlToMarkdown(decodeUtf8(bytes));
       break;
-    case "pdf":
-      body = (await pdfToMarkdown(bytes)).text;
+    case "pdf": {
+      const extraction = await pdfToMarkdown(bytes);
+      // §6.5's smell test is PDF-only. The marker heads the body rather than
+      // the file so the frontmatter block stays first, and it is re-derived
+      // with the derivative on every run, so it never goes stale.
+      const reasons = smellPdfExtraction(extraction);
+      body =
+        reasons.length === 0
+          ? extraction.text
+          : `${normalizationSuspect(reasons)}\n\n${extraction.text}`;
       break;
+    }
     case "dataset":
       body = datasetToMarkdown(decodeUtf8(bytes), path);
       break;
+    case "image":
+      body = await describeImage(path, bytes, deps);
+      break;
     default:
-      throw new Error(`no M1 normalizer for source-format ${format}`);
+      throw new Error(`no normalizer for source-format ${format}`);
   }
 
   const { text } = await localizeInlineImages(body, deps);
   const derivativePath = derivativePathFor(path, format) as string;
   await writeDerivative(derivativePath, text, path, format, deps);
   return { hash, derivativePath, wrote: true };
+}
+
+/** §6.1's orphan-image set, mapped to the media types the vision API takes. */
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+const VISION_SYSTEM = [
+  "You are describing an image for a personal knowledge wiki.",
+  "",
+  "Rules:",
+  "- Transcribe every piece of visible text faithfully and completely: notes on a",
+  "  whiteboard, labels on a diagram, captions, handwriting. The transcription is",
+  "  the most valuable part of your reply.",
+  "- Describe the structure of any diagram: what the boxes and arrows connect.",
+  "- Then describe what the image shows, in enough detail to stand in for it.",
+  "- Reply with markdown prose only. No frontmatter, no headings repeating the",
+  "  filename, no commentary about being an AI.",
+].join("\n");
+
+/**
+ * §6.1's vision pass — exactly one model call per orphan image (invariant 12).
+ * A failure propagates: the source is skipped with a notice (§11) and
+ * invariant 3's success-only manifest retries it next compile.
+ */
+async function describeImage(
+  path: string,
+  bytes: Uint8Array,
+  deps: NormalizeDeps,
+): Promise<string> {
+  const mediaType = IMAGE_MEDIA_TYPES[extname(path)];
+  if (mediaType === undefined) throw new Error(`unsupported image type for ${path}`);
+
+  const reply = await deps.provider.complete({
+    task: "vision",
+    system: VISION_SYSTEM,
+    user: `Describe this image. Its filename is "${basename(path)}".`,
+    images: [{ mediaType, data: bytes }],
+  });
+
+  const text = reply.trim();
+  if (text === "") throw new Error(`vision returned no description for ${path}`);
+  return `${text}\n`;
 }
 
 async function writeDerivative(

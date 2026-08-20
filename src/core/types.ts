@@ -32,6 +32,12 @@ export interface PageMeta {
   aliases: string[];
   summary: string;
   updated: string;
+  /**
+   * Source pages only: the vault path of the raw file this page describes,
+   * unwrapped from §4's `source: "[[raw/<file>]]"` frontmatter. It is how a
+   * re-ingested source finds its existing page and keeps its title stable.
+   */
+  source?: string;
 }
 
 export interface GraphNode {
