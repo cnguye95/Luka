@@ -145,3 +145,21 @@ cents and takes a minute or two.
 - [ ] Removing the API key and compiling a changed source surfaces one failure
       notice per source and leaves the manifest untouched, so the next compile
       with a key restored picks them up again.
+
+### M2d
+
+Continues from the compiled vault above.
+
+- [ ] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
+      modal first, showing the diff counts and both lists — pages to regenerate,
+      and pages that may be deleted.
+- [ ] Pressing **Cancel** (or Esc) closes it, reports "compile cancelled", and
+      changes nothing: `wiki/sources/page.md` and `raw/page.md` are still there.
+- [ ] Running Compile again and pressing **Compile** removes `wiki/sources/page.md`
+      and `raw/page.md`, drops the page from `wiki/_index.md`, and regenerates
+      any page that cited it from its remaining sources.
+- [ ] Triggering Compile a second time while the modal is open shows
+      "Luka is busy: compile" — the lock is held across the confirm.
+- [ ] Editing a source rather than deleting it also opens the modal, and its
+      "may be deleted" list is empty.
+- [ ] A compile whose diff is only additions opens no modal at all.

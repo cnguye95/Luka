@@ -245,6 +245,13 @@ describe("scope preview (§5, §6.6)", () => {
     expect(fs.deletes).toBe(0);
   });
 
+  it("answers on a vault that has never been compiled", async () => {
+    // No manifest and no wiki/ folder: a first run, never an error (invariant 3).
+    const fs = sharedVault();
+    const preview = await core(fs, new StubProvider(replyFor)).previewCompile();
+    expect(preview).toMatchObject({ added: 2, deleted: 0, regenerate: [], mayDelete: [] });
+  });
+
   it("reports nothing to do on an unchanged vault", async () => {
     const fs = sharedVault();
     await core(fs, new StubProvider(replyFor)).compile();
