@@ -65,8 +65,15 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
     }
   }
 
+  // A skipped source is not a deleted one. §6.1 has an unsupported or
+  // unrecordable file "surface again each compile rather than failing
+  // silently", which means it is still sitting in the vault — so handing its
+  // path to §6.6's cascade would delete the pages of a source that never went
+  // away. This matters most when the skip rules themselves change: a path that
+  // compiled cleanly yesterday must not be cascaded on today.
+  const skippedPaths = new Set(skipped.map((entry) => entry.path));
   const vanished = Object.keys(manifest)
-    .filter((path) => !present.has(path))
+    .filter((path) => !present.has(path) && !skippedPaths.has(path))
     .sort();
 
   const { renamed, remainingAdded, remainingDeleted } = pairRenames(added, vanished, manifest);
@@ -186,14 +193,14 @@ function unrepresentable(path: string): string | null {
   // which is exactly why a path carrying one fails to parse back out.
   if (/[\n\r\u2028\u2029]/.test(path)) return "path contains a line break";
   if (path.includes("\\")) return "path contains a backslash";
-  // Both readers trim — `parseCitationBlock`'s entries and `source:`'s target —
-  // so a segment padded with whitespace reads back as a different path. A file
-  // needs an extension to be a source, but a repo directory does not, so
-  // `raw/my repo ` is reachable. Under §6.6 a citer that no longer matches is
-  // not just a lost line in the record; it can cost the page.
-  if (path.split("/").some((segment) => segment !== segment.trim())) {
-    return "path segment starts or ends with whitespace";
-  }
+  // Both readers trim the recorded value as a whole — `parseCitationBlock`'s
+  // entry and `source:`'s target — so it is padding at the very ends of the
+  // path that fails to round-trip, not whitespace inside it. Every source path
+  // starts with `raw/`, which leaves a trailing-space basename as the reachable
+  // case: a file needs an extension to be a source, but a repo directory does
+  // not, so `raw/my repo ` is legal. Under §6.6 a citer that no longer matches
+  // is not just a lost line in the record; it can cost the page.
+  if (path !== path.trim()) return "path starts or ends with whitespace";
   return null;
 }
 

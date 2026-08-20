@@ -596,6 +596,67 @@ describe("an interrupted cascade retries (invariant 3)", () => {
   });
 });
 
+describe("a source that cannot be read costs a page one run, not its content", () => {
+  it("does not regenerate a page from an unreadable citer's empty body (§6.5)", async () => {
+    // Both sources cite Ranking. `one.html` then fails to normalize, because a
+    // file of the user's now occupies its derivative path — but the source
+    // still exists, so it keeps its citation. Call B would be handed "" under
+    // its label, and the page, rewritten wholesale, would lose everything that
+    // source contributed while its block still claimed it.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking only.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+    const before = fs.text("wiki/concepts/Ranking.md");
+    expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/one.html", "raw/two.md"]);
+
+    await fs.write("raw/one.html", "<p>Ranking and Graphs.</p>\n");
+    await fs.write("raw/one.md", "My own note now.\n");
+
+    const provider = new StubProvider(replyFor);
+    const result = await core(fs, provider).compile();
+
+    // The page is left exactly as it was rather than rewritten from nothing.
+    expect(fs.text("wiki/concepts/Ranking.md")).toBe(before);
+    expect(result.failed.length).toBeGreaterThan(0);
+    // No Call B ran on a prompt carrying an empty source body.
+    for (const call of provider.callsFor("page-generation")) {
+      expect(call.user).not.toMatch(/--- source: \S+ ---\n\n/);
+    }
+  });
+});
+
+describe("a failed derivative carry-over recovers", () => {
+  it("removes the half-carried file so the next compile can re-extract", async () => {
+    // The move lands but the repoint write fails. Left alone, the derivative
+    // names a path that no longer exists: the source reads as missing its
+    // derivative every run and can never claim the location back.
+    const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    await fs.move("raw/a.html", "raw/sub/a.html");
+
+    const guarded = Object.create(fs) as MemFs;
+    guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
+      if (path === "raw/sub/a.md") throw new Error("EACCES");
+      return MemFs.prototype.write.call(fs, path, data);
+    };
+
+    const second = await core(guarded, new StubProvider(replyFor)).compile();
+    expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
+    expect(await fs.exists("raw/sub/a.md")).toBe(false);
+
+    // Next compile re-extracts cleanly instead of failing forever.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third.failed).toEqual([]);
+    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+
+    const fourth = await core(fs, new StubProvider(replyFor)).compile();
+    expect(fourth).toMatchObject({ noop: true });
+  });
+});
+
 /** A view of the vault whose `delete` refuses one path, as a locked file would. */
 function refusingToDelete(fs: MemFs, blocked: string): MemFs {
   const guarded = Object.create(fs) as MemFs;

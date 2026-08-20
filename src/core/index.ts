@@ -237,18 +237,29 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         path: rename.to,
         reason: `could not carry over ${at} — ${describe(error)}`,
       });
+      // A half-carried derivative still names the old path, which is worse than
+      // none: the source reads as missing its derivative every run and then
+      // cannot claim the location, because what sits there belongs to a source
+      // that no longer exists. Removing it lets the next compile re-extract.
+      try {
+        if (await deps.fs.exists(at)) await deps.fs.delete(at);
+      } catch {
+        // Best effort; the block below is what makes the retry happen.
+      }
+      block(blockedDeleted, rename.from, `carry-over of ${at} failed`);
     }
   }
 
+  // The derivative locations sources that still exist will actually write to.
+  // Derived from each source's *format*, not from its stem: a passthrough
+  // source claims nothing, and shielding the location its stem happens to point
+  // at would leave a real orphan permanently unsweepable — and permanently
+  // blocking that path for any later source.
   const stillClaimed = new Set(
-    [
-      ...discovery.added,
-      ...discovery.modified,
-      ...discovery.unchanged,
-    ]
-      .map((source) => source.path)
-      .concat(discovery.renamed.map((rename) => rename.to))
-      .map(derivativeLocation),
+    [...discovery.added, ...discovery.modified, ...discovery.unchanged]
+      .map((source) => derivativePathFor(source.path, source.format))
+      .concat(discovery.renamed.map((rename) => derivativePathFor(rename.to, rename.format)))
+      .filter((path): path is string => path !== null),
   );
 
   for (const orphan of await orphanedDerivatives(
@@ -394,7 +405,14 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     const cached = bodies.get(path);
     if (cached !== undefined) return cached;
     const target = readable.get(path) ?? (await readableFromManifest(deps.fs, path));
-    const text = target === null ? "" : bodyOf(decodeUtf8(await deps.fs.read(target)));
+    // §6.5 gives Call B "the full normalized bodies of *all* citing sources".
+    // A citer whose markdown cannot be found is not an empty source: passing
+    // "" would have the model write a page grounded in a subset while code
+    // wrote a citation block claiming the lot, and `wiki/` is rewritten
+    // wholesale so the old page would be gone. Failing here instead costs the
+    // page one run — the existing text stands and the citers retry.
+    if (target === null) throw new Error(`no readable markdown for ${path}`);
+    const text = bodyOf(decodeUtf8(await deps.fs.read(target)));
     bodies.set(path, text);
     return text;
   };
@@ -402,8 +420,12 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // §6.6's "surviving citing sources": the file is still in the vault. Being
   // present is enough — a source that failed to normalize or inventory this run
   // has not gone anywhere, and deleting the page it cites because one run went
-  // badly is not recoverable the way retrying an ingest is. This is also the
-  // set `cascadeScope` calls live, so the preview and the run agree.
+  // badly is not recoverable the way retrying an ingest is.
+  //
+  // `cascadeScope` counts a renamed source's old path live as well, because it
+  // runs before `repointRenames`, while every block reaching this point has
+  // already been repointed to the new path. The two sets describe the same
+  // vault at different moments rather than disagreeing about it.
   //
   // `Object.hasOwn`, not `next[path] !== undefined`: a hand-written citation
   // entry of `constructor` or `toString` would otherwise resolve to an

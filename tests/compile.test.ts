@@ -247,6 +247,62 @@ describe("the four rules (§6.2)", () => {
     expect(await fs.exists("raw/data.md")).toBe(false);
   });
 
+  it("does not cascade on a source that discovery skipped (§6.1)", async () => {
+    // A skipped path is still sitting in the vault — §6.1 has it "surface again
+    // each compile". Treating it as vanished would delete the pages of a source
+    // that never went away, which is what happens when the skip rules change
+    // under a vault that already compiled.
+    const fs = new MemFs({ "raw/note.md": "content\n" });
+    await core(fs).instance.compile();
+    expect(await fs.exists("wiki/sources/note.md")).toBe(true);
+
+    // The path becomes unrecordable without the file moving.
+    const bytes = fs.files.get("raw/note.md") as Uint8Array;
+    fs.files.delete("raw/note.md");
+    fs.files.set("raw/note.md odd", bytes);
+    await fs.write(
+      MANIFEST,
+      JSON.stringify({ "raw/note.md odd": "0".repeat(64) }),
+    );
+
+    const second = await core(fs).instance.compile();
+
+    expect(second.skipped.map((entry) => entry.path)).toEqual(["raw/note.md odd"]);
+    expect(second).toMatchObject({ deleted: 0, pagesDeleted: 0 });
+    expect(await fs.exists("wiki/sources/note.md")).toBe(true);
+  });
+
+  it("accepts a path whose inner segments contain spaces", async () => {
+    // Only padding at the very ends of the recorded value fails to round-trip;
+    // an ordinary spaced folder or filename is fine.
+    const fs = new MemFs({ "raw/my notes/a note.md": "content\n" });
+    const result = await core(fs).instance.compile();
+
+    expect(result).toMatchObject({ added: 1, skipped: [] });
+    expect(fs.text("wiki/sources/a note.md")).toContain("- [[raw/my notes/a note.md]]");
+  });
+
+  it("sweeps an orphan whose stem a passthrough source now occupies", async () => {
+    // `.txt` writes no derivative, so it never claims `data.md`. Shielding that
+    // location because a stem matches would strand the orphan permanently — and
+    // block any later source that really does want to write there.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    expect(await fs.exists("raw/data.md")).toBe(true);
+
+    await fs.delete("raw/data.csv");
+    await fs.write("raw/data.txt", "just a note\n");
+    await core(fs).instance.compile();
+
+    expect(await fs.exists("raw/data.md")).toBe(false);
+
+    // And the freed location is claimable again.
+    await fs.write("raw/data.html", "<h1>Hi</h1>\n");
+    const third = await core(fs).instance.compile();
+    expect(third.failed).toEqual([]);
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.html");
+  });
+
   it("leaves the rest of a repaired derivative's frontmatter byte-for-byte", async () => {
     // §6.2 invites the user to edit a derivative, so repointing one key must
     // not restyle their YAML: a load/dump round trip drops comments, reorders
