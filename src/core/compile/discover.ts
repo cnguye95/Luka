@@ -136,6 +136,29 @@ function pairRenames(
   };
 }
 
+/**
+ * Characters that make a path impossible for Luka to record faithfully, with
+ * the reason for the §6.1-style skip notice. `null` means the path is fine.
+ *
+ * §6.5 makes the citation block the persistent citer record and §4 writes a
+ * source page's origin as `source: "[[<path>]]"`. Both are single-line forms,
+ * so a path containing any line terminator cannot be read back — it would be
+ * silently dropped from the record, which costs the user a source (and, once
+ * the §6.6 cascade lands, the page). A backslash is equally unrepresentable:
+ * vault paths are forward-slash only, so a literal one in a filename is
+ * indistinguishable from a separator and would relocate the derivative.
+ *
+ * Skipping is the §6.1 idiom — named in a notice, never manifested, and so it
+ * resurfaces every compile rather than failing silently or corrupting a record.
+ */
+function unrepresentable(path: string): string | null {
+  // All four JavaScript line terminators: a regex `.` matches none of them,
+  // which is exactly why a path carrying one fails to parse back out.
+  if (/[\n\r\u2028\u2029]/.test(path)) return "path contains a line break";
+  if (path.includes("\\")) return "path contains a backslash";
+  return null;
+}
+
 async function collectSources(
   fs: FsAdapter,
 ): Promise<{ sources: DiscoveredSource[]; skipped: SkippedSource[] }> {
@@ -148,6 +171,11 @@ async function collectSources(
   while (directories.length > 0) {
     const directory = directories.pop() as string;
     for (const entry of await fs.list(directory)) {
+      const unwritable = unrepresentable(entry.path);
+      if (unwritable !== null) {
+        skipped.push({ path: entry.path, reason: unwritable });
+        continue;
+      }
       if (entry.kind === "folder") {
         if (isUnder(entry.path, ASSETS_FOLDER)) continue;
         if (await isRepoDirectory(fs, entry.path)) {

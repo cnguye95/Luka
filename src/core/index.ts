@@ -28,7 +28,7 @@ import {
 import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
 import { loadManifest, saveManifest } from "./manifest";
-import { normalizeSource } from "./normalize/index";
+import { derivativePathFor, formatForPath, normalizeSource } from "./normalize/index";
 import { dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
@@ -273,7 +273,11 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     return text;
   };
 
-  const isLive = (path: string): boolean => next[path] !== undefined || readable.has(path);
+  // `Object.hasOwn`, not `next[path] !== undefined`: a hand-written citation
+  // entry of `constructor` or `toString` would otherwise resolve to an
+  // inherited member of the manifest object and read as a live source forever.
+  const isLive = (path: string): boolean =>
+    Object.hasOwn(next, path) || readable.has(path);
 
   // Entity/concept pages — one Call B each.
   const generationTargets = [
@@ -325,11 +329,8 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       continue;
     }
     // Every source that queued this page must be re-inventoried to retry it.
-    for (const citer of result.target.citers) {
-      const blocked = blockedBy.get(citer) ?? [];
-      blocked.push(result.target.title);
-      blockedBy.set(citer, blocked);
-    }
+    const reason = `page generation failed for ${result.target.title} — ${result.reason}`;
+    for (const citer of result.target.citers) block(blockedBy, citer, reason);
   }
 
   // ── Post-process and write ─────────────────────────────────────────────
@@ -340,11 +341,24 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     ...toWrite.map(toMeta),
   ]);
 
+  // A page title comes from the model, and `sanitizeTitle` removes only the
+  // characters §4 names — not every name a filesystem will refuse (`?`, `*`,
+  // a reserved Windows name, or simply one too long for the host). An
+  // unguarded write would throw straight out of compile, past the manifest
+  // step, discarding the record for every source that succeeded and making the
+  // next run re-spend every model call it already paid for. §11's rule is that
+  // a failure costs one source, so this degrades the same way.
   for (const page of toWrite) {
-    const directory = dirname(page.path);
-    if (directory !== "") await deps.fs.mkdir(directory);
-    await deps.fs.write(page.path, renderPage(page, index, today));
-    wrote = true;
+    try {
+      const directory = dirname(page.path);
+      if (directory !== "") await deps.fs.mkdir(directory);
+      await deps.fs.write(page.path, renderPage(page, index, today));
+      wrote = true;
+    } catch (error) {
+      const reason = `could not write ${page.path} — ${describe(error)}`;
+      if (page.citers.length === 0) failed.push({ path: page.path, reason });
+      for (const citer of page.citers) block(blockedBy, citer, reason);
+    }
   }
 
   // §6.5 ends every compile by regenerating the index, so it is always
@@ -371,10 +385,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     if (blocked === undefined) {
       next[entry.source.path] = entry.hash;
     } else {
-      failed.push({
-        path: entry.source.path,
-        reason: `page generation failed for ${blocked.join(", ")}`,
-      });
+      failed.push({ path: entry.source.path, reason: blocked.join("; ") });
     }
   }
 
@@ -439,6 +450,13 @@ async function repointRenames(
   return wrote;
 }
 
+/** Records why a source cannot be manifested this run, so it retries next time. */
+function block(blockedBy: Map<string, string[]>, citer: string, reason: string): void {
+  const reasons = blockedBy.get(citer) ?? [];
+  reasons.push(reason);
+  blockedBy.set(citer, reasons);
+}
+
 function toMeta(page: PageToWrite): PageMeta {
   return {
     path: page.path,
@@ -454,14 +472,24 @@ function toMeta(page: PageToWrite): PageMeta {
 /**
  * The readable markdown of a source this run did not touch — needed when an
  * unchanged source still cites a page being regenerated (§6.5's "*all* citing
- * sources"). Its format is not in hand, so the derivative is preferred and the
- * source itself is the fallback.
+ * sources").
+ *
+ * The format decides the answer, so it is read from the path rather than
+ * guessed at: a passthrough source IS its own readable markdown, and guessing
+ * `<stem>.md` for one would hand back an unrelated neighbour's file — a vault
+ * holding both `notes.txt` and `notes.md` would feed the wrong document to
+ * Call B under the right document's label. A derivative is accepted only if it
+ * names this source as its origin, for the same reason.
  */
 async function readableFromManifest(fs: FsAdapter, path: string): Promise<string | null> {
-  const derivative = `${dirname(path) === "" ? "" : `${dirname(path)}/`}${stem(path)}.md`;
-  if (derivative !== path && (await fs.exists(derivative))) return derivative;
-  if (await fs.exists(path)) return path;
-  return null;
+  const format = formatForPath(path);
+  const derivative = format === null ? null : derivativePathFor(path, format);
+
+  if (derivative === null) return (await fs.exists(path)) ? path : null;
+  if (!(await fs.exists(derivative))) return null;
+
+  const { data } = parseFrontmatter(decodeUtf8(await fs.read(derivative)));
+  return data["derived-from"] === path ? derivative : null;
 }
 
 /** `null` when the file does not exist, so a comparison can stand in for it. */

@@ -127,6 +127,15 @@ export async function normalizeSource(
   // are the identity, and no extractor can invalidate the value afterwards.
   const hash = await sha256Hex(bytes);
 
+  // Claimed before any extraction runs. §6.1 names every derivative
+  // `<original-stem>.md`, so two non-passthrough sources sharing a stem
+  // (`chart.csv` and `chart.png`) both want one file and the second cannot
+  // have it. Checking afterwards would still fail — but only after paying for
+  // the vision call, on every compile, forever, since a failed source is never
+  // manifested (invariant 3).
+  const derivativePath = derivativePathFor(path, format) as string;
+  await claimDerivative(derivativePath, path, deps);
+
   let body: string;
   switch (format) {
     case "html":
@@ -155,7 +164,6 @@ export async function normalizeSource(
   }
 
   const { text } = await localizeInlineImages(body, deps);
-  const derivativePath = derivativePathFor(path, format) as string;
   await writeDerivative(derivativePath, text, path, format, deps);
   return { hash, derivativePath, wrote: true };
 }
@@ -207,6 +215,30 @@ async function describeImage(
   return `${text}\n`;
 }
 
+/**
+ * Throws unless `target` is free for this origin's derivative.
+ *
+ * A derivative may only ever overwrite another derivative of the same origin;
+ * anything else would be an unsanctioned write to a user-placed file
+ * (invariant 7). Called before extraction so a doomed source never spends a
+ * model call, and again inside `writeDerivative` so no caller can skip it.
+ */
+async function claimDerivative(
+  target: string,
+  origin: string,
+  deps: NormalizeDeps,
+): Promise<void> {
+  if (!(await deps.fs.exists(target))) return;
+  const existing = parseFrontmatter(decodeUtf8(await deps.fs.read(target)));
+  const derivedFrom = existing.data["derived-from"];
+  if (derivedFrom === origin) return;
+  throw new Error(
+    `derivative path ${target} is already taken by ${
+      typeof derivedFrom === "string" ? `a derivative of ${derivedFrom}` : "a user-placed file"
+    }`,
+  );
+}
+
 async function writeDerivative(
   target: string,
   body: string,
@@ -214,19 +246,7 @@ async function writeDerivative(
   format: SourceFormat,
   deps: NormalizeDeps,
 ): Promise<void> {
-  // A derivative may only ever overwrite another derivative of the same origin.
-  // Anything else would be an unsanctioned write to a user-placed file.
-  if (await deps.fs.exists(target)) {
-    const existing = parseFrontmatter(decodeUtf8(await deps.fs.read(target)));
-    const derivedFrom = existing.data["derived-from"];
-    if (derivedFrom !== origin) {
-      throw new Error(
-        `derivative path ${target} is already taken by ${
-          typeof derivedFrom === "string" ? `a derivative of ${derivedFrom}` : "a user-placed file"
-        }`,
-      );
-    }
-  }
+  await claimDerivative(target, origin, deps);
 
   const frontmatter = serializeFrontmatter({
     ingested: deps.today,

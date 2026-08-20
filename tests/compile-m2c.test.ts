@@ -507,6 +507,150 @@ describe("the call counter counts what the provider really does (§11, invariant
   });
 });
 
+describe("paths Luka cannot record faithfully are skipped, not corrupted", () => {
+  // A citation entry and a `source:` value are single-line forms. A path
+  // carrying a line terminator cannot be read back out of either — a regex `.`
+  // matches none of the four — so it would silently vanish from the citer
+  // record. §6.1's idiom is to skip and name it instead.
+  const terminators = ["\n", "\r", "\u2028", "\u2029"];
+
+  it("skips a source whose path contains any line terminator", async () => {
+    for (const terminator of terminators) {
+      const path = `raw/a${terminator}b.md`;
+      const fs = new MemFs();
+      fs.files.set(path, new TextEncoder().encode("Content.\n"));
+
+      const provider = new StubProvider(replyFor);
+      const result = await core(fs, provider).compile();
+
+      expect(result.skipped.map((s) => s.path), JSON.stringify(terminator)).toEqual([path]);
+      expect(result.added).toBe(0);
+      expect(provider.stats().requests).toBe(0);
+    }
+  });
+
+  it("skips a source whose path contains a backslash", async () => {
+    const fs = new MemFs();
+    fs.files.set("raw/a\\b.md", new TextEncoder().encode("Content.\n"));
+
+    const result = await core(fs, new StubProvider(replyFor)).compile();
+
+    expect(result.skipped.map((s) => s.path)).toEqual(["raw/a\\b.md"]);
+    expect(result.added).toBe(0);
+  });
+
+  it("never manifests a skipped path, so it resurfaces rather than vanishing", async () => {
+    const fs = new MemFs();
+    fs.files.set("raw/a\rb.md", new TextEncoder().encode("Content.\n"));
+    fs.files.set("raw/fine.md", new TextEncoder().encode("PageRank ranks pages.\n"));
+
+    await core(fs, new StubProvider(replyFor)).compile();
+    const second = await core(fs, new StubProvider(replyFor)).compile();
+
+    expect(second.skipped.map((s) => s.path)).toEqual(["raw/a\rb.md"]);
+    expect(JSON.parse(fs.text(MANIFEST))["raw/a\rb.md"]).toBeUndefined();
+  });
+
+  it("does not grow a duplicate source page for such a path", async () => {
+    // The failure this guards: `source:` kept its brackets when the regex did
+    // not match, so the page was never found again and every reprocess
+    // allocated another one — unbounded.
+    const fs = new MemFs();
+    fs.files.set("raw/a\rb.md", new TextEncoder().encode("Content.\n"));
+
+    for (let run = 0; run < 3; run++) await core(fs, new StubProvider(replyFor)).compile();
+
+    expect(fs.paths().filter((p) => p.startsWith("wiki/sources/"))).toEqual([]);
+  });
+});
+
+describe("an unchanged citer is read from its own file (§6.5)", () => {
+  it("does not mistake a same-stem neighbour for a passthrough source's derivative", async () => {
+    // `raw/notes.txt` is a passthrough — it has NO derivative. Guessing
+    // `<stem>.md` finds `raw/notes.md`, an unrelated source, and feeds its
+    // body to Call B behind the other document's label.
+    const fs = new MemFs({
+      "raw/notes.txt": "TXT-ONLY-MARKER about Ranking.\n",
+      "raw/notes.md": "MD-ONLY-MARKER, a different document.\n",
+    });
+    const inventory = (request: CompletionRequest): unknown =>
+      request.task === "inventory" && request.user.includes("TXT-ONLY-MARKER")
+        ? inventoryReply("The txt.", [{ title: "Ranking", kind: "concept" }])
+        : request.task === "inventory"
+          ? inventoryReply("The md.")
+          : "Prose.";
+
+    await core(fs, new StubProvider(inventory)).compile();
+
+    // Now regenerate Ranking from a new source while notes.txt is unchanged.
+    await fs.write("raw/more.md", "Ranking again.\n");
+    const second = new StubProvider((request) =>
+      request.task === "inventory" && request.user.includes("Ranking again")
+        ? inventoryReply("More.", [{ title: "Ranking", kind: "concept" }])
+        : inventory(request),
+    );
+    await core(fs, second).compile();
+
+    const prompt = second.callsFor("page-generation")[0]?.user ?? "";
+    expect(prompt).toContain("TXT-ONLY-MARKER");
+    expect(prompt).not.toContain("MD-ONLY-MARKER");
+  });
+});
+
+describe("a source that cannot be written does not cost the whole run", () => {
+  it("keeps the manifest for every source that succeeded (§11)", async () => {
+    // A model title can survive sanitizeTitle and still be illegal on the host
+    // — too long, or `?`/`*`/a reserved name on Windows. An unguarded write
+    // threw out of compile past the manifest step, so the next run re-spent
+    // every model call it had already paid for.
+    const fs = new MemFs({
+      "raw/good.md": "PageRank ranks pages.\n",
+      "raw/bad.md": "Something else entirely.\n",
+    });
+    const provider = new StubProvider((request) =>
+      request.task === "inventory" && request.user.includes("Something else")
+        ? inventoryReply("Bad.", [{ title: "X".repeat(400), kind: "concept" }])
+        : replyFor(request),
+    );
+
+    // MemFs accepts any name, so the failure is injected at the write itself.
+    const realWrite = fs.write.bind(fs);
+    fs.write = async (path: string, data: string | Uint8Array) => {
+      if (path.includes("X".repeat(50))) throw new Error("ENAMETOOLONG");
+      return realWrite(path, data);
+    };
+
+    const result = await core(fs, provider).compile();
+
+    // The run completed rather than throwing, and the good source is recorded.
+    expect(result.failed.map((f) => f.path)).toEqual(["raw/bad.md"]);
+    expect(JSON.parse(fs.text(MANIFEST))["raw/good.md"]).toBeDefined();
+    expect(JSON.parse(fs.text(MANIFEST))["raw/bad.md"]).toBeUndefined();
+  });
+});
+
+describe("a derivative collision never costs a model call twice", () => {
+  it("fails a same-stem image before spending the vision call", async () => {
+    // §6.1 names every derivative `<original-stem>.md`, so `chart.csv` and
+    // `chart.png` both want `chart.md`. The loser must fail *before* paying.
+    const fs = new MemFs({
+      "raw/chart.csv": "a,b\n1,2\n",
+      "raw/chart.png": PNG,
+    });
+
+    const first = new StubProvider(replyFor);
+    const firstResult = await core(fs, first).compile();
+    const second = new StubProvider(replyFor);
+    await core(fs, second).compile();
+
+    expect(firstResult.failed.map((f) => f.path)).toEqual(["raw/chart.png"]);
+    expect(firstResult.failed[0]?.reason).toContain("already taken");
+    // The point: zero vision calls, on this run and on every run after it.
+    expect(first.stats().byTask.vision).toBe(0);
+    expect(second.stats().byTask.vision).toBe(0);
+  });
+});
+
 describe("failure handling (invariant 3, §11)", () => {
   it("un-manifests a source whose inventory failed, so it retries", async () => {
     const fs = vault();
