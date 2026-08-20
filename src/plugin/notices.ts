@@ -48,7 +48,18 @@ function completionMessage(result: CompileResult): string {
   // it against a list of pages that only *might* go. Saying how many actually
   // went closes that loop. This is not invariant 4's forbidden ingest report:
   // it counts what compile did, not the problems it found.
-  return result.pagesDeleted === 0
+  const removed: string[] = [];
+  if (result.pagesDeleted > 0) removed.push(`${plural(result.pagesDeleted, "page")}`);
+  // `raw/` is the user's own folder. A compile that took a file out of it says
+  // so, even though §6.6's preview lists only pages.
+  if (result.derivativesDeleted > 0) {
+    removed.push(`${plural(result.derivativesDeleted, "file")} from raw/`);
+  }
+  return removed.length === 0
     ? "compile finished."
-    : `compile finished — ${result.pagesDeleted} page${result.pagesDeleted === 1 ? "" : "s"} removed.`;
+    : `compile finished — removed ${removed.join(" and ")}.`;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

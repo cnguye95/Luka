@@ -628,12 +628,14 @@ describe("a source that cannot be read costs a page one run, not its content", (
 });
 
 describe("a failed derivative carry-over recovers", () => {
-  it("removes the half-carried file so the next compile can re-extract", async () => {
-    // The move lands but the repoint write fails. Left alone, the derivative
-    // names a path that no longer exists: the source reads as missing its
-    // derivative every run and can never claim the location back.
+  it("re-presents the rename so the next compile finishes it, and deletes nothing", async () => {
+    // The move lands but the repoint write fails. The half-carried file is left
+    // exactly where it is: it still names the old path, which is what lets the
+    // next compile recognise the same rename and finish the job. Deleting it as
+    // a "recovery" would destroy the repair the retry exists to preserve.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
 
     await fs.move("raw/a.html", "raw/sub/a.html");
 
@@ -645,11 +647,13 @@ describe("a failed derivative carry-over recovers", () => {
 
     const second = await core(guarded, new StubProvider(replyFor)).compile();
     expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
-    expect(await fs.exists("raw/sub/a.md")).toBe(false);
+    expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
+    expect(second.derivativesDeleted).toBe(0);
 
-    // Next compile re-extracts cleanly instead of failing forever.
+    // The rename is presented again, carried properly, and costs no model call.
     const third = await core(fs, new StubProvider(replyFor)).compile();
-    expect(third.failed).toEqual([]);
+    expect(third).toMatchObject({ renamed: 1, modelCalls: 0, failed: [] });
+    expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
 
     const fourth = await core(fs, new StubProvider(replyFor)).compile();

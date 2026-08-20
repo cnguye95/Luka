@@ -9,7 +9,7 @@ import { decodeUtf8, sha256Hex } from "../hash";
 import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
 import { isRepoDirectory, repoContentHash, selectRepoFiles } from "../normalize/repo";
-import { comparePaths, extname, isUnder } from "../paths";
+import { basename, comparePaths, dirname, extname, isUnder } from "../paths";
 import type { IngestManifest, SourceFormat } from "../types";
 import { parseFrontmatter } from "../yaml";
 
@@ -127,8 +127,10 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
     modified: modified.sort(byPath),
     unchanged: unchanged.sort(byPath),
     deleted: remainingDeleted.sort(),
-    renamed: renames.sort((a, b) => a.to.localeCompare(b.to)),
-    skipped: skipped.sort((a, b) => a.path.localeCompare(b.path)),
+    // Already in the order the decisions above were taken; re-sorting with a
+    // different comparator would let `discovery.renamed` disagree with them.
+    renamed: renames,
+    skipped: skipped.sort((a, b) => comparePaths(a.path, b.path)),
   };
 }
 
@@ -150,6 +152,17 @@ async function hasDerivative(fs: FsAdapter, source: DiscoveredSource): Promise<b
 
 /** A rename before its derivative decision is taken. */
 type PairedRename = Omit<Rename, "derivative">;
+
+/**
+ * Index of the vanished path that best explains an addition at `to`. Bucket
+ * order is already deterministic, so the fallback is simply the first entry.
+ */
+function bestPairing(bucket: readonly string[], to: string): number {
+  const sameName = bucket.findIndex((from) => basename(from) === basename(to));
+  if (sameName !== -1) return sameName;
+  const sameFolder = bucket.findIndex((from) => dirname(from) === dirname(to));
+  return sameFolder === -1 ? 0 : sameFolder;
+}
 
 /**
  * Same hash gone from one path and appeared at another. Pairs are formed in
@@ -174,11 +187,17 @@ function pairRenames(
 
   for (const source of [...added].sort(byPath)) {
     const bucket = vanishedByHash.get(source.hash);
-    const from = bucket?.shift();
-    if (from === undefined) {
+    if (bucket === undefined || bucket.length === 0) {
       remainingAdded.push(source);
       continue;
     }
+    // Two byte-identical sources make the pairing ambiguous, and §4's identity
+    // rule offers no tiebreak — but the vault usually does. Prefer the vanished
+    // path that shares this one's basename, then its directory, before falling
+    // back to the first in code-point order: a user who deletes one copy and
+    // moves the other should not have the survivor inherit the wrong history.
+    const at = bestPairing(bucket, source.path);
+    const from = bucket.splice(at, 1)[0] as string;
     claimed.add(from);
     renamed.push({ from, to: source.path, hash: source.hash, format: source.format });
   }
@@ -279,5 +298,8 @@ async function collectSources(
 }
 
 function byPath(a: { path: string }, b: { path: string }): number {
-  return a.path.localeCompare(b.path);
+  // Code-point order, never `localeCompare`: this decides which addition pairs
+  // with which vanished path when several share a hash, so a Turkish or
+  // Estonian collation must not produce a different rename from an English one.
+  return comparePaths(a.path, b.path);
 }

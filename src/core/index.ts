@@ -9,7 +9,6 @@ import {
   cascadeScope,
   derivativeLocation,
   orphanedDerivatives,
-  ownedBy,
   type ScopePreview,
 } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
@@ -94,6 +93,12 @@ export interface CompileResult {
   pagesWritten: number;
   /** Wiki pages the §6.6 cascade deleted — their last citer is gone. */
   pagesDeleted: number;
+  /**
+   * Files under `raw/` the cascade removed: derivatives orphaned by a source
+   * leaving its path. `raw/` is the user's folder, so a compile says when it
+   * has taken something out of it (§6.6's preview covers pages only).
+   */
+  derivativesDeleted: number;
   /** Provider calls this run — invariant 12's deterministic count. */
   modelCalls: number;
   /** True when the run wrote nothing at all. */
@@ -224,9 +229,17 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   //
   // Before normalization, so a source that does have to re-extract finds its
   // derivative path settled.
-  const carriedOverFrom = new Set<string>();
+  // Old paths whose derivative must survive this pass: either a carry-over
+  // failed and the retry still needs it, or the source is re-extracting and
+  // the replacement does not exist yet.
+  const deferSweep = new Set<string>();
   for (const rename of discovery.renamed) {
     const action = rename.derivative;
+    // A re-extracting rename keeps its old derivative until the replacement is
+    // actually written. Sweeping first destroys a hand repair on behalf of an
+    // extraction that may be refused outright — a stem collision at the
+    // destination is exactly why this rename fell back to re-extracting.
+    if (action.kind === "reprocess") deferSweep.add(rename.from);
     if (action.kind === "none" || action.kind === "reprocess") continue;
     const at = action.kind === "move" ? action.to : action.at;
     try {
@@ -238,22 +251,20 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         path: rename.to,
         reason: `could not carry over ${at} — ${describe(error)}`,
       });
-      // A half-carried derivative still names the old path, which is worse than
-      // none: the source reads as missing its derivative every run and cannot
-      // claim the location either, because what sits there belongs to a source
-      // that no longer exists. Removing it lets the next compile re-extract —
-      // but only if it really is the file this carry-over was handling, since
-      // a move can fail *because* something else arrived at the destination.
-      try {
-        if (await ownedBy(deps.fs, at, rename.from)) await deps.fs.delete(at);
-      } catch {
-        // Best effort. The withheld manifest entry is what forces the retry.
-      }
-      // Nothing was carried, so the source is not ingested at its new path.
+      // The half-carried derivative is left exactly where it is. It still
+      // names the old path, which is what lets the next compile recognise the
+      // same rename and finish the job — deleting it as a "recovery" would
+      // destroy the repair the retry exists to preserve, and a rename is
+      // retryable in a way a re-extraction is not.
+      //
+      // Withdrawing the new path's manifest entry and restoring the old one is
+      // what re-presents the rename: without it the file reads as a plain
+      // addition next run and gets re-extracted over.
       delete next[rename.to];
-      // And its derivative, wherever it ended up, is not this run's to sweep:
-      // deleting it here would destroy a repair the retry could still carry.
-      carriedOverFrom.add(rename.from);
+      next[rename.from] = rename.hash;
+      // Its derivative, wherever it ended up, is not this run's to sweep:
+      // deleting it would destroy the repair that retry could still carry.
+      deferSweep.add(rename.from);
     }
   }
 
@@ -263,19 +274,28 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // file a living source is taking over, so those no longer name it. What is
   // left really is orphaned, including at a location some other source would
   // like to claim: freeing it is the point.
-  for (const orphan of await orphanedDerivatives(
-    deps.fs,
-    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)].filter(
-      (path) => !carriedOverFrom.has(path),
-    ),
-  )) {
-    try {
-      await deps.fs.delete(orphan.derivative);
-      wrote = true;
-    } catch (error) {
-      block(blockedDeleted, orphan.owner, `could not delete ${orphan.derivative} — ${describe(error)}`);
+  let derivativesDeleted = 0;
+  const sweep = async (oldPaths: readonly string[]): Promise<void> => {
+    for (const orphan of await orphanedDerivatives(deps.fs, oldPaths)) {
+      try {
+        await deps.fs.delete(orphan.derivative);
+        derivativesDeleted += 1;
+        wrote = true;
+      } catch (error) {
+        block(
+          blockedDeleted,
+          orphan.owner,
+          `could not delete ${orphan.derivative} — ${describe(error)}`,
+        );
+      }
     }
-  }
+  };
+
+  await sweep(
+    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)].filter(
+      (path) => !deferSweep.has(path),
+    ),
+  );
 
   // ── Normalize ──────────────────────────────────────────────────────────
   // Serial, and deliberately so: normalization writes files, and the §11
@@ -298,6 +318,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       failed.push({ path: source.path, reason: describe(error) });
     }
   }
+
+  // Now the replacements exist, the deferred orphans really are orphans. A
+  // rename whose re-extraction failed keeps its old derivative for the retry
+  // to carry — losing a repair is not a price a failure should exact.
+  const extracted = new Set(normalized.map((entry) => entry.source.path));
+  await sweep(
+    discovery.renamed
+      .filter((rename) => deferSweep.has(rename.from) && extracted.has(rename.to))
+      .map((rename) => rename.from),
+  );
 
   // ── Call A ─────────────────────────────────────────────────────────────
   const inventories = new Map<string, SourceInventory>();
@@ -647,6 +677,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     failed,
     pagesWritten,
     pagesDeleted,
+    derivativesDeleted,
     modelCalls: provider.stats().requests - before,
     noop: !wrote,
     cancelled: false,
@@ -665,6 +696,7 @@ function cancelled(discovery: DiscoveryResult): CompileResult {
     failed: [],
     pagesWritten: 0,
     pagesDeleted: 0,
+    derivativesDeleted: 0,
     modelCalls: 0,
     noop: true,
     cancelled: true,
@@ -781,12 +813,13 @@ async function readableFromManifest(fs: FsAdapter, path: string): Promise<string
   // format from — and handing back the path itself would have Call B try to
   // read a folder. Its readable markdown is §6.1's derivative location.
   const format = stat.kind === "folder" ? null : formatForPath(path);
+  // An extension Luka does not support is not readable markdown, whatever it
+  // is. Handing back the path would put its raw bytes in a Call B prompt under
+  // a source's label.
+  if (stat.kind !== "folder" && format === null) return null;
+
   const derivative =
-    stat.kind === "folder"
-      ? derivativeLocation(path)
-      : format === null
-        ? null
-        : derivativePathFor(path, format);
+    format === null ? derivativeLocation(path) : derivativePathFor(path, format);
 
   if (derivative === null) return path;
   if (!(await fs.exists(derivative))) return null;

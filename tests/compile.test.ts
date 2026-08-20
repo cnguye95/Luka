@@ -247,6 +247,91 @@ describe("the four rules (§6.2)", () => {
     expect(await fs.exists("raw/data.md")).toBe(false);
   });
 
+  it("keeps a repaired derivative when the rename's re-extraction is refused", async () => {
+    // The destination stem is occupied by the user's own note, so the rename
+    // falls back to re-extracting — and that re-extraction can never succeed.
+    // Sweeping the old derivative first would destroy a §6.2 repair in
+    // exchange for nothing at all.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.md": "My own note.\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
+
+    await fs.move("raw/a.html", "raw/b.html");
+    const second = await core(fs).instance.compile();
+
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/b.html"]);
+    expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
+    expect(fs.text("raw/b.md")).toContain("My own note.");
+    // Still reported on the next run rather than settling into a silent wrong.
+    expect((await core(fs).instance.compile()).failed).toHaveLength(1);
+    expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
+  });
+
+  it("sweeps the old derivative once the re-extraction has actually landed", async () => {
+    // Same shape, but the collision clears in the same run, so the replacement
+    // is written — and only then is the old file an orphan.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.csv": "x,y\n1,2\n" });
+    await core(fs).instance.compile();
+
+    await fs.delete("raw/b.csv");
+    await fs.move("raw/a.html", "raw/b.html");
+    const second = await core(fs).instance.compile();
+
+    expect(second.failed).toEqual([]);
+    expect(fs.text("raw/b.md")).toContain("derived-from: raw/b.html");
+    expect(await fs.exists("raw/a.md")).toBe(false);
+    expect(second.derivativesDeleted).toBeGreaterThan(0);
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ noop: true });
+  });
+
+  it("retries the carry-over after a failed one instead of re-extracting over it", async () => {
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
+
+    await fs.move("raw/a.html", "raw/sub/a.html");
+
+    // The move lands; the repoint write does not.
+    const guarded = Object.create(fs) as MemFs;
+    guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
+      if (path === "raw/sub/a.md") throw new Error("EACCES");
+      return MemFs.prototype.write.call(fs, path, data);
+    };
+    const second = await core(guarded).instance.compile();
+    expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
+
+    // The next compile sees the same rename again and carries it properly,
+    // rather than reading the file as new and re-extracting over the repair.
+    const third = await core(fs).instance.compile();
+    expect(third).toMatchObject({ renamed: 1, modelCalls: 0, failed: [] });
+    expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
+    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+  });
+
+  it("pairs a rename with the copy it actually came from (§4)", async () => {
+    // Two byte-identical sources. The user deletes one and moves the other;
+    // hash alone cannot tell them apart, but the basename can.
+    const fs = new MemFs({
+      "raw/p.html": "<h1>Same</h1>\n",
+      "raw/q.html": "<h1>Same</h1>\n",
+    });
+    await core(fs).instance.compile();
+    await fs.write("raw/q.md", `${fs.text("raw/q.md")}\nMARK-Q.\n`);
+
+    await fs.delete("raw/p.html");
+    await fs.move("raw/q.html", "raw/sub/q.html");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 1, deleted: 1 });
+    // q's history followed q, not p's.
+    expect(fs.text("raw/sub/q.md")).toContain("MARK-Q.");
+    expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
+      "wiki/sources/q.md",
+    ]);
+  });
+
   it("does not adopt a stale derivative left at the path a rename moves into", async () => {
     // `raw/data.md` is left over from a long-dead `raw/data.csv`. When a new
     // file is later moved to that same path, its name matches — but the file
