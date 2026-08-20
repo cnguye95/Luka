@@ -154,14 +154,29 @@ async function hasDerivative(fs: FsAdapter, source: DiscoveredSource): Promise<b
 type PairedRename = Omit<Rename, "derivative">;
 
 /**
- * Index of the vanished path that best explains an addition at `to`. Bucket
- * order is already deterministic, so the fallback is simply the first entry.
+ * Index of the vanished path that best explains an addition at `to`.
+ *
+ * Scored rather than ordered by signal, because neither signal dominates.
+ * Preferring the basename outright cross-pairs two siblings that swapped names
+ * within their own folders; preferring the folder outright hands a moved file
+ * to an unrelated neighbour. Staying in the same folder is the strongest
+ * evidence, moving deeper into it the next, and keeping the name the next —
+ * and ties fall back to the bucket's own deterministic order.
  */
 function bestPairing(bucket: readonly string[], to: string): number {
-  const sameName = bucket.findIndex((from) => basename(from) === basename(to));
-  if (sameName !== -1) return sameName;
-  const sameFolder = bucket.findIndex((from) => dirname(from) === dirname(to));
-  return sameFolder === -1 ? 0 : sameFolder;
+  let best = 0;
+  let bestScore = -1;
+  for (const [at, from] of bucket.entries()) {
+    let score = 0;
+    if (dirname(from) === dirname(to)) score += 2;
+    else if (isUnder(dirname(to), dirname(from))) score += 1;
+    if (basename(from) === basename(to)) score += 1;
+    if (score > bestScore) {
+      bestScore = score;
+      best = at;
+    }
+  }
+  return best;
 }
 
 /**

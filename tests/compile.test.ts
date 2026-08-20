@@ -310,6 +310,54 @@ describe("the four rules (§6.2)", () => {
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
   });
 
+  it("survives an edit between a failed carry-over and its retry", async () => {
+    // The retry only re-presents the rename while the source's bytes are
+    // unchanged. An ordinary edit in between must not leave a derivative
+    // stranded somewhere nothing can reach, blocking that path for good.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+
+    await fs.move("raw/a.html", "raw/sub/a.html");
+    const guarded = Object.create(fs) as MemFs;
+    guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
+      if (path === "raw/sub/a.md") throw new Error("EACCES");
+      return MemFs.prototype.write.call(fs, path, data);
+    };
+    await core(guarded).instance.compile();
+
+    // The user edits the source before the retry, so the rename cannot pair.
+    await fs.write("raw/sub/a.html", "<h1>Hi</h1>\n<p>More.</p>\n");
+    const third = await core(fs).instance.compile();
+
+    expect(third.failed).toEqual([]);
+    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+    expect(await fs.exists("raw/a.md")).toBe(false);
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ noop: true });
+  });
+
+  it("does not cross-pair two siblings that swapped names in their own folders", async () => {
+    // Both files are byte-identical, so only position can tell them apart.
+    // Preferring the basename outright hands each rename the other's history.
+    const fs = new MemFs({
+      "raw/a/x.html": "<h1>Same</h1>\n",
+      "raw/b/y.html": "<h1>Same</h1>\n",
+    });
+    await core(fs).instance.compile();
+    await fs.write("raw/a/x.md", `${fs.text("raw/a/x.md")}\nMARK-X.\n`);
+    await fs.write("raw/b/y.md", `${fs.text("raw/b/y.md")}\nMARK-Y.\n`);
+
+    await fs.move("raw/a/x.html", "raw/a/y.html");
+    await fs.move("raw/b/y.html", "raw/b/z.html");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 2, deleted: 0 });
+    // Each folder keeps its own file's history.
+    expect(fs.text("raw/a/y.md")).toContain("MARK-X.");
+    expect(fs.text("raw/b/z.md")).toContain("MARK-Y.");
+  });
+
   it("pairs a rename with the copy it actually came from (§4)", async () => {
     // Two byte-identical sources. The user deletes one and moves the other;
     // hash alone cannot tell them apart, but the basename can.
@@ -376,11 +424,16 @@ describe("the four rules (§6.2)", () => {
     // manifested with no derivative of its own.
     expect(fs.text("raw/q.md")).toContain("derived-from: raw/q.csv");
     expect(second.failed.map((failure) => failure.path)).toEqual(["raw/q.html"]);
-    expect(Object.keys(manifestOf(fs))).toEqual(["raw/q.csv"]);
+    // The loser's old path is restored, so the rename is put in front of the
+    // next compile again rather than the file reading as a plain addition —
+    // that is what keeps its deferred derivative reachable and its failure
+    // reported instead of silently stranded.
+    expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/b.html", "raw/q.csv"]);
 
-    // And the loser keeps being reported rather than reading as ingested.
+    // And it keeps being reported rather than reading as ingested.
     const third = await core(fs).instance.compile();
     expect(third.failed.map((failure) => failure.path)).toEqual(["raw/q.html"]);
+    expect(third).toMatchObject({ renamed: 1 });
   });
 
   it("frees a derivative path once the source that owned it is deleted", async () => {

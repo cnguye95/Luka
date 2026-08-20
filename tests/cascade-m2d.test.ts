@@ -628,11 +628,12 @@ describe("a source that cannot be read costs a page one run, not its content", (
 });
 
 describe("a failed derivative carry-over recovers", () => {
-  it("re-presents the rename so the next compile finishes it, and deletes nothing", async () => {
-    // The move lands but the repoint write fails. The half-carried file is left
-    // exactly where it is: it still names the old path, which is what lets the
-    // next compile recognise the same rename and finish the job. Deleting it as
-    // a "recovery" would destroy the repair the retry exists to preserve.
+  it("rolls back and re-presents the rename so the next compile finishes it", async () => {
+    // The move lands but the repoint write fails, so the move is undone and the
+    // vault is left exactly as it was found. A file that moved without being
+    // repointed would be unreachable — the sweep looks for it at the old
+    // location — and deleting it as a "recovery" would destroy the repair the
+    // retry exists to preserve.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
@@ -647,7 +648,9 @@ describe("a failed derivative carry-over recovers", () => {
 
     const second = await core(guarded, new StubProvider(replyFor)).compile();
     expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
-    expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
+    // Rolled back: the derivative is where it started, repair intact.
+    expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
+    expect(await fs.exists("raw/sub/a.md")).toBe(false);
     expect(second.derivativesDeleted).toBe(0);
 
     // The rename is presented again, carried properly, and costs no model call.

@@ -157,6 +157,19 @@ async function runPreview(deps: CoreDeps): Promise<ScopePreview> {
   return cascadeScope(pages, await readCitations(deps.fs, pages), discovery);
 }
 
+/**
+ * A citing source whose readable markdown cannot be located — it is in the
+ * vault but outside what compile can process, so no retry of anyone else's
+ * work would produce it. Distinguished from an ordinary failure because the
+ * §6.5 citer set cannot be satisfied at all, rather than not yet.
+ */
+class UnreadableCiter extends Error {
+  constructor(path: string) {
+    super(`no readable markdown for ${path}`);
+    this.name = "UnreadableCiter";
+  }
+}
+
 /** A source that normalized successfully and is ready for Call A. */
 interface NormalizedSource {
   source: DiscoveredSource;
@@ -242,20 +255,46 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     if (action.kind === "reprocess") deferSweep.add(rename.from);
     if (action.kind === "none" || action.kind === "reprocess") continue;
     const at = action.kind === "move" ? action.to : action.at;
+    const cameFrom = action.kind === "move" ? action.from : null;
+    let moved = false;
     try {
-      if (action.kind === "move") await deps.fs.move(action.from, action.to);
+      if (cameFrom !== null) {
+        await deps.fs.move(cameFrom, at);
+        moved = true;
+      }
       await repointDerivative(deps.fs, at, rename.to);
       wrote = true;
     } catch (error) {
+      // Roll the move back, so a failure leaves the vault exactly as it found
+      // it. A file that moved but was not repointed is unreachable: the sweep
+      // looks for it at the *old* location, and the retry only re-presents the
+      // rename while the source's bytes are unchanged — so an ordinary edit in
+      // between would strand it, blocking that derivative path for good.
+      if (moved && cameFrom !== null) {
+        try {
+          await deps.fs.move(at, cameFrom);
+          moved = false;
+        } catch {
+          // Rolling back failed too. Removing the stranded file costs the
+          // repair but keeps the source ingestable, which is the better of two
+          // bad outcomes; if that fails as well, the failure below is reported
+          // on every run rather than passing silently.
+          try {
+            await deps.fs.delete(at);
+          } catch {
+            // Reported below.
+          }
+        }
+      }
       failed.push({
         path: rename.to,
         reason: `could not carry over ${at} — ${describe(error)}`,
       });
-      // The half-carried derivative is left exactly where it is. It still
-      // names the old path, which is what lets the next compile recognise the
-      // same rename and finish the job — deleting it as a "recovery" would
-      // destroy the repair the retry exists to preserve, and a rename is
-      // retryable in a way a re-extraction is not.
+      // Rolled back, the derivative is where it started and still names the old
+      // path — which is what lets the next compile recognise the same rename
+      // and finish the job. Deleting it as a "recovery" would destroy the
+      // repair the retry exists to preserve; a rename is retryable in a way a
+      // re-extraction is not.
       //
       // Withdrawing the new path's manifest entry and restoring the old one is
       // what re-presents the rename: without it the file reads as a plain
@@ -443,7 +482,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // wrote a citation block claiming the lot, and `wiki/` is rewritten
     // wholesale so the old page would be gone. Failing here instead costs the
     // page one run — the existing text stands and the citers retry.
-    if (target === null) throw new Error(`no readable markdown for ${path}`);
+    if (target === null) throw new UnreadableCiter(path);
     const text = bodyOf(decodeUtf8(await deps.fs.read(target)));
     bodies.set(path, text);
     return text;
@@ -533,7 +572,12 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         });
         return { ok: true as const, target, body };
       } catch (error) {
-        return { ok: false as const, target, reason: describe(error) };
+        return {
+          ok: false as const,
+          target,
+          reason: describe(error),
+          unreadable: error instanceof UnreadableCiter,
+        };
       }
     },
   );
@@ -543,9 +587,14 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       toWrite.push({ ...result.target, body: result.body });
       continue;
     }
-    // Every source that queued this page must be re-inventoried to retry it.
     const reason = `page generation failed for ${result.target.title} — ${result.reason}`;
-    for (const citer of result.target.citers) block(blockedBy, citer, reason);
+    // A citer Luka cannot read is not something re-inventorying anyone would
+    // fix — the file is in the vault but outside what compile can process, and
+    // §6.1 already names it in a skip notice. Blocking the page's *other*
+    // citers would leave them unmanifested and re-inventoried on every compile
+    // for as long as it sits there. The page keeps the text it has.
+    if (result.unreadable) failed.push({ path: result.target.path, reason });
+    else for (const citer of result.target.citers) block(blockedBy, citer, reason);
     blockCascade(blockedDeleted, affectedByDeleted, result.target.path, reason);
   }
 
@@ -630,7 +679,14 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const succeeded = new Set(ready.map((entry) => entry.source.path));
   for (const rename of discovery.renamed) {
     const alsoModified = discovery.modified.some((source) => source.path === rename.to);
-    if (alsoModified && !succeeded.has(rename.to)) delete next[rename.to];
+    if (!alsoModified || succeeded.has(rename.to)) continue;
+    delete next[rename.to];
+    // The re-extraction failed, so its old derivative is still deferred and
+    // still on disk. Restoring the old path keeps the rename in front of the
+    // next compile, which keeps that deferral justified and the failure
+    // reported — otherwise the file is stranded with nothing able to reach it
+    // and nothing saying why.
+    if (rename.derivative.kind === "reprocess") next[rename.from] = rename.hash;
   }
 
   for (const entry of ready) {
