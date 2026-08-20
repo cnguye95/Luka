@@ -1,10 +1,48 @@
-// The ingest manifest: vault-relative source path -> SHA-256 of its content
-// (handoff.md §3, §6.2). Written only for sources that completed successfully
-// (invariant 3); a missing manifest is a first run, never an error.
+// The ingest manifest: vault-relative source path -> what this source's last
+// successful ingest produced (handoff.md §3, §6.2). Written only for sources
+// that completed successfully (invariant 3); a missing manifest is a first run,
+// never an error.
+//
+// §3 describes the file as "path -> SHA-256 content hash". The entry is an
+// object instead, because the hash alone cannot say *which* file is this
+// source's derivative — and deriving that from the filename every compile is
+// what produced the M2d defect cluster (see BUILD-NOTES "M2e"). Ownership is
+// recorded here so nothing downstream has to infer it.
 import type { FsAdapter } from "./adapters";
 import { decodeUtf8 } from "./hash";
-import { dirname } from "./paths";
-import type { IngestManifest } from "./types";
+import { comparePaths, dirname } from "./paths";
+import type { IngestManifest, ManifestEntry } from "./types";
+
+/**
+ * The hash recorded for a source that left the vault but whose §6.6 cascade
+ * could not be completed, so §6.2 sees the path leave again next compile and
+ * the cascade retries.
+ *
+ * Deliberately not a SHA-256. §6.2 identifies sources by content hash, and a
+ * restored real hash would sit in the manifest for as many runs as the failure
+ * lasts, waiting to pair as a rename against any unrelated file that happens to
+ * share those bytes. Nothing can hash to this, so the entry can only ever be
+ * read as "still gone, still owed a cascade".
+ *
+ * A pending entry keeps its `derivative` pointer: that is the file the retry
+ * still has to sweep.
+ */
+export const CASCADE_PENDING = "cascade-pending";
+
+export function isPending(entry: ManifestEntry): boolean {
+  return entry.hash === CASCADE_PENDING;
+}
+
+/**
+ * §7.1's "every manifest source's readable markdown (the source itself if
+ * `.md`/`.txt`, else its derivative)" — the whole point of recording the
+ * derivative. `null` for a source that is not readable: one whose cascade is
+ * still pending, and so is not in the vault at all.
+ */
+export function readablePathOf(path: string, entry: ManifestEntry): string | null {
+  if (isPending(entry)) return null;
+  return entry.derivative ?? path;
+}
 
 export async function loadManifest(fs: FsAdapter, path: string): Promise<IngestManifest> {
   if (!(await fs.exists(path))) return {};
@@ -21,9 +59,29 @@ export async function loadManifest(fs: FsAdapter, path: string): Promise<IngestM
 
   const out: IngestManifest = {};
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof value === "string") out[key] = value;
+    const entry = toEntry(value);
+    if (entry !== null) out[key] = entry;
   }
   return out;
+}
+
+/**
+ * A bare string is a manifest written before ownership was recorded: it is a
+ * hash and nothing more. Reading it costs a converting source one re-extraction,
+ * which restores the pointer; a passthrough source has no derivative to record
+ * and is unaffected. An entry that is neither shape is dropped, as any
+ * unreadable value always has been.
+ */
+function toEntry(value: unknown): ManifestEntry | null {
+  if (typeof value === "string") return { hash: value };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const hash = record["hash"];
+  if (typeof hash !== "string") return null;
+
+  const derivative = record["derivative"];
+  return typeof derivative === "string" ? { hash, derivative } : { hash };
 }
 
 export async function saveManifest(
@@ -31,10 +89,32 @@ export async function saveManifest(
   path: string,
   manifest: IngestManifest,
 ): Promise<void> {
-  const sorted: IngestManifest = {};
-  for (const key of Object.keys(manifest).sort()) sorted[key] = manifest[key] as string;
+  // Code-point order, like every other path ordering in the codebase, so the
+  // file's bytes do not depend on the host's locale.
+  const sorted: Record<string, ManifestEntry> = {};
+  for (const key of Object.keys(manifest).sort(comparePaths)) {
+    const entry = manifest[key] as ManifestEntry;
+    // Written key by key rather than spread, so the serialized key order is
+    // fixed here rather than inherited from however the entry was built.
+    sorted[key] =
+      entry.derivative === undefined
+        ? { hash: entry.hash }
+        : { hash: entry.hash, derivative: entry.derivative };
+  }
 
   const parent = dirname(path);
   if (parent !== "") await fs.mkdir(parent);
   await fs.write(path, `${JSON.stringify(sorted, null, 2)}\n`);
+}
+
+/** Structural, never by reference: entries are rebuilt each run (invariant I). */
+export function isSameManifest(a: IngestManifest, b: IngestManifest): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => {
+    if (!Object.hasOwn(b, key)) return false;
+    const left = a[key] as ManifestEntry;
+    const right = b[key] as ManifestEntry;
+    return left.hash === right.hash && left.derivative === right.derivative;
+  });
 }

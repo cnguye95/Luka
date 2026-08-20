@@ -82,20 +82,6 @@ export function cascadeScope(
   };
 }
 
-/**
- * The manifest value recorded for a departed source whose cascade could not be
- * completed, so that §6.2 sees the path leave again next compile and the
- * cascade retries.
- *
- * Deliberately not a SHA-256. §6.2 identifies sources by content hash, and a
- * restored real hash would sit in the manifest for as many runs as the failure
- * lasts, waiting to pair as a rename against any unrelated file that happens to
- * share those bytes — a copied template or a second empty file would silently
- * inherit the dead path's identity and its pages. Nothing can hash to this, so
- * the entry can only ever be read as "still gone, still owed a cascade".
- */
-export const CASCADE_PENDING = "cascade-pending";
-
 /** A derivative left behind by a source that is no longer at `owner`. */
 export interface OrphanedDerivative {
   derivative: string;

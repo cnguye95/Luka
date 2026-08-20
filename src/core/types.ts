@@ -59,14 +59,30 @@ export interface GraphSnapshot {
 }
 
 /**
- * Vault-relative path → SHA-256 of the source's content (handoff.md §3, §6.2).
+ * What one source's last successful ingest produced.
  *
- * One value is deliberately not a hash: `CASCADE_PENDING` marks a source that
- * left the vault but whose §6.6 cascade could not be completed. Readers that
- * treat an entry as "this file exists and is ingested" — §7.1's graph node set
- * and §10's health check — must skip it.
+ * §3 describes the manifest as "path → SHA-256 content hash"; the entry records
+ * the derivative alongside it, because the hash cannot say which file in `raw/`
+ * this source's extraction wrote — and inferring that from the filename every
+ * compile is the root of the M2d defect cluster (BUILD-NOTES "M2e").
+ *
+ * `hash` is deliberately not always a hash: `CASCADE_PENDING` marks a source
+ * that left the vault but whose §6.6 cascade could not be completed. Readers
+ * that treat an entry as "this file exists and is ingested" — §7.1's graph node
+ * set and §10's health check — must skip those; `readablePathOf` does it for
+ * them.
+ *
+ * Entries are immutable: a changed entry is always a fresh object, so the
+ * before/after manifests a run compares can never alias each other.
  */
-export type IngestManifest = Record<string, string>;
+export interface ManifestEntry {
+  readonly hash: string;
+  /** Vault path of the derivative Luka wrote; absent for passthrough sources. */
+  readonly derivative?: string;
+}
+
+/** Vault-relative source path → its ingest record (handoff.md §3, §6.2). */
+export type IngestManifest = Record<string, ManifestEntry>;
 
 /** Names of the operations that contend for the single global lock (invariant 2). */
 export type OperationName = "compile" | "ask" | "health check";

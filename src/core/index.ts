@@ -5,7 +5,6 @@
 import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
 import {
-  CASCADE_PENDING,
   cascadeScope,
   derivativeLocation,
   orphanedDerivatives,
@@ -39,7 +38,7 @@ import {
 } from "./compile/pagetable";
 import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
-import { loadManifest, saveManifest } from "./manifest";
+import { CASCADE_PENDING, isSameManifest, loadManifest, saveManifest } from "./manifest";
 import { derivativePathFor, formatForPath, normalizeSource } from "./normalize/index";
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
@@ -204,8 +203,11 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
   const next: IngestManifest = { ...manifest };
   for (const rename of discovery.renamed) {
+    // The entry travels whole: its hash is `rename.hash` by definition (that is
+    // how the rename was detected) and its derivative pointer follows the file.
+    const carried = manifest[rename.from] ?? { hash: rename.hash };
     delete next[rename.from];
-    next[rename.to] = rename.hash;
+    next[rename.to] = carried;
   }
   for (const path of discovery.deleted) delete next[path];
 
@@ -300,7 +302,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       // what re-presents the rename: without it the file reads as a plain
       // addition next run and gets re-extracted over.
       delete next[rename.to];
-      next[rename.from] = rename.hash;
+      next[rename.from] = manifest[rename.from] ?? { hash: rename.hash };
       // Its derivative, wherever it ended up, is not this run's to sweep:
       // deleting it would destroy the repair that retry could still carry.
       deferSweep.add(rename.from);
@@ -686,13 +688,15 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // next compile, which keeps that deferral justified and the failure
     // reported — otherwise the file is stranded with nothing able to reach it
     // and nothing saying why.
-    if (rename.derivative.kind === "reprocess") next[rename.from] = rename.hash;
+    if (rename.derivative.kind === "reprocess") {
+      next[rename.from] = manifest[rename.from] ?? { hash: rename.hash };
+    }
   }
 
   for (const entry of ready) {
     const blocked = blockedBy.get(entry.source.path);
     if (blocked === undefined) {
-      next[entry.source.path] = entry.hash;
+      next[entry.source.path] = { hash: entry.hash };
     } else {
       failed.push({ path: entry.source.path, reason: blocked.join("; ") });
     }
@@ -707,12 +711,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // path is a manifest key too, which is how the rename was detected, and its
   // stale derivative is swept by the same pass.
   //
-  // The value is `CASCADE_PENDING`, never the old hash, so the entry cannot
-  // pair as a rename against an unrelated file with the same content while it
-  // waits.
+  // The hash is `CASCADE_PENDING`, never the old one, so the entry cannot pair
+  // as a rename against an unrelated file with the same content while it waits.
+  // The derivative pointer is kept: that is the file the retry has to sweep.
   for (const path of [...blockedDeleted.keys()].sort(comparePaths)) {
-    if (!Object.hasOwn(manifest, path)) continue;
-    next[path] = CASCADE_PENDING;
+    const previous = manifest[path];
+    if (previous === undefined) continue;
+    next[path] =
+      previous.derivative === undefined
+        ? { hash: CASCADE_PENDING }
+        : { hash: CASCADE_PENDING, derivative: previous.derivative };
     const reasons = blockedDeleted.get(path) ?? [];
     failed.push({ path, reason: [...reasons, "cascade will retry next compile"].join("; ") });
   }
@@ -890,11 +898,6 @@ async function readIfPresent(fs: FsAdapter, path: string): Promise<string | null
   return decodeUtf8(await fs.read(path));
 }
 
-function isSameManifest(a: IngestManifest, b: IngestManifest): boolean {
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  return keys.every((key) => a[key] === b[key]);
-}
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

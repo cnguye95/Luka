@@ -10,7 +10,7 @@ import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
 import { isRepoDirectory, repoContentHash, selectRepoFiles } from "../normalize/repo";
 import { basename, comparePaths, dirname, extname, isUnder } from "../paths";
-import type { IngestManifest, SourceFormat } from "../types";
+import type { IngestManifest, ManifestEntry, SourceFormat } from "../types";
 import { parseFrontmatter } from "../yaml";
 
 export const RAW_FOLDER = "raw";
@@ -60,7 +60,7 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   const unchanged: DiscoveredSource[] = [];
 
   for (const source of sources) {
-    const recorded = manifest[source.path];
+    const recorded = manifest[source.path]?.hash;
     if (recorded === undefined) {
       added.push(source);
     } else if (recorded !== source.hash || !(await hasDerivative(fs, source))) {
@@ -190,7 +190,9 @@ function pairRenames(
 ): { renamed: PairedRename[]; remainingAdded: DiscoveredSource[]; remainingDeleted: string[] } {
   const vanishedByHash = new Map<string, string[]>();
   for (const path of vanished) {
-    const hash = manifest[path] as string;
+    // Bucketed by hash: `CASCADE_PENDING` is not one, so a pending entry can
+    // never pair as a rename with a real file.
+    const hash = (manifest[path] as ManifestEntry).hash;
     const bucket = vanishedByHash.get(hash);
     if (bucket) bucket.push(path);
     else vanishedByHash.set(hash, [path]);
