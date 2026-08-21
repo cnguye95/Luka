@@ -1019,6 +1019,32 @@ describe("source discovery", () => {
     expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
   });
 
+  it("says so when it cannot read the markdown an entry names", async () => {
+    // Keeping the entry is the right call — the alternative destroys a file
+    // over a blip — but a source whose markdown cannot be read is not a healthy
+    // source, and reading `unchanged` about it forever with nothing said is the
+    // silent shape this project keeps having to remove.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+
+    let seen = 0;
+    const guarded = Object.create(fs) as MemFs;
+    guarded.read = async (path: string): Promise<Uint8Array> => {
+      if (path === "raw/a.md") {
+        seen += 1;
+        if (seen > 1) throw new Error("EIO");
+      }
+      return MemFs.prototype.read.call(fs, path);
+    };
+
+    const second = await core(guarded).instance.compile();
+
+    expect(second).toMatchObject({ unchanged: 1, modified: 0, modelCalls: 0, failed: [] });
+    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/a.html"]);
+    expect(second.reported[0]?.reason).toContain("raw/a.md");
+    expect(second.reported[0]?.reason).toContain("EIO");
+  });
+
   it("does not reclassify a source because one read of its markdown failed", async () => {
     // §6.2's missing-derivative test reads the file to ask whether it is still
     // this source's. A read that fails answers neither yes nor no — treating it

@@ -49,6 +49,14 @@ export interface DiscoveryResult {
   renamed: Rename[];
   /** Never manifested, so they resurface next compile rather than failing silently. */
   skipped: SkippedSource[];
+  /**
+   * Sources whose recorded markdown could not be read, so §6.2's
+   * missing-derivative test could not be answered either way. The entry stands
+   * — the alternative re-extracts over a file on a transient failure — but the
+   * source is not healthy, and compile reports it rather than reading
+   * `unchanged` about it in silence.
+   */
+  unreadable: SkippedSource[];
 }
 
 export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise<DiscoveryResult> {
@@ -58,12 +66,16 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   const added: DiscoveredSource[] = [];
   const modified: DiscoveredSource[] = [];
   const unchanged: DiscoveredSource[] = [];
+  const unreadable: SkippedSource[] = [];
 
   for (const source of sources) {
     const recorded = manifest[source.path];
     if (recorded === undefined) {
       added.push(source);
-    } else if (recorded.hash !== source.hash || !(await hasDerivative(fs, source, recorded))) {
+    } else if (
+      recorded.hash !== source.hash ||
+      !(await hasDerivative(fs, source, recorded, unreadable))
+    ) {
       // §6.2: a manifested source whose derivative went missing reprocesses as modified.
       modified.push(source);
     } else {
@@ -111,6 +123,7 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
     // on every host.
     renamed: [...renamed].sort((a, b) => comparePaths(a.source.path, b.source.path)),
     skipped: skipped.sort((a, b) => comparePaths(a.path, b.path)),
+    unreadable: unreadable.sort((a, b) => comparePaths(a.path, b.path)),
   };
 }
 
@@ -139,6 +152,7 @@ async function hasDerivative(
   fs: FsAdapter,
   source: DiscoveredSource,
   entry: ManifestEntry,
+  unreadable: SkippedSource[],
 ): Promise<boolean> {
   // A passthrough source is its own readable markdown and owes no derivative.
   if (derivativePathFor(source.path, source.format) === null) return true;
@@ -147,11 +161,18 @@ async function hasDerivative(
     // Also settles the case of a directory built over the derivative: a folder
     // names no origin, so it is not this source's markdown either.
     return (await derivativeOrigin(fs, entry.derivative)) === source.path;
-  } catch {
+  } catch (error) {
     // The file could not be read at all. That answers neither "still ours" nor
     // "not ours", and the two costs are wildly different: treating it as absent
-    // re-extracts over whatever is there — silently, since nothing failed — on
-    // an IO blip. The entry stands until something actually contradicts it.
+    // re-extracts over whatever is there on an IO blip. The entry stands until
+    // something actually contradicts it — and the run says so, because a source
+    // whose markdown cannot be read is not a source that is fine.
+    unreadable.push({
+      path: source.path,
+      reason: `could not read ${entry.derivative as string} — ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    });
     return true;
   }
 }

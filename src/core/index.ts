@@ -249,6 +249,9 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
   const failed: CompileFailure[] = [];
   const reported: Report[] = [];
+  // Markdown an entry names that this run could not read. The source keeps its
+  // entry — nothing contradicted it — but it is not left to read as healthy.
+  reported.push(...discovery.unreadable);
   let wrote = false;
 
   // Departed sources whose cascade could not be completed, and why. Their
