@@ -68,6 +68,7 @@ import {
   selectSeeds,
 } from "./retrieve/pipeline";
 import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
+import { fileBack } from "./answer/fileback";
 import {
   normalizeSettings,
   type GraphSnapshot,
@@ -91,6 +92,8 @@ export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types
 // this value per entry. Exported here rather than from manifest.ts so callers
 // outside core keep going through the one façade.
 export { readablePathOf } from "./manifest";
+export { FILED_ANSWERS_FOLDER } from "./answer/fileback";
+export { parseTrace, writeTrace, type Trace } from "./answer/trace";
 export type { PPROptions, PPRResult } from "./graph/ppr";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
 // invariant 10 requires every provider call to pass through the wrapper, and
@@ -190,6 +193,12 @@ export interface Core {
    * (invariant 11).
    */
   ask(question: string): Promise<AnswerResult>;
+  /**
+   * §8.4: moves an answer note into `raw/answers/`, stripping the trace and
+   * keeping the sources block, and returns where it landed. No auto-compile —
+   * the next compile picks it up through the normal path.
+   */
+  fileBack(answerPath: string): Promise<string>;
   /** §7.2's personalized PageRank over the current graph. */
   computePPR(
     seedPaths: readonly string[],
@@ -238,6 +247,8 @@ export function createCore(deps: CoreDeps): Core {
       return result;
     },
     ask: (question: string) => lock.run("ask", () => runAsk(deps, question)),
+    // Outside the lock: no model calls, no compile, and §8.4 ends at a notice.
+    fileBack: (answerPath: string) => fileBack(deps.fs, answerPath),
     getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);

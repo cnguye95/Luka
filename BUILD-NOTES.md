@@ -996,3 +996,28 @@ because the missing string matched no page at all; the already-assembled filter
 was never tested with a keyword that actually matches an assembled page
 (`ranking` shares no substring with `PageRank`); and the toggle had no
 normalization test. All three tests were rewritten rather than accepted.
+
+### Filing (§8.4)
+
+`src/core/answer/fileback.ts`.
+
+- **Nothing teaches compile about answers, and nothing needs to.** §4's
+  discovery already walks `raw/` recursively and names `raw/answers/` outright,
+  and a `.md` source is passthrough. §8.4's "through the normal path" is a
+  statement that no special case exists, and §16 forbids the one anybody would
+  be tempted to add — a redundancy gate.
+- **The trace goes and the sources block stays.** That asymmetry is the point of
+  filing: the trace is this run's working, while the sources block's links
+  become real graph edges once the note is compiled (§7.1). Filing densifies
+  the graph rather than merely archiving prose.
+- **Written before the original is removed.** A failure part-way leaves the
+  answer where the user can still see it, rather than between two folders.
+- **Only an answer note is filed.** Everything under `raw/` becomes a source on
+  the next compile, so filing an arbitrary file is a vault edit nobody asked
+  for. The check is `kind: answer` in frontmatter.
+- **Outside the operation lock**: no model calls, no compile, and §8.4 ends at a
+  notice.
+
+Nine assertions, five mutation-checked: the trace left in, the kind check
+removed, the collision suffix removed, the delete moved before the write, and
+the suffix applied after the extension rather than to the stem.
