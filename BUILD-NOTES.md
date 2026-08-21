@@ -1225,3 +1225,33 @@ no raw file is ignored — instead of claiming coverage it does not have.
 The ordering test also had to be rewritten. Its first version used the names
 "Nowhere" and "Rare", where alphabetical order and demand order happen to agree,
 so it passed whichever sort was in place.
+
+### The full-scale testing pass
+
+Run before any reviewer, so a wave spends its attention on what the instruments
+cannot reach.
+
+| | |
+|---|---|
+| `CHURN_SEEDS=1500`, both fault modes | green, 31s |
+| `FUZZ_SEEDS=1500` | green |
+| `FUZZ_LOCALIZE_SEEDS=1500` | green |
+| `PPR_SEEDS=2000` | green |
+| demo corpus + demo-ask (real fs, real pdf.js) | green |
+| `npm run eval` | green |
+| Fixture rebuilt and diffed | byte-identical |
+| Full suite / build / boundary / lint | 801 passed / 4 skipped, all green |
+
+**M2's named mutation checks still hold at their recorded weights** — removing
+the float branch in `renames.ts` fails **exactly 7** tests, and removing
+`chooseTarget`'s recorded-path fallback **exactly 1**. M3 added a graph, a
+ranker and three new modules on top of the rename subsystem without moving
+either number.
+
+Five of M3's own guards were re-checked against the whole suite rather than
+their own file, to be sure nothing else silently covers for them: α exchanged
+with 1−α (4 red), the graph's manifest-path alias dropped (1), the ungrounded
+callout dropped (2), `ask` taken outside the lock (2), and the mode predicate's
+node threshold made exclusive (1).
+
+Tree byte-identical afterwards.
