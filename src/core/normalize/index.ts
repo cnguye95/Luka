@@ -88,6 +88,10 @@ export interface NormalizeOutcome {
  * the way is its *own* previous derivative, still naming the old path. Naming
  * that path here is what lets the re-extraction proceed; every other file is
  * still refused. Empty means "this source only", which is every ordinary call.
+ *
+ * `recordedDerivative` is the manifest entry's pointer, when there is one. It
+ * is where this source's markdown actually is, which after a float is not
+ * `<stem>.md` — see `chooseTarget`.
  */
 export async function normalizeSource(
   path: string,
@@ -95,11 +99,13 @@ export async function normalizeSource(
   kind: "file" | "repo",
   deps: NormalizeDeps,
   acceptOrigins: readonly string[] = [],
+  recordedDerivative?: string,
 ): Promise<NormalizeOutcome> {
   const accepted = [path, ...acceptOrigins];
   if (kind === "repo") {
     const files = await selectRepoFiles(deps.fs, path);
-    const derivativePath = derivativePathFor(path, "repo") as string;
+    const canonical = derivativePathFor(path, "repo") as string;
+    const derivativePath = await chooseTarget(canonical, recordedDerivative, accepted, deps);
     await writeDerivative(derivativePath, repoToMarkdown(path, files), path, "repo", accepted, deps);
     return { hash: await repoContentHash(files), derivativePath, wrote: true };
   }
@@ -143,8 +149,12 @@ export async function normalizeSource(
   // have it. Checking afterwards would still fail — but only after paying for
   // the vision call, on every compile, forever, since a failed source is never
   // manifested (invariant 3).
-  const derivativePath = derivativePathFor(path, format) as string;
-  await claimDerivative(derivativePath, accepted, deps);
+  const derivativePath = await chooseTarget(
+    derivativePathFor(path, format) as string,
+    recordedDerivative,
+    accepted,
+    deps,
+  );
 
   let body: string;
   switch (format) {
@@ -223,6 +233,47 @@ async function describeImage(
   const text = reply.trim();
   if (text === "") throw new Error(`vision returned no description for ${path}`);
   return `${text}\n`;
+}
+
+/**
+ * Where this normalization writes.
+ *
+ * `<stem>.md` first, always: §6.1 names it, and a derivative sitting where its
+ * source's name says it should is the one a user can find. The claim is made
+ * before any extraction runs, so a doomed source never spends a model call.
+ *
+ * When that path is refused and the entry records this source's own markdown
+ * somewhere else — a float (VII) — the write goes there instead. That file is
+ * this source's, confirmed by the same guard that refuses everyone else's, and
+ * rewriting it is invariant 7's plain sentence: derivative files Luka wrote are
+ * Luka's to rewrite. Nothing is widened; the only address ever reached this way
+ * is one the manifest already recorded for this very source.
+ *
+ * Canonical-first is also what makes floats temporary. A floated source that is
+ * edited lands back at `<stem>.md` the moment the obstruction clears, and the
+ * file it vacated is swept at the commit point behind the ownership guard.
+ *
+ * An *empty* non-canonical path is never taken: fresh placement belongs to
+ * §6.1, and a float is only ever the continuation of a file that already exists.
+ */
+async function chooseTarget(
+  canonical: string,
+  recorded: string | undefined,
+  accepted: readonly string[],
+  deps: NormalizeDeps,
+): Promise<string> {
+  try {
+    await claimDerivative(canonical, accepted, deps);
+    return canonical;
+  } catch (refusal) {
+    if (recorded !== undefined && recorded !== canonical) {
+      const origin = await derivativeOrigin(deps.fs, recorded);
+      if (origin !== null && accepted.includes(origin)) return recorded;
+    }
+    // The canonical refusal is the honest story: nothing of this source's own
+    // stands anywhere else to continue.
+    throw refusal;
+  }
 }
 
 /**

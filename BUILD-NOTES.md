@@ -485,5 +485,44 @@ Scoped to whether the second round's revert and re-root settled it. On that ques
 
 ### Known limitations, accepted (third review round)
 
-- **Two sources that swap names cannot be resolved by this pass.** A swap needs somewhere to park a file while the other moves. The way out without new machinery is to record the pointer wherever the file already lies — recorded ownership makes that representable — but §6.1 names derivatives after their original, so that is a spec question rather than this pass's to decide. It is loud: both sources are reported with their reasons on every compile, nothing is destroyed while it waits, and removing either derivative ends it in two compiles. Deliberately not fixed by widening the write guard: that is the third time this milestone that widening a guard would have looked like the answer, and the first two both destroyed user data.
+- *(Superseded by M2f: a derivative may stay where it lies, so a swap needs nowhere to park a file. See "M2f".)* **Two sources that swap names cannot be resolved by this pass.** A swap needs somewhere to park a file while the other moves. The way out without new machinery is to record the pointer wherever the file already lies — recorded ownership makes that representable — but §6.1 names derivatives after their original, so that is a spec question rather than this pass's to decide. It is loud: both sources are reported with their reasons on every compile, nothing is destroyed while it waits, and removing either derivative ends it in two compiles. Deliberately not fixed by widening the write guard: that is the third time this milestone that widening a guard would have looked like the answer, and the first two both destroyed user data.
 - **An unreadable derivative is silent and self-perpetuating.** When the missing-derivative check cannot read the file it names, it keeps the entry standing — the right call, since the alternative destroys a file over a transient blip — but says nothing. The source reads as unchanged, and the condition surfaces only on whichever compile happens to regenerate a page citing it.
+
+## M2f — Floating derivatives
+
+The third round left one defect standing: two sources that swap names deadlock for good. Each rename's destination holds the other's markdown, so neither can be placed at `<stem>.md`, and the invariant-7 guard then rightly refuses each one's re-extraction over a file naming somebody else. Both sources stay un-ingested. The measurement under the M2e orphan-stem entry shows the wider family it belongs to.
+
+Every attempt to fix that family by *loosening a guard* has destroyed user data — twice, in the first review round. This milestone fixes it by loosening a *convention* instead.
+
+### The decision (user-directed, in two parts)
+
+§6.1 says normalized output is "persisted next to the original in `raw/`, named `<original-stem>.md`". Read as a rule about where a derivative must forever live, a rename whose stem is taken has nowhere to go. Read as a rule about **where a normalization writes** — which is what the sentence is about — a rename may leave the file exactly where it is and record that location. Recorded ownership already made that representable: the entry names the file, and every reader in the codebase already goes through the pointer. This is a deviation from a natural reading of §6.1, taken on the user's instruction, and logged as such rather than as a §0 smallest-option call.
+
+The second part was forced by the design pass and approved separately. Floating only in the carry is **unsound**: once a swap settles as two floats, modifying either source re-extracts toward a canonical path the other's live float holds, is refused, and fails permanently — the same family rebuilt one step later. So a **re**-extraction whose canonical path is refused may rewrite the source's *own recorded* file in place. That file is this source's, confirmed by the same guard that refuses everyone else's, and rewriting it is invariant 7's plain sentence: derivative files Luka wrote are Luka's to rewrite. Nothing is widened — the only address ever reached this way is one the manifest already recorded for this very source, and an *empty* non-canonical path is never taken.
+
+### What changed
+
+- **The carry floats instead of falling back.** When the entry's file is intact and ours but the destination is occupied, the file is repointed where it lies and recorded there. The occupant is not read, not judged and not touched — there is no second candidate, because the entry already named the first. Cost: nothing. A swap now converges in one compile at zero model calls with both repairs intact.
+- **Normalization prefers the canonical path and falls back to the recorded one.** `chooseTarget` claims `<stem>.md` first, always, so floats *decay*: a floated source lands home the moment the obstruction clears. Only when canonical is refused does it continue the file its entry records.
+- **A returning float's vacated file is swept at the commit point**, behind the same guard as every other removal — forward completion of a re-extraction that succeeded (III), and a structural no-op for every source that wrote where its entry already pointed.
+- **Invariant VII added**: the pointer is the address; `<stem>.md` is a preference. IV notes that a float never opens the move window (repoint-in-place is the whole operation). V notes that the ordering pass now buys tidiness rather than correctness — a mis-ordered dependant floats rather than re-extracting. II is unchanged: its carve-out fires only when the entry's file is *gone*, and a float exists only while it is intact.
+- **Policy B**: a float is a happy path, not a complication, so it reports nothing. What still falls back is a carry that cannot *write* — no pointer to follow, or a repoint that fails.
+
+### Behaviour that changed, with its new expectation
+
+Five existing tests pinned the old outcome and were rewritten: the swap now converges; a destination held by a user's note floats rather than failing; two renames competing for one stem both carry (one lands, one floats); a stale copy at the destination is left byte-identical and never consulted; and a copy the user made in the new folder no longer triggers a re-extraction. In every case the new outcome costs less and destroys less than the old one.
+
+### Known limitations, accepted (M2f)
+
+- **A stem held by a live float is contention, reported.** After a float, `raw/a.md` may belong to a source named `b.html`; a later `a.csv` wanting that stem is refused, exactly as for a genuine §6.1 collision. It decays on the float owner's next modification or rename, both of which prefer canonical. There is deliberately no standing re-homer: it would have to write on an unchanged vault, which §6.2 forbids, and it is precisely the extra machinery that turned M2d into five rounds.
+- **A float can leave a stale copy in place.** The occupant of a contested canonical path is never read and never rewritten, so a copy the user left there stays. It is litter, not damage — the pointer outranks it permanently — and it is overwritten the next time that source re-extracts canonically.
+- **A float is silent.** Nothing is `reported`: the carry succeeded, nothing was lost, and the manifest records where the file is. Same rule as invariant II's carve-out.
+- **§7.1 cosmetic**: a float node's basename will not match its source's stem in the graph. Noted for M3.
+
+### The sweep's deadlock classifier
+
+`tests/churn.test.ts` gained a check for the property this milestone establishes: nothing may settle into permanent failure while holding intact markdown of its own — directly, or under the vanished path it pairs with as a rename. A genuine §6.1 collision loser has no such file, which is exactly why it is trying to write one, so the check separates deadlock from collision without hard-coding either.
+
+Getting it honest took three corrections, each a flaw in the *check* rather than the code: it first paired on any entry sharing a hash (the generator makes byte-identical sources on purpose), then on entries whose file is still in the vault (a live source, never a rename partner), and it resolves ambiguity by requiring *every* candidate to have intact markdown rather than guessing which one `bestPairing` chose. A fourth correction went the other way — the "every entry names existing markdown" check had to learn that an entry whose *source* is gone is a departure awaiting its cascade or an unsettled rename, both deliberately kept so the work re-presents.
+
+Stated rather than papered over: with the float removed, the sweep does **not** catch the swap, because the generator almost never produces one — it needs two sources whose extensions differ and whose swapped paths are both free. A stem-swap operation was added and the shape is still rare. The swap is pinned by tests written directly against it, mutation-verified: removing the float branch, the recorded-path fallback, or the commit-point sweep each fails tests. The classifier guards the general property; the unit tests guard this instance.

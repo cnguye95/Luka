@@ -29,6 +29,8 @@
 //        BUILD-NOTES, and it can only ever adopt a file naming the source's own
 //        old path. It is not *reported* at runtime: the carry succeeded and
 //        nothing was lost, so there is nothing to tell the user.
+//        VII neither widens nor narrows this: the carve-out fires only when the
+//        entry's file is *gone*, and a float exists only while it is intact.
 //
 //  (III) NO DESTRUCTIVE OPERATION IS EVER A FAILURE-RECOVERY STEP. Deletes and
 //        overwrites happen only to complete an outcome that succeeded, always
@@ -56,6 +58,9 @@
 //        may withhold a carried rename's entry — an earlier fix did exactly
 //        that for a blocked page and turned this window into a routine
 //        outcome. Whatever the carry completed, the commit records.
+//        A float never opens that window at all: repointing in place is the
+//        whole operation, so a floated carry re-runs to an identical no-op.
+//        The window belongs to the move path alone.
 //
 //  (V)   CLASSIFICATION HAPPENS ONCE. The four rules and rename identity are
 //        decided at discovery, against the vault as this run found it. Carry
@@ -63,6 +68,23 @@
 //        extraction begins — dependency first, so a rename vacating a location
 //        is decided before the one that wants it, with the new path's order as
 //        the tiebreak. Each rename is decided exactly once either way.
+//        Since VII, mis-ordering costs a float rather than a re-extraction, so
+//        the pass buys tidiness rather than correctness: a resolvable chain
+//        lands at `<stem>.md`, and only a true cycle floats.
+//
+//  (VII) THE POINTER IS THE ADDRESS; `<stem>.md` IS A PREFERENCE. §6.1 names
+//        where a normalization *writes* — `<original-stem>.md` beside the
+//        original — not where a derivative must forever live afterwards (user
+//        decision, BUILD-NOTES "M2f"). A carry whose destination is occupied
+//        leaves the file where the entry already says it is, repoints it there
+//        and records that location: a float. No reader may treat `<stem>.md` as
+//        where a derivative *is*.
+//        Floats decay rather than accumulating machinery. Normalization still
+//        prefers the canonical path, so a floated source lands back home the
+//        next time it is extracted with the stem free, and a carry moves it
+//        home the next time it is renamed with the stem free. Nothing hunts for
+//        floats to re-home on an unchanged vault — that would write where §6.2
+//        requires zero writes.
 //
 //  (VI)  READABLE MARKDOWN IS LOOKED UP, NEVER RECONSTRUCTED. A source's body
 //        comes from this run's outcomes, or else from the file its entry names.
@@ -81,6 +103,11 @@
 // derivative at zero model calls, and ANY complication falls back to plain
 // re-extraction and says so. There are no retry state machines and no attempts
 // to preserve a repair through a failure — those are what bred M2d's defects.
+//
+// A float is not a complication. An occupied destination used to be one, and
+// cost a model call and often a repair; under VII it costs nothing at all, so
+// it is a happy path and reports nothing. What still falls back is a carry that
+// cannot write: no pointer to follow, or a repoint that fails.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { derivativeOrigin, derivativePathFor } from "../normalize/index";
@@ -132,10 +159,12 @@ export async function carryRenames(
   const ordered = [...renames].sort((a, b) => comparePaths(a.source.path, b.source.path));
 
   // Which rename's markdown currently sits at each location. A rename that is
-  // *vacating* the place another one wants has to go first: until it moves, the
-  // other sees the destination occupied and falls back — spending a model call
-  // and losing a repair on an ordering that has nothing to do with either of
-  // them (V: one pass, and its outcome must not depend on unrelated names).
+  // *vacating* the place another one wants goes first: until it moves, the
+  // other sees the destination occupied and floats instead of landing at
+  // `<stem>.md`. Floating is correct and costs nothing, but a derivative that
+  // sits where its source's name says it should is easier for a user to find,
+  // so a resolvable chain is resolved rather than left to drift (V: one pass,
+  // and its outcome must not depend on unrelated names).
   const occupies = new Map<string, Rename>();
   for (const rename of ordered) {
     const recorded = manifest[rename.from]?.derivative;
@@ -154,17 +183,11 @@ export async function carryRenames(
     if (target !== null) {
       // Free the destination first. Two renames each wanting the other's
       // location leave `pending` set, so the recursion stops and both are
-      // decided against the vault as it stands.
-      //
-      // For a straight swap that means both fall back — and then neither can
-      // re-extract, because each one's destination holds the *other* one's
-      // markdown, which the invariant-7 guard rightly refuses. Both sources
-      // stay un-ingested, reported every compile, until a user removes one of
-      // the two files. A swap needs somewhere to put a file while the other
-      // moves, and there is no such place that is not new machinery; recording
-      // the pointer wherever the file already lies would be the way out, but
-      // §6.1 names derivatives after their original, so that is a spec question
-      // and not this pass's to answer. Logged as a known limitation.
+      // decided against the vault as it stands — which for a straight swap
+      // means both float: each keeps the markdown it already has, repointed at
+      // its new source. Zero model calls, nothing moved, nothing lost. A swap
+      // has nowhere to park a file mid-move, and with VII it does not need
+      // one.
       const blocker = occupies.get(target);
       if (blocker !== undefined && blocker.source.path !== to) await carry(blocker, pending);
     }
@@ -224,8 +247,14 @@ async function carryOne(
           await fs.move(recorded, target);
           return { outcome: { rename, kind: "carried", derivative: target }, wrote: true };
         }
-        // The destination holds something the entry does not name. Between two
-        // candidate files there is nothing to choose on, so nothing is chosen.
+        // The destination holds something the entry does not name — so the
+        // markdown stays exactly where it is and the entry keeps saying so.
+        // A float (VII): `<stem>.md` is where a normalization *writes*, not
+        // where a derivative has to live, and the pointer is the address. The
+        // occupant is not read, not judged and not touched; there is no
+        // second candidate here, because the entry already named the first.
+        if (await repointDerivative(fs, recorded, to)) wrote = true;
+        return { outcome: { rename, kind: "carried", derivative: recorded }, wrote };
       } else if (
         !(await fs.exists(recorded)) &&
         (await isOurs(fs, target, rename, recorded))
@@ -266,9 +295,10 @@ async function carryOne(
 /**
  * Whether the file at `path` is this rename's derivative to act on.
  *
- * At the location the entry records, either end of the rename counts: `from` is
- * the untouched case, and `to` is a previous run that repointed and could not
- * finish, which must re-run to the same state (IV).
+ * At the location the entry records — wherever that is, which since VII need
+ * not be `<stem>.md`, and nothing here cares — either end of the rename counts:
+ * `from` is the untouched case, and `to` is a previous run that repointed and
+ * could not finish, which must re-run to the same state (IV).
  *
  * Anywhere else, only `from` counts. A file already naming `to` at a path the
  * entry does not record was written for an earlier occupant — the source

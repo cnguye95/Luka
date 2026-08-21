@@ -300,6 +300,18 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const acceptOrigins = new Map<string, readonly string[]>(
     fallbacks.map((outcome) => [outcome.rename.source.path, [outcome.rename.from]]),
   );
+  // Where each source's markdown already is, so a re-extraction can continue a
+  // float rather than fail against a stem somebody else holds (VII). A fallback
+  // rename's pointer is filed under the path it came from.
+  const recordedDerivatives = new Map<string, string>();
+  for (const source of [...discovery.added, ...discovery.modified]) {
+    const recorded = manifest[source.path]?.derivative;
+    if (recorded !== undefined) recordedDerivatives.set(source.path, recorded);
+  }
+  for (const outcome of fallbacks) {
+    const recorded = manifest[outcome.rename.from]?.derivative;
+    if (recorded !== undefined) recordedDerivatives.set(outcome.rename.source.path, recorded);
+  }
   const work = [
     ...discovery.added,
     ...discovery.modified,
@@ -316,6 +328,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         source.kind,
         normalizeDeps,
         acceptOrigins.get(source.path) ?? [],
+        recordedDerivatives.get(source.path),
       );
       normalized.push({
         source,
@@ -773,11 +786,30 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
   for (const entry of ready) {
     const blocked = blockedBy.get(entry.source.path);
-    if (blocked === undefined) {
-      next[entry.source.path] = entryFor(entry.hash, entry.derivativePath ?? undefined);
-    } else {
+    if (blocked !== undefined) {
       failed.push({ path: entry.source.path, reason: blocked.join("; ") });
+      continue;
     }
+    next[entry.source.path] = entryFor(entry.hash, entry.derivativePath ?? undefined);
+
+    // A float that came home leaves the file it vacated behind. Forward
+    // completion of a re-extraction that succeeded, behind the same guard as
+    // every other removal (III) — and a no-op for every source that wrote where
+    // its entry already pointed, which is all of them but a returning float.
+    const previous = manifest[entry.source.path]?.derivative;
+    if (previous === undefined) continue;
+    const vacated = await removeSupersededDerivative(
+      deps.fs,
+      { from: entry.source.path, source: entry.source },
+      previous,
+      entry.derivativePath ?? undefined,
+      claimedDerivatives,
+    );
+    if (vacated.deleted) {
+      derivativesDeleted += 1;
+      wrote = true;
+    }
+    if (vacated.report !== null) reported.push(vacated.report);
   }
 
   // The hash is `CASCADE_PENDING`, never the old one, so the entry cannot pair

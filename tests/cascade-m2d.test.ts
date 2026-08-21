@@ -512,29 +512,32 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     expect(manifestOf(fs)).toEqual({});
   });
 
-  it("re-extracts rather than guessing between two candidate files", async () => {
+  it("keeps the file the entry names when a copy sits at the destination", async () => {
     // The user copied the derivative into the new folder and left the original
-    // where it was, so two files now name this source. The entry names one of
-    // them; the copy is at the location the new path expects. Nothing can
-    // establish which is current, so nothing is adopted — the source re-extracts
-    // and says so, and the file the entry named is cleaned up behind it.
+    // where it was, so two files now name this source. Nothing can establish
+    // which is current — so nothing has to. The entry already named one of
+    // them, and that one stays exactly where it is, repointed at the new path.
+    // The copy is never read, never adopted and never rewritten.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
+    const copy = fs.text("raw/a.md");
 
     await fs.move("raw/a.html", "raw/sub/a.html");
-    await fs.write("raw/sub/a.md", fs.text("raw/a.md"));
+    await fs.write("raw/sub/a.md", copy);
 
-    const guarded = refusingToDelete(fs, "raw/a.md");
-    const second = await core(guarded, new StubProvider(replyFor)).compile();
+    const second = await core(fs, new StubProvider(replyFor)).compile();
 
-    expect(second).toMatchObject({ renamed: 1, modified: 0, failed: [] });
-    // Two notices, two facts: what it had to redo, and what it could not tidy.
-    const reasons = second.reported.map((entry) => entry.reason).join(" | ");
-    expect(second.reported.every((entry) => entry.path === "raw/sub/a.html")).toBe(true);
-    expect(reasons).toContain("re-extracted");
-    expect(reasons).toContain("raw/a.md");
-    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
-    expect(Object.keys(manifestOf(fs))).toEqual(["raw/sub/a.html"]);
+    expect(second).toMatchObject({
+      renamed: 1,
+      modified: 0,
+      modelCalls: 0,
+      failed: [],
+      reported: [],
+    });
+    expect(fs.text("raw/a.md")).toContain("derived-from: raw/sub/a.html");
+    expect(manifestOf(fs)["raw/sub/a.html"]?.derivative).toBe("raw/a.md");
+    // Untouched, down to the byte: it still names the path it was copied from.
+    expect(fs.text("raw/sub/a.md")).toBe(copy);
 
     // And the vault settles rather than re-reporting every compile.
     const third = await core(fs, new StubProvider(replyFor)).compile();

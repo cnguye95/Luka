@@ -212,6 +212,71 @@ function repairsStolen(
   return stolen;
 }
 
+/**
+ * Sources that have settled into permanent failure while their own markdown
+ * stands intact — a deadlock rather than a collision.
+ *
+ * §6.1 names derivatives after their original, so two live sources on one stem
+ * genuinely contend and one of them must lose; that is by design and permanent
+ * by design. What is not by design is a source barred from ingesting when
+ * nothing is actually competing for anything it needs — which is what happened
+ * before derivatives were allowed to float: a rename whose destination held
+ * another rename's markdown could neither carry nor re-extract, and a name swap
+ * locked both sources out for good.
+ *
+ * The tell is that the blocked source has intact markdown of its own, recorded
+ * and guard-confirmed: either directly, or under the old path it is pairing
+ * from as a rename. A genuine collision loser has no such file — that is
+ * exactly why it is trying to write one.
+ */
+async function deadlocked(fs: MemFs, result: CompileResult): Promise<string[]> {
+  const manifest = manifestOf(fs);
+  const found: string[] = [];
+
+  const intact = async (owner: string, entry: ManifestEntry | undefined): Promise<boolean> => {
+    const derivative = entry?.derivative;
+    if (derivative === undefined || !fs.files.has(derivative)) return false;
+    const origin = /^derived-from: (.*)$/m.exec(fs.text(derivative))?.[1]?.trim();
+    return origin === owner;
+  };
+
+  for (const failure of result.failed) {
+    if (!failure.path.startsWith("raw/")) continue;
+    // Its own entry names markdown that is still its own.
+    if (await intact(failure.path, manifest[failure.path])) {
+      found.push(`${failure.path} (own markdown intact)`);
+      continue;
+    }
+    // Or it is the new side of a rename, and the old side's markdown is intact.
+    const bytes = fs.files.get(failure.path);
+    if (bytes === undefined) continue;
+    const hash = await sha256Hex(bytes);
+    // Which vanished entry this source paired with is `bestPairing`'s judgement,
+    // made with signals this check cannot see — and the generator produces
+    // byte-identical sources on purpose, so the choice is often ambiguous.
+    // Rather than guess it, require *every* candidate to have intact markdown:
+    // then whichever one the run picked, this source had markdown to float and
+    // should not have been left failing.
+    const candidates = Object.entries(manifest).filter(
+      ([old, entry]) =>
+        old !== failure.path &&
+        entry.hash === hash &&
+        // A rename pairs from a path that has *gone*. An entry whose file is
+        // still in the vault is a live source that merely shares these bytes.
+        !fs.files.has(old),
+    );
+    if (candidates.length === 0) continue;
+    let every = true;
+    for (const [old, entry] of candidates) {
+      if (!(await intact(old, entry)) && !(await intact(failure.path, entry))) every = false;
+    }
+    if (every) {
+      found.push(`${failure.path} (markdown intact under ${candidates.map((c) => c[0]).join(", ")})`);
+    }
+  }
+  return found;
+}
+
 /** Which pinned repairs this compile destroyed without saying anything. */
 function repairsLost(
   fs: MemFs,
@@ -267,7 +332,30 @@ async function churn(fs: MemFs, pick: () => number, round: number): Promise<void
 
     const victim = sources[Math.floor(pick() * sources.length)] as string;
 
-    if (roll < 0.40) {
+    if (roll < 0.34 && sources.length > 1) {
+      // Two sources exchange names, each keeping its own extension: both old
+      // paths vanish and both new ones appear, so this is two renames rather
+      // than two edits. It is the one shape where each rename's destination
+      // holds the other's markdown — the shape that used to lock both sources
+      // out for good.
+      const other = sources[Math.floor(pick() * sources.length)] as string;
+      const cut = (path: string): [string, string] => {
+        const dot = path.lastIndexOf(".");
+        return dot > path.lastIndexOf("/") ? [path.slice(0, dot), path.slice(dot)] : [path, ""];
+      };
+      const [stemA, extA] = cut(victim);
+      const [stemB, extB] = cut(other);
+      const toA = `${stemB}${extA}`;
+      const toB = `${stemA}${extB}`;
+      if (other !== victim && extA !== extB && !fs.files.has(toA) && !fs.files.has(toB)) {
+        const a = fs.files.get(victim) as Uint8Array;
+        const b = fs.files.get(other) as Uint8Array;
+        fs.files.delete(victim);
+        fs.files.delete(other);
+        fs.files.set(toA, a);
+        fs.files.set(toB, b);
+      }
+    } else if (roll < 0.40) {
       await fs.delete(victim);
     } else if (roll < 0.66) {
       // Rename: same bytes, new path. Sometimes changing the extension too.
@@ -414,9 +502,21 @@ async function sweep(everywhere: boolean): Promise<string[]> {
           failures.push(`seed ${seed}: model calls on a settled vault`);
           continue;
         }
-        // Every manifest entry must name markdown that is actually there.
+        // Nothing may settle into permanent failure while holding intact
+        // markdown of its own: that is a deadlock, not a §6.1 collision.
+        const stuck = await deadlocked(fs, results[2] as CompileResult);
+        if (stuck.length > 0) {
+          failures.push(`seed ${seed}: deadlocked ${JSON.stringify(stuck)}`);
+          continue;
+        }
+        // Every manifest entry for a source that is still in the vault must name
+        // markdown that is actually there. An entry whose *source* has gone is
+        // a departure awaiting its cascade, or the old side of a rename whose
+        // re-extraction has not settled — both are deliberately kept so the
+        // work re-presents, and neither promises a file.
         for (const [path, entry] of Object.entries(manifestOf(fs))) {
           if (entry.hash === "cascade-pending") continue;
+          if (!fs.files.has(path)) continue;
           const readable = entry.derivative ?? path;
           if (!(await fs.exists(readable))) {
             failures.push(`seed ${seed}: ${path} names missing markdown ${readable}`);
