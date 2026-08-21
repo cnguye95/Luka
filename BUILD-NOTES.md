@@ -1143,3 +1143,31 @@ Nothing failed: the build succeeded, the eval ran, and two queries simply scored
 zero — which a floor set from that run would have enshrined as normal. The
 builder now fails loudly when any source matches no phrase, and the corrected
 fixture has 47 pages rather than 44.
+
+### §15's M3 acceptance, end to end
+
+`tests/demo-ask.test.ts`, over the corpus §15 names, on a real filesystem with
+real pdf.js: compile → ask → the answer's links all validate → file it → the
+next compile ingests it and its source page exists → the sources block it kept
+is now graph material.
+
+**It found a defect no unit test could have.** An **alias** of a retrieved page
+was being unlinked as though it named something outside the retrieved set.
+`AssembledNode` carries a title and a path and nothing else, so
+`validateAnswerLinks` had no way to know that `[[PPR]]` and
+"Personalized PageRank" are one page — and §8.3's rule is that a link *outside
+the retrieved set* is unlinked, which an alias of a retrieved page plainly is
+not. Resolution now goes through `buildTitleIndex`, the same title table §4
+resolves every other link with, so there is one rule for what a handle names
+rather than two.
+
+The unit tests could not have caught it: they construct `AssembledNode`s
+directly, so the aliases were never in play. It took a real vault, where the
+pages have aliases because inventory gave them some.
+
+**One assertion of mine was stricter than the criterion.** The first version
+required every link in the prose to appear verbatim in `## Sources consulted`,
+which lists pages by title — so a correct alias link failed it. "Inline links
+all validate" means each resolves to a page that was retrieved, not that it
+spells that page's title; the test resolves through the vault's own title table
+now.

@@ -11,11 +11,12 @@
 // The model writes prose only." Everything below the answer text — the
 // frontmatter, the callout, the sources block, the trace — is code's.
 import { handleOf } from "../compile/pagetable";
+import { buildTitleIndex } from "../compile/links";
 import { linkOutsideRetrievedSet } from "../markers";
 import { comparePaths } from "../paths";
 import { serializeFrontmatter } from "../yaml";
 import type { LLMProvider } from "../provider/types";
-import type { RetrievalMode } from "../types";
+import type { PageMeta, RetrievalMode } from "../types";
 import type { AssembledNode } from "../retrieve/assemble";
 import { writeTrace, type Trace } from "./trace";
 
@@ -118,18 +119,37 @@ export function stripMissingBlock(reply: string): SynthesisReply {
  * The link becomes the text it displayed, so the sentence still reads, and the
  * marker names what was dropped. A page that was retrieved keeps its link.
  */
-export function validateAnswerLinks(body: string, retrieved: readonly AssembledNode[]): string {
+export function validateAnswerLinks(
+  body: string,
+  retrieved: readonly AssembledNode[],
+  pages: readonly PageMeta[] = [],
+): string {
+  const retrievedPaths = new Set(retrieved.map((node) => node.path));
   const known = new Set<string>();
   for (const node of retrieved) {
     known.add(handleOf(node.title));
     known.add(handleOf(node.path));
   }
 
+  // An alias of a retrieved page is not a link outside the retrieved set. §4
+  // gives titles and aliases one namespace and resolves a handle through the
+  // title table, so resolution here goes through that same table rather than
+  // matching titles alone — otherwise a model that writes `[[PPR]]` for a page
+  // retrieved as "Personalized PageRank" has its link stripped for naming the
+  // right page by its other name.
+  const index = buildTitleIndex(pages);
+  const pathByTitle = new Map(pages.map((page) => [handleOf(page.title), page.path]));
+
   return body.replace(/\[\[([^\]\n]+)\]\]/g, (full, inner: string) => {
     const pipe = inner.indexOf("|");
     const target = (pipe === -1 ? inner : inner.slice(0, pipe)).trim();
     const display = pipe === -1 ? target : inner.slice(pipe + 1).trim();
     if (target === "" || known.has(handleOf(target))) return full;
+
+    const canonical = index.get(handleOf(target));
+    const resolved = canonical === undefined ? undefined : pathByTitle.get(handleOf(canonical));
+    if (resolved !== undefined && retrievedPaths.has(resolved)) return full;
+
     return `${display} ${linkOutsideRetrievedSet(target)}`;
   });
 }
@@ -143,6 +163,8 @@ export interface AnswerNote {
   /** The model's prose, already stripped of its JSON block. */
   body: string;
   consulted: readonly AssembledNode[];
+  /** The page table, so an alias of a retrieved page still resolves (§4). */
+  pages?: readonly PageMeta[];
   trace: Trace;
 }
 
@@ -163,7 +185,7 @@ export function renderAnswerNote(note: AnswerNote): string {
   const parts: string[] = [];
   // §8.3 puts the callout first, before the answer.
   if (!note.grounded) parts.push(UNGROUNDED_CALLOUT, "");
-  parts.push(validateAnswerLinks(note.body, note.consulted).trim(), "");
+  parts.push(validateAnswerLinks(note.body, note.consulted, note.pages ?? []).trim(), "");
   parts.push(renderSourcesBlock(note.consulted), "");
   parts.push(writeTrace(note.trace));
 

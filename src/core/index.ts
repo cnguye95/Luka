@@ -388,6 +388,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     grounded,
     body: reply.body,
     consulted: assembly.nodes,
+    pages,
     trace: {
       mode,
       seeds: seedPaths,
