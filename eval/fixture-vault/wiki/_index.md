@@ -2,12 +2,12 @@
 ## Sources
 - [[bletchley-park]] — Where Enigma and Lorenz were broken.
 - [[church-turing-thesis]] — The equivalence of two models of computation.
-- [[cobol]] — The verbose language still running payrolls.
-- [[colossus]] — The first programmable electronic digital computer.
+- [[cobol-committee]] — The verbose language still running payrolls.
+- [[colossus-at-bletchley]] — The first programmable electronic digital computer.
 - [[compiler]] — An unremarkable source.
 - [[early-machines]] — A table of early machines.
 - [[edvac-report]] — The 1945 draft that named an architecture.
-- [[eniac]] — The 1945 valve machine and the women who programmed it.
+- [[eniac-programmers]] — The 1945 valve machine and the women who programmed it.
 - [[garbage-collection]] — An unremarkable source.
 - [[hopper-biography]] — A biography of Grace Hopper.
 - [[lambda-calculus]] — Church's formalism and its descendants.
@@ -22,11 +22,11 @@
 - [[Alan Turing]] — Mathematician; defined computability.
 - [[Alonzo Church]] — Logician; devised the lambda calculus.
 - [[Bletchley Park]] — British codebreaking establishment.
-- [[COBOL-2]] — Deliberately readable business language. (aliases: Common Business-Oriented Language)
-- [[Colossus-2]] — Programmable electronic codebreaking machine.
+- [[COBOL]] — Deliberately readable business language. (aliases: Common Business-Oriented Language)
+- [[Colossus]] — Programmable electronic codebreaking machine.
 - [[EDSAC]] — Cambridge stored-program machine, 1949.
 - [[EDVAC]] — The machine the 1945 report described.
-- [[ENIAC-2]] — Decimal valve machine programmed by rewiring. (aliases: Electronic Numerical Integrator and Computer)
+- [[ENIAC]] — Decimal valve machine programmed by rewiring. (aliases: Electronic Numerical Integrator and Computer)
 - [[Grace Hopper]] — Wrote the first compiler and shaped COBOL. (aliases: Hopper, Rear Admiral Hopper)
 - [[Jean Bartik]] — One of ENIAC's first programmers.
 - [[John von Neumann]] — Wrote the EDVAC report.

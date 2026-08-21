@@ -1,6 +1,6 @@
 ---
 kind: source
-source: '[[raw/colossus.md]]'
+source: '[[raw/colossus-at-bletchley.md]]'
 aliases: []
 summary: The first programmable electronic digital computer.
 updated: '2026-03-01'
@@ -9,5 +9,5 @@ The first programmable electronic digital computer.
 
 <!-- citations:start -->
 ## Sources
-- [[raw/colossus.md]]
+- [[raw/colossus-at-bletchley.md]]
 <!-- citations:end -->

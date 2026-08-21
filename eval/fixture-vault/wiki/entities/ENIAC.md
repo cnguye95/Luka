@@ -5,10 +5,10 @@ aliases:
 summary: Decimal valve machine programmed by rewiring.
 updated: '2026-03-01'
 ---
-ENIAC-2 is one of the threads this vault follows. It stands on its own here.
+ENIAC is one of the threads this vault follows. It connects to [[Jean Bartik]], [[Vacuum tube]], [[Stored-program computer]].
 
 <!-- citations:start -->
 ## Sources
 - [[raw/early-machines.csv]]
-- [[raw/eniac.md]]
+- [[raw/eniac-programmers.md]]
 <!-- citations:end -->

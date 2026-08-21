@@ -87,6 +87,17 @@ describe("the fixture reaches Mode B, with margin (§7.3)", () => {
     expect(Math.min(...degrees)).toBeLessThanOrEqual(2);
   });
 
+  it("keeps one title collision, so the suffix path is exercised", async () => {
+    // `raw/compiler.md` is a source, so its source page holds the title
+    // "compiler" and §4's uniqueness rule gives the *concept* "Compiler-2".
+    // That is real behaviour a real vault produces, and a fixture with no
+    // instance of it would leave the suffixed-page lookup unmeasured.
+    const titles = (await loadPageTable(fs())).map((page) => page.title);
+
+    expect(titles).toContain("Compiler-2");
+    expect(titles).toContain("compiler");
+  });
+
   it("contains the near-miss title pair a ranker has to tell apart", async () => {
     const titles = (await loadPageTable(fs())).map((page) => page.title);
 

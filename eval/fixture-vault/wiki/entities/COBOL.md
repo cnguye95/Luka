@@ -5,10 +5,10 @@ aliases:
 summary: Deliberately readable business language.
 updated: '2026-03-01'
 ---
-COBOL-2 is one of the threads this vault follows. It stands on its own here.
+COBOL is one of the threads this vault follows. It connects to [[Grace Hopper]], [[compiler|Compiler]].
 
 <!-- citations:start -->
 ## Sources
-- [[raw/cobol.md]]
+- [[raw/cobol-committee.md]]
 - [[raw/hopper-biography.html]]
 <!-- citations:end -->
