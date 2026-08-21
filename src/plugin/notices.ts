@@ -39,6 +39,14 @@ export function reportCompile(result: CompileResult): void {
   for (const failure of result.failed) {
     notify(`skipped ${failure.path} — ${failure.reason}`, NOTICE_MS);
   }
+
+  // Not skipped — done, differently. A rename that had to re-extract got its
+  // markdown at the cost of a model call, and a file Luka declined to remove is
+  // still sitting in `raw/`. Neither retries, so neither would ever be
+  // mentioned again if it were not mentioned now.
+  for (const entry of result.reported) {
+    notify(`${entry.path} — ${entry.reason}`, NOTICE_MS);
+  }
 }
 
 function completionMessage(result: CompileResult): string {

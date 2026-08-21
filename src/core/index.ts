@@ -4,13 +4,7 @@
 // folded through it, plus the scope preview §5 names.
 import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
-import {
-  cascadeScope,
-  orphanedDerivatives,
-  ownedBy,
-  type RenameDerivativeAction,
-  type ScopePreview,
-} from "./compile/cascade";
+import { cascadeScope, type ScopePreview } from "./compile/cascade";
 import { parseCitationBlock, withCitationBlock } from "./compile/citations";
 import {
   discover,
@@ -27,6 +21,13 @@ import {
   type PageToWrite,
 } from "./compile/generate";
 import { bodyOf, takeInventory, type SourceInventory } from "./compile/inventory";
+import {
+  carryRenames,
+  removeSupersededDerivative,
+  sweepDeparted,
+  type CarryOutcome,
+  type Report,
+} from "./compile/renames";
 import { buildTitleIndex } from "./compile/links";
 import { mergeInventories, type SourceInventoryEntry } from "./compile/dedup";
 import { INDEX_PATH, renderIndex } from "./compile/indexdoc";
@@ -46,7 +47,12 @@ import {
   loadManifest,
   saveManifest,
 } from "./manifest";
-import { formatForPath, isPassthrough, normalizeSource } from "./normalize/index";
+import {
+  derivativeOrigin,
+  formatForPath,
+  isPassthrough,
+  normalizeSource,
+} from "./normalize/index";
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
@@ -57,7 +63,7 @@ import type {
   OperationName,
   PageMeta,
 } from "./types";
-import { parseFrontmatter, replaceFrontmatterValue, serializeFrontmatter } from "./yaml";
+import { parseFrontmatter, serializeFrontmatter } from "./yaml";
 
 export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
@@ -105,6 +111,14 @@ export interface CompileResult {
   renamed: number;
   skipped: SkippedSource[];
   failed: CompileFailure[];
+  /**
+   * Work this compile completed differently than intended, and files it chose
+   * not to touch. Distinct from `failed`: nothing here is retried, because
+   * there is nothing left owed — a rename that fell back to re-extraction got
+   * its markdown, it just cost a model call, and a file left alone was never
+   * Luka's to remove. Reported so neither passes silently.
+   */
+  reported: CompileFailure[];
   /** Wiki pages written this run. */
   pagesWritten: number;
   /** Wiki pages the §6.6 cascade deleted — their last citer is gone. */
@@ -224,16 +238,6 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     if (!(await options.confirm(preview))) return cancelled(discovery);
   }
 
-  const next: IngestManifest = { ...manifest };
-  for (const rename of discovery.renamed) {
-    // The hash is `rename.hash` by definition — that is how the rename was
-    // detected — and the pointer is wherever this run's carry leaves the file,
-    // which discovery's classification already decided.
-    delete next[rename.from];
-    next[rename.to] = entryFor(rename.hash, carriedDerivative(rename.derivative));
-  }
-  for (const path of discovery.deleted) delete next[path];
-
   const today = (deps.now?.() ?? new Date()).toISOString().slice(0, 10);
   const normalizeDeps = {
     fs: deps.fs,
@@ -243,132 +247,76 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     provider,
   };
 
-  const work = [...discovery.added, ...discovery.modified];
   const failed: CompileFailure[] = [];
+  const reported: Report[] = [];
   let wrote = false;
 
   // Departed sources whose cascade could not be completed, and why. Their
-  // manifest entry is put back at the end, so §6.2's rules see the path leave
+  // manifest entry is kept at the end, so §6.2's rules see the path leave
   // again next compile and the cascade retries — the same shape invariant 3
   // gives a failed ingest.
   const blockedDeleted = new Map<string, string[]>();
 
-  // ── Orphaned derivatives ───────────────────────────────────────────────
-  // A source that left its path takes its derivative with it: `wiki/` is
-  // machine-owned and so is anything Luka wrote into `raw/` (invariant 7).
-  // This runs before normalization so a new source with the same stem can
-  // claim the freed derivative path in this very run.
+  // ── Sweep (§6.6) ───────────────────────────────────────────────────────
+  // The markdown of sources that left the vault. Before the carry and before
+  // normalization, so a derivative location a departed source was holding is
+  // free for whoever wants it in this very run.
+  //
+  // Only outright deletions. A renamed source has not left the vault — its old
+  // path is where its markdown currently sits, which the carry below is about
+  // to use.
+  const swept = await sweepDeparted(deps.fs, manifest, discovery.deleted);
+  let derivativesDeleted = swept.deleted;
+  if (swept.deleted > 0) wrote = true;
+  for (const entry of swept.blocked) block(blockedDeleted, entry.path, entry.reason);
+  reported.push(...swept.reported);
+
+  // ── Carry (§6.2) ───────────────────────────────────────────────────────
   // A renamed source keeps its derivative rather than rebuilding it: §6.2 says
   // a derivative persists until its original changes, and a rename does not
   // change the original — identical bytes are how it was detected. Carrying it
-  // over costs no model call and preserves a hand-repaired extraction, which
-  // §6.2 calls the sanctioned repair path. Discovery used this same decision
-  // to conclude the source needs no reprocessing, so the two cannot disagree.
+  // costs no model call and preserves a hand-repaired extraction, which §6.2
+  // calls the sanctioned repair path.
   //
-  // Before normalization, so a source that does have to re-extract finds its
-  // derivative path settled.
-  // Old paths whose derivative must survive this pass: either a carry-over
-  // failed and the retry still needs it, or the source is re-extracting and
-  // the replacement does not exist yet.
-  const deferSweep = new Set<string>();
-  for (const rename of discovery.renamed) {
-    const action = rename.derivative;
-    // A re-extracting rename keeps its old derivative until the replacement is
-    // actually written. Sweeping first destroys a hand repair on behalf of an
-    // extraction that may be refused outright — a stem collision at the
-    // destination is exactly why this rename fell back to re-extracting.
-    if (action.kind === "reprocess") deferSweep.add(rename.from);
-    if (action.kind === "none" || action.kind === "reprocess") continue;
-    const at = action.kind === "move" ? action.to : action.at;
-    const cameFrom = action.kind === "move" ? action.from : null;
-    let moved = false;
-    try {
-      if (cameFrom !== null) {
-        await deps.fs.move(cameFrom, at);
-        moved = true;
-      }
-      await repointDerivative(deps.fs, at, rename.to);
-      wrote = true;
-    } catch (error) {
-      // Roll the move back, so a failure leaves the vault exactly as it found
-      // it. A file that moved but was not repointed is unreachable: the sweep
-      // looks for it at the *old* location, and the retry only re-presents the
-      // rename while the source's bytes are unchanged — so an ordinary edit in
-      // between would strand it, blocking that derivative path for good.
-      if (moved && cameFrom !== null) {
-        try {
-          await deps.fs.move(at, cameFrom);
-          moved = false;
-        } catch {
-          // Rolling back failed too. Removing the stranded file costs the
-          // repair but keeps the source ingestable, which is the better of two
-          // bad outcomes; if that fails as well, the failure below is reported
-          // on every run rather than passing silently.
-          try {
-            await deps.fs.delete(at);
-          } catch {
-            // Reported below.
-          }
-        }
-      }
-      failed.push({
-        path: rename.to,
-        reason: `could not carry over ${at} — ${describe(error)}`,
-      });
-      // Rolled back, the derivative is where it started and still names the old
-      // path — which is what lets the next compile recognise the same rename
-      // and finish the job. Deleting it as a "recovery" would destroy the
-      // repair the retry exists to preserve; a rename is retryable in a way a
-      // re-extraction is not.
-      //
-      // Withdrawing the new path's manifest entry and restoring the old one is
-      // what re-presents the rename: without it the file reads as a plain
-      // addition next run and gets re-extracted over.
-      delete next[rename.to];
-      next[rename.from] = manifest[rename.from] ?? { hash: rename.hash };
-      // Its derivative, wherever it ended up, is not this run's to sweep:
-      // deleting it would destroy the repair that retry could still carry.
-      deferSweep.add(rename.from);
-    }
-  }
-
-  // No shield by path is needed, and an earlier one by path was actively
-  // harmful. The sweep deletes a file only when its `derived-from` still names
-  // the departed source — and the carry-over above has already repointed every
-  // file a living source is taking over, so those no longer name it. What is
-  // left really is orphaned, including at a location some other source would
-  // like to claim: freeing it is the point.
-  let derivativesDeleted = 0;
-  const sweep = async (oldPaths: readonly string[]): Promise<void> => {
-    for (const orphan of await orphanedDerivatives(deps.fs, oldPaths)) {
-      try {
-        await deps.fs.delete(orphan.derivative);
-        derivativesDeleted += 1;
-        wrote = true;
-      } catch (error) {
-        block(
-          blockedDeleted,
-          orphan.owner,
-          `could not delete ${orphan.derivative} — ${describe(error)}`,
-        );
-      }
-    }
-  };
-
-  await sweep(
-    [...discovery.deleted, ...discovery.renamed.map((rename) => rename.from)].filter(
-      (path) => !deferSweep.has(path),
-    ),
+  // Every outcome is decided here, in one pass, before any extraction (V).
+  // Nothing is written to the manifest yet: a carry that cannot complete simply
+  // puts its source on the worklist below, and if that fails too the untouched
+  // entry re-presents the whole rename next compile (I).
+  const carried = await carryRenames(deps.fs, manifest, discovery.renamed);
+  if (carried.wrote) wrote = true;
+  const fallbacks = carried.outcomes.filter(
+    (outcome): outcome is Extract<CarryOutcome, { kind: "fallback" }> =>
+      outcome.kind === "fallback",
   );
 
   // ── Normalize ──────────────────────────────────────────────────────────
   // Serial, and deliberately so: normalization writes files, and the §11
   // concurrency budget of 2 is for model calls.
+  //
+  // A rename that could not be carried joins the worklist here. It may
+  // overwrite markdown naming its own old path — an extension-only rename
+  // lands on the very file it failed to repoint — so its old path is added to
+  // the invariant-7 accept list. Nothing else is.
+  const acceptOrigins = new Map<string, readonly string[]>(
+    fallbacks.map((outcome) => [outcome.rename.source.path, [outcome.rename.from]]),
+  );
+  const work = [
+    ...discovery.added,
+    ...discovery.modified,
+    ...fallbacks.map((outcome) => outcome.rename.source),
+  ].sort((a, b) => comparePaths(a.path, b.path));
+
   const normalized: NormalizedSource[] = [];
   for (const [index, source] of work.entries()) {
     emit({ phase: "normalizing", path: source.path, index, total: work.length });
     try {
-      const outcome = await normalizeSource(source.path, source.format, source.kind, normalizeDeps);
+      const outcome = await normalizeSource(
+        source.path,
+        source.format,
+        source.kind,
+        normalizeDeps,
+        acceptOrigins.get(source.path) ?? [],
+      );
       normalized.push({
         source,
         hash: outcome.hash,
@@ -379,20 +327,11 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     } catch (error) {
       // Invariant 3: only successes are manifested, so this source is retried
       // next compile. A modified source keeps its previous hash, so it still
-      // reads as modified rather than as unchanged.
+      // reads as modified rather than as unchanged; a fallback rename keeps its
+      // old path, so it re-presents as the same rename.
       failed.push({ path: source.path, reason: describe(error) });
     }
   }
-
-  // Now the replacements exist, the deferred orphans really are orphans. A
-  // rename whose re-extraction failed keeps its old derivative for the retry
-  // to carry — losing a repair is not a price a failure should exact.
-  const extracted = new Set(normalized.map((entry) => entry.source.path));
-  await sweep(
-    discovery.renamed
-      .filter((rename) => deferSweep.has(rename.from) && extracted.has(rename.to))
-      .map((rename) => rename.from),
-  );
 
   // ── Call A ─────────────────────────────────────────────────────────────
   const inventories = new Map<string, SourceInventory>();
@@ -428,7 +367,9 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // next edit (which then creates a duplicate page), and every citation block
   // naming the old path loses that citer at the next citer union.
   if (discovery.renamed.length > 0) {
-    const moved = new Map(discovery.renamed.map((rename) => [rename.from, rename.to]));
+    const moved = new Map(
+      discovery.renamed.map((rename) => [rename.from, rename.source.path]),
+    );
     if (await repointRenames(deps.fs, pages, citations, moved, today)) wrote = true;
     pages = await loadPageTable(deps.fs);
     citations = await readCitations(deps.fs, pages);
@@ -507,7 +448,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   const bodyOfSource = async (path: string): Promise<string> => {
     const cached = bodies.get(path);
     if (cached !== undefined) return cached;
-    const target = readable.get(path) ?? (await readableFromManifest(deps.fs, next, path));
+    const target = readable.get(path) ?? (await readableFromManifest(deps.fs, manifest, path));
     // §6.5 gives Call B "the full normalized bodies of *all* citing sources".
     // A citer whose markdown cannot be found is not an empty source: passing
     // "" would have the model write a page grounded in a subset while code
@@ -530,16 +471,26 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // already been repointed to the new path. The two sets describe the same
   // vault at different moments rather than disagreeing about it.
   //
-  // `Object.hasOwn`, not `next[path] !== undefined`: a hand-written citation
-  // entry of `constructor` or `toString` would otherwise resolve to an
+  // Derived from the manifest this run *found* plus discovery's own sets, not
+  // from the one it is about to write: there is no half-built manifest to read
+  // any more (I), and the answer must not depend on how far the run has got.
+  //
+  // `Object.hasOwn`, not `manifested[path] !== undefined`: a hand-written
+  // citation entry of `constructor` or `toString` would otherwise resolve to an
   // inherited member of the manifest object and read as a live source forever.
   const present = new Set(
     [...discovery.added, ...discovery.modified, ...discovery.unchanged]
       .map((source) => source.path)
-      .concat(discovery.renamed.map((rename) => rename.to)),
+      .concat(discovery.renamed.map((rename) => rename.source.path)),
   );
+  const departed = new Set([
+    ...discovery.deleted,
+    ...discovery.renamed.map((rename) => rename.from),
+  ]);
   const isLive = (path: string): boolean =>
-    present.has(path) || Object.hasOwn(next, path) || readable.has(path);
+    present.has(path) ||
+    readable.has(path) ||
+    (Object.hasOwn(manifest, path) && !departed.has(path));
 
   const affected = [
     ...workSet.regenerate.map((item) => ({
@@ -703,24 +654,75 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     }
   }
 
-  // ── Manifest ───────────────────────────────────────────────────────────
-  // The rename pass above recorded the new path unconditionally, because a
-  // rename on its own needs no processing. When the same source was *also*
-  // modified — its derivative did not come along — that entry is a claim the
-  // run has not earned, so a failure has to take it back out (invariant 3).
-  const succeeded = new Set(ready.map((entry) => entry.source.path));
-  for (const rename of discovery.renamed) {
-    const alsoModified = discovery.modified.some((source) => source.path === rename.to);
-    if (!alsoModified || succeeded.has(rename.to)) continue;
-    delete next[rename.to];
-    // The re-extraction failed, so its old derivative is still deferred and
-    // still on disk. Restoring the old path keeps the rename in front of the
-    // next compile, which keeps that deferral justified and the failure
-    // reported — otherwise the file is stranded with nothing able to reach it
-    // and nothing saying why.
-    if (rename.derivative.kind === "reprocess") {
-      next[rename.from] = manifest[rename.from] ?? { hash: rename.hash };
+  // ── Manifest — the single commit point (I) ─────────────────────────────
+  // Built here, once, from outcomes that are already complete. Nothing above
+  // has touched it, so every failure recovery in this whole compile is the same
+  // one thing: the entry that was never rewritten still describes the vault as
+  // it was, and §6.2 presents the same work again next run. There is nothing to
+  // withdraw, restore, or roll back.
+  const next: IngestManifest = { ...manifest };
+  const settled = new Map(ready.map((entry) => [entry.source.path, entry]));
+
+  // A departure is only recorded once its cascade completed. Leaving the path
+  // in makes §6.2 see it leave again next compile, which re-runs the cascade
+  // idempotently — retry with no extra state, exactly as a failed ingest
+  // retries by not being manifested.
+  for (const path of discovery.deleted) {
+    if (!blockedDeleted.has(path)) delete next[path];
+  }
+
+  for (const outcome of carried.outcomes) {
+    const rename = outcome.rename;
+    const to = rename.source.path;
+
+    if (outcome.kind === "carried") {
+      delete next[rename.from];
+      next[to] = entryFor(rename.source.hash, outcome.derivative);
+      // Forward completion: markdown the carry left behind at the old location,
+      // now that the source's own copy is settled elsewhere (III).
+      const leftover = await removeSupersededDerivative(
+        deps.fs,
+        rename,
+        manifest[rename.from]?.derivative,
+        outcome.derivative,
+      );
+      if (leftover.deleted) {
+        derivativesDeleted += 1;
+        wrote = true;
+      }
+      if (leftover.report !== null) reported.push(leftover.report);
+      continue;
     }
+
+    // A fallback re-extracted instead of carrying. It is only settled if that
+    // extraction ran to completion; otherwise the old entry stays exactly where
+    // it is and the same rename is presented again next compile.
+    // Not settled: the re-extraction failed too. The source is already in
+    // `failed` with the reason it failed and the promise of a retry, and M2d's
+    // rule holds — one problem, one notice. Saying separately that the carry
+    // fell back would describe a detour that led nowhere.
+    const done = settled.get(to);
+    if (done === undefined) continue;
+
+    delete next[rename.from];
+    // Blocked means the markdown is written but a page it owes is not. Recording
+    // the hash without a pointer is what makes the next compile read the source
+    // as modified and retry that page — recording the pointer would have it read
+    // as fully ingested with the page still owed, forever.
+    if (blockedBy.has(to)) next[to] = entryFor(done.hash, undefined);
+
+    const leftover = await removeSupersededDerivative(
+      deps.fs,
+      rename,
+      manifest[rename.from]?.derivative,
+      done.derivativePath ?? undefined,
+    );
+    if (leftover.deleted) {
+      derivativesDeleted += 1;
+      wrote = true;
+    }
+    if (leftover.report !== null) reported.push(leftover.report);
+    reported.push({ path: to, reason: outcome.reason });
   }
 
   for (const entry of ready) {
@@ -732,15 +734,6 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     }
   }
 
-  // A departure is only recorded once its cascade completed. Re-entering the
-  // path makes §6.2 see it leave again next compile, which re-runs the cascade
-  // idempotently — retry with no extra state, exactly as a failed ingest
-  // retries by not being manifested.
-  //
-  // This covers the old side of a rename as well as an outright deletion: that
-  // path is a manifest key too, which is how the rename was detected, and its
-  // stale derivative is swept by the same pass.
-  //
   // The hash is `CASCADE_PENDING`, never the old one, so the entry cannot pair
   // as a rename against an unrelated file with the same content while it waits.
   // The derivative pointer is kept: that is the file the retry has to sweep.
@@ -766,6 +759,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     renamed: discovery.renamed.length,
     skipped: discovery.skipped,
     failed,
+    reported,
     pagesWritten,
     pagesDeleted,
     derivativesDeleted,
@@ -785,6 +779,7 @@ function cancelled(discovery: DiscoveryResult): CompileResult {
     renamed: discovery.renamed.length,
     skipped: discovery.skipped,
     failed: [],
+    reported: [],
     pagesWritten: 0,
     pagesDeleted: 0,
     derivativesDeleted: 0,
@@ -849,50 +844,12 @@ function blockCascade(
 }
 
 /**
- * Points a carried-over derivative at its source's new path, touching only that
- * one line. A user may have repaired this file by hand (§6.2), so the rest of
- * their frontmatter — comments, key order, scalar styles — is left alone; a
- * full re-serialize would restyle all of it for the sake of one value.
- */
-async function repointDerivative(fs: FsAdapter, path: string, to: string): Promise<void> {
-  const text = decodeUtf8(await fs.read(path));
-  const rewritten = replaceFrontmatterValue(text, "derived-from", to);
-  // `null` means the key could not be rewritten safely — a nested key of the
-  // same name, a folded value, a quoted key. Treating that as success would
-  // leave the file naming a path that no longer exists, which fails the source
-  // on every later run; the caller's recovery handles it instead.
-  if (rewritten === null) throw new Error(`could not repoint derived-from in ${path}`);
-  if (rewritten !== text) await fs.write(path, rewritten);
-}
-
-/**
  * A manifest entry, with the `derivative` key present only when there is a
  * pointer to record. Entries are built here rather than spread from an older
  * one, so no stale pointer can ride along unnoticed.
  */
 function entryFor(hash: string, derivative: string | undefined): ManifestEntry {
   return derivative === undefined ? { hash } : { hash, derivative };
-}
-
-/**
- * Where a renamed source's derivative will be once this run's carry lands —
- * discovery's classification, read for its destination rather than re-derived.
- *
- * A re-extracting rename records no pointer: the replacement does not exist
- * yet, so a run that fails after this point must leave an entry that still
- * reads as a source owed a derivative. `none` is a passthrough source, which
- * owes none at all.
- */
-function carriedDerivative(action: RenameDerivativeAction): string | undefined {
-  switch (action.kind) {
-    case "repoint":
-      return action.at;
-    case "move":
-      return action.to;
-    case "none":
-    case "reprocess":
-      return undefined;
-  }
 }
 
 /** Records why a source cannot be manifested this run, so it retries next time. */
@@ -950,7 +907,7 @@ async function readableFromManifest(
   // Invariant II: `derived-from` is read as a guard before serving a file as a
   // source's content, never to locate one. Whatever sits at that path, it is
   // not this source's normalized body unless it still says so.
-  return (await ownedBy(fs, entry.derivative, path)) ? entry.derivative : null;
+  return (await derivativeOrigin(fs, entry.derivative)) === path ? entry.derivative : null;
 }
 
 /** `null` when the file does not exist, so a comparison can stand in for it. */

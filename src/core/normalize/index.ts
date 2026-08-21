@@ -81,16 +81,26 @@ export interface NormalizeOutcome {
   wrote: boolean;
 }
 
+/**
+ * `acceptOrigins` widens the invariant-7 write guard beyond this source's own
+ * path. A rename whose derivative could not be carried re-extracts instead, and
+ * for an extension-only rename (`data.csv` -> `data.tsv`) the file standing in
+ * the way is its *own* previous derivative, still naming the old path. Naming
+ * that path here is what lets the re-extraction proceed; every other file is
+ * still refused. Empty means "this source only", which is every ordinary call.
+ */
 export async function normalizeSource(
   path: string,
   format: SourceFormat,
   kind: "file" | "repo",
   deps: NormalizeDeps,
+  acceptOrigins: readonly string[] = [],
 ): Promise<NormalizeOutcome> {
+  const accepted = [path, ...acceptOrigins];
   if (kind === "repo") {
     const files = await selectRepoFiles(deps.fs, path);
     const derivativePath = derivativePathFor(path, "repo") as string;
-    await writeDerivative(derivativePath, repoToMarkdown(path, files), path, "repo", deps);
+    await writeDerivative(derivativePath, repoToMarkdown(path, files), path, "repo", accepted, deps);
     return { hash: await repoContentHash(files), derivativePath, wrote: true };
   }
 
@@ -134,7 +144,7 @@ export async function normalizeSource(
   // the vision call, on every compile, forever, since a failed source is never
   // manifested (invariant 3).
   const derivativePath = derivativePathFor(path, format) as string;
-  await claimDerivative(derivativePath, path, deps);
+  await claimDerivative(derivativePath, accepted, deps);
 
   let body: string;
   switch (format) {
@@ -164,7 +174,7 @@ export async function normalizeSource(
   }
 
   const { text } = await localizeInlineImages(body, deps);
-  await writeDerivative(derivativePath, text, path, format, deps);
+  await writeDerivative(derivativePath, text, path, format, accepted, deps);
   return { hash, derivativePath, wrote: true };
 }
 
@@ -216,25 +226,45 @@ async function describeImage(
 }
 
 /**
- * Throws unless `target` is free for this origin's derivative.
+ * The source path a file names as its origin, or `null` if it is not a
+ * derivative at all — not a file, no readable frontmatter, or no `derived-from`
+ * key. The single reader of that key in the codebase.
  *
- * A derivative may only ever overwrite another derivative of the same origin;
- * anything else would be an unsanctioned write to a user-placed file
- * (invariant 7). Called before extraction so a doomed source never spends a
- * model call, and again inside `writeDerivative` so no caller can skip it.
+ * Invariant II: this answers "whose is the file at this path", never "where is
+ * this source's file". It is read as a guard, immediately before a destructive
+ * write or before serving a file as a source's content, and its answer is never
+ * used to locate anything.
+ */
+export async function derivativeOrigin(fs: FsAdapter, path: string): Promise<string | null> {
+  const stat = await fs.stat(path);
+  if (stat === null || stat.kind !== "file") return null;
+  try {
+    const { data } = parseFrontmatter(decodeUtf8(await fs.read(path)));
+    return typeof data["derived-from"] === "string" ? data["derived-from"] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Throws unless `target` is free for this source's derivative.
+ *
+ * A derivative may only ever overwrite a derivative of an origin on the
+ * accepted list; anything else would be an unsanctioned write to a user-placed
+ * file (invariant 7). Called before extraction so a doomed source never spends
+ * a model call, and again inside `writeDerivative` so no caller can skip it.
  */
 async function claimDerivative(
   target: string,
-  origin: string,
+  accepted: readonly string[],
   deps: NormalizeDeps,
 ): Promise<void> {
   if (!(await deps.fs.exists(target))) return;
-  const existing = parseFrontmatter(decodeUtf8(await deps.fs.read(target)));
-  const derivedFrom = existing.data["derived-from"];
-  if (derivedFrom === origin) return;
+  const derivedFrom = await derivativeOrigin(deps.fs, target);
+  if (derivedFrom !== null && accepted.includes(derivedFrom)) return;
   throw new Error(
     `derivative path ${target} is already taken by ${
-      typeof derivedFrom === "string" ? `a derivative of ${derivedFrom}` : "a user-placed file"
+      derivedFrom === null ? "a user-placed file" : `a derivative of ${derivedFrom}`
     }`,
   );
 }
@@ -244,9 +274,10 @@ async function writeDerivative(
   body: string,
   origin: string,
   format: SourceFormat,
+  accepted: readonly string[],
   deps: NormalizeDeps,
 ): Promise<void> {
-  await claimDerivative(target, origin, deps);
+  await claimDerivative(target, accepted, deps);
 
   const frontmatter = serializeFrontmatter({
     ingested: deps.today,

@@ -294,41 +294,125 @@ describe("the four rules (§6.2)", () => {
     expect(await core(fs).instance.compile()).toMatchObject({ noop: true });
   });
 
-  it("retries the carry-over after a failed one instead of re-extracting over it", async () => {
+  it("re-extracts in the same run when the carry cannot move the file", async () => {
+    // Policy B. The repoint lands, the move does not, and rather than leaving
+    // state behind for a retry to pick up, the source simply re-extracts now.
+    // That costs a model call and the hand repair — both reported — and it ends
+    // the run with the vault in the state it would have reached anyway.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
     await core(fs).instance.compile();
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
 
     await fs.move("raw/a.html", "raw/sub/a.html");
 
-    // The move lands; the repoint write does not.
     const guarded = Object.create(fs) as MemFs;
-    guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
-      if (path === "raw/sub/a.md") throw new Error("EACCES");
-      return MemFs.prototype.write.call(fs, path, data);
+    guarded.move = async (from: string, to: string): Promise<void> => {
+      if (from === "raw/a.md") throw new Error("EXDEV");
+      return MemFs.prototype.move.call(fs, from, to);
     };
     const second = await core(guarded).instance.compile();
-    expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
 
-    // The next compile sees the same rename again and carries it properly,
-    // rather than reading the file as new and re-extracting over the repair.
-    const third = await core(fs).instance.compile();
-    expect(third).toMatchObject({ renamed: 1, modelCalls: 0, failed: [] });
-    expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
+    // Nothing is owed afterwards, so nothing is `failed` — the source is fully
+    // ingested. What it cost is reported.
+    expect(second).toMatchObject({ renamed: 1, failed: [] });
+    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/sub/a.html"]);
+    expect(second.reported[0]?.reason).toContain("re-extracted");
+
+    // Freshly extracted, so the repair is gone — the honest outcome of a carry
+    // that could not happen, rather than a half-carried file left somewhere.
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+    expect(fs.text("raw/sub/a.md")).not.toContain("HAND REPAIRED.");
+    // And the file the carry could not move is cleaned up behind it.
+    expect(await fs.exists("raw/a.md")).toBe(false);
+    expect(manifestOf(fs)["raw/sub/a.html"]?.derivative).toBe("raw/sub/a.md");
+
+    // It is finished: the next compile has nothing left to do.
+    fs.resetCounters();
+    const third = await core(fs).instance.compile();
+    expect(third).toMatchObject({ unchanged: 1, noop: true, reported: [], failed: [] });
+    expect(fs.writes).toBe(0);
   });
 
-  it("survives an edit between a failed carry-over and its retry", async () => {
-    // The retry only re-presents the rename while the source's bytes are
-    // unchanged. An ordinary edit in between must not leave a derivative
-    // stranded somewhere nothing can reach, blocking that path for good.
+  it("re-extracts over its own old derivative when an extension-only carry fails", async () => {
+    // `data.csv` and `data.tsv` share one derivative location, so the fallback
+    // has to write over the very file it failed to repoint. That file names the
+    // source's *old* path, which the invariant-7 guard refuses by default —
+    // naming the old path on the accept list is what distinguishes "this
+    // source's own previous markdown" from "somebody else's file".
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/data.md", `${fs.text("raw/data.md")}\nHAND REPAIRED.\n`);
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.csv");
+
+    await fs.move("raw/data.csv", "raw/data.tsv");
+
+    // The repoint keeps the body and fails; the re-extraction writes fresh
+    // bytes and is allowed through.
+    const guarded = Object.create(fs) as MemFs;
+    guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
+      if (path === "raw/data.md" && typeof data === "string" && data.includes("HAND REPAIRED")) {
+        throw new Error("EACCES");
+      }
+      return MemFs.prototype.write.call(fs, path, data);
+    };
+
+    const second = await core(guarded).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 1, failed: [] });
+    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/data.tsv"]);
+    // Rebuilt in place, naming the new path, with the repair gone — the honest
+    // cost of a carry that could not happen.
+    expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.tsv");
+    expect(fs.text("raw/data.md")).not.toContain("HAND REPAIRED.");
+    expect(manifestOf(fs)["raw/data.tsv"]?.derivative).toBe("raw/data.md");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("carries the derivative of a rename that also changes format", async () => {
+    // Same bytes at a new path with a different extension: one source, and
+    // §6.2's shortcut still applies. The derivative moves and is repointed; it
+    // is not rebuilt just because the new extension would extract differently.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
+
+    await fs.move("raw/a.html", "raw/sub/a.csv");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({
+      renamed: 1,
+      modified: 0,
+      modelCalls: 0,
+      failed: [],
+      reported: [],
+    });
+    expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.csv");
+    // Extracted as HTML, and it still says so. A rename does not re-extract, so
+    // what the markdown records about its own extraction remains true of it.
+    expect(fs.text("raw/sub/a.md")).toContain("source-format: html");
+    expect(await fs.exists("raw/a.md")).toBe(false);
+    expect(manifestOf(fs)["raw/sub/a.csv"]?.derivative).toBe("raw/sub/a.md");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("converges when the source is edited between a failed carry and the retry", async () => {
+    // The rename can only be presented again while the source's bytes are
+    // unchanged. An edit in between turns it into a delete plus an add, and the
+    // vault must still settle rather than stranding markdown nothing can reach.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
     await core(fs).instance.compile();
 
     await fs.move("raw/a.html", "raw/sub/a.html");
+    // Neither end can be written, so the carry and its fallback both fail.
     const guarded = Object.create(fs) as MemFs;
     guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
-      if (path === "raw/sub/a.md") throw new Error("EACCES");
+      if (path === "raw/a.md" || path === "raw/sub/a.md") throw new Error("EACCES");
       return MemFs.prototype.write.call(fs, path, data);
     };
     await core(guarded).instance.compile();
@@ -444,9 +528,11 @@ describe("the four rules (§6.2)", () => {
     expect(third).toMatchObject({ renamed: 1 });
   });
 
-  it("frees a derivative path once the source that owned it is deleted", async () => {
+  it("sweeps before it extracts, so a freed derivative path is claimable at once", async () => {
     // Two sources share a stem; the loser can never claim the path while the
-    // winner lives. Deleting the winner must release it, not deadlock it.
+    // winner lives. Deleting the winner must release it, not deadlock it — and
+    // the sweep runs before the carry and before normalization precisely so the
+    // release lands in the same run, not the next one.
     const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n", "raw/data.html": "<h1>Hi</h1>\n" });
     const first = await core(fs).instance.compile();
     expect(first.failed).toHaveLength(1);
@@ -454,9 +540,11 @@ describe("the four rules (§6.2)", () => {
     await fs.delete("raw/data.csv");
     const second = await core(fs).instance.compile();
 
-    // The sweep frees the path even though a live source's stem points at it,
-    // and the source that was blocked claims it in the very same run.
+    // The entry named the file, so the sweep removed exactly it — even though a
+    // live source's stem points at the same path — and the source that was
+    // blocked claims it in the very same run.
     expect(second.failed).toEqual([]);
+    expect(second.derivativesDeleted).toBe(1);
     expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.html");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/data.html"]);
 
@@ -702,6 +790,29 @@ describe("source discovery", () => {
     expect(provider.stats().byTask.vision).toBe(1);
     expect(fs.text("raw/photo.md")).toContain("derived-from: raw/photo.png");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/photo.png"]);
+  });
+
+  it("leaves a derivative the user has taken over, and still completes", async () => {
+    // The sweep's one guard. The file at the recorded path no longer names this
+    // source, so it is not Luka's to delete — and the entry goes anyway, since
+    // retrying cannot change whose a file is and re-presenting the deletion
+    // would only repeat the notice every compile.
+    const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/data.md", "---\nderived-from: raw/elsewhere.csv\n---\nMine now.\n");
+
+    await fs.delete("raw/data.csv");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ deleted: 1, derivativesDeleted: 0, failed: [] });
+    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/data.csv"]);
+    expect(second.reported[0]?.reason).toContain("raw/data.md");
+    expect(fs.text("raw/data.md")).toContain("Mine now.");
+    expect(manifestOf(fs)).toEqual({});
+
+    // Finished, not deferred: the notice is not repeated.
+    const third = await core(fs).instance.compile();
+    expect(third).toMatchObject({ deleted: 0, failed: [], reported: [] });
   });
 
   it("reprocesses when a folder has taken the derivative's place", async () => {

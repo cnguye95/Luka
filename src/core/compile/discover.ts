@@ -4,7 +4,6 @@
 // carrying `derived-from`. A repo directory is one source and is never
 // descended into. Identity is SHA-256 of content; timestamps are never used.
 import type { FsAdapter } from "../adapters";
-import { renameDerivativeAction, type RenameDerivativeAction } from "./cascade";
 import { decodeUtf8, sha256Hex } from "../hash";
 import { derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
@@ -27,18 +26,19 @@ export interface SkippedSource {
   reason: string;
 }
 
+/**
+ * Same bytes, gone from one path and present at another. Identity only: what
+ * this run owes the derivative is decided later, in one pass, by `carryRenames`
+ * (invariant V) — discovery answers "is this the same source", not "where is
+ * its markdown".
+ *
+ * `source` is the file at its new path, carried whole so a rename that has to
+ * re-extract can join the normalize worklist without anything being inferred
+ * back out of the path. `source.path` is the new path; `from` is the old one.
+ */
 export interface Rename {
   from: string;
-  to: string;
-  hash: string;
-  /** The new path's format — what decides where its derivative belongs. */
-  format: SourceFormat;
-  /**
-   * What compile owes this rename's derivative, decided here against the vault
-   * as this run found it. Compile applies it rather than re-deriving it: by the
-   * time it runs, its own earlier iterations have moved files about.
-   */
-  derivative: RenameDerivativeAction;
+  source: DiscoveredSource;
 }
 
 export interface DiscoveryResult {
@@ -96,40 +96,20 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
   // which always leaves the derivative behind — would delete the pages citing
   // it.
   //
-  // Whether it is *also* modified depends on the derivative. Compile can carry
-  // one over, in place or by moving it, and §6.2 says a derivative persists
-  // until its original changes — which a rename does not do. Only when there
-  // is nothing usable to carry does the missing-derivative rule apply.
-  // Sorted first so the decisions below, which depend on what earlier renames
-  // in this run have claimed, do not vary with walk order.
-  const renames: Rename[] = [];
-  const claimedDerivatives = new Set<string>();
-
-  for (const rename of [...renamed].sort((a, b) => comparePaths(a.to, b.to))) {
-    const source = present.get(rename.to) as DiscoveredSource;
-    let action = await renameDerivativeAction(fs, rename);
-
-    // Two renames can want the same derivative location — `a.csv` and `b.html`
-    // both moving to `q.*` land on `q.md`. Only the first can carry its file
-    // there; the second has to re-extract, and deciding that here is what keeps
-    // it in the worklist. Compile discovering it later could only skip it,
-    // leaving a source manifested with no derivative of its own.
-    const at = action.kind === "move" ? action.to : action.kind === "repoint" ? action.at : null;
-    if (at !== null && claimedDerivatives.has(at)) action = { kind: "reprocess" };
-    else if (at !== null) claimedDerivatives.add(at);
-
-    renames.push({ ...rename, derivative: action });
-    if (action.kind === "reprocess") modified.push(source);
-  }
-
+  // A rename is never *also* modified here. §6.2's missing-derivative rule is
+  // about a source whose markdown is gone; a renamed source's markdown is a
+  // question about where the carry can put it, which `carryRenames` answers
+  // against the vault at the moment it acts. A rename it cannot complete
+  // re-enters the worklist there.
   return {
     added: remainingAdded.sort(byPath),
     modified: modified.sort(byPath),
     unchanged: unchanged.sort(byPath),
     deleted: remainingDeleted.sort(),
-    // Already in the order the decisions above were taken; re-sorting with a
-    // different comparator would let `discovery.renamed` disagree with them.
-    renamed: renames,
+    // Ordered by the new path, which is the order `carryRenames` acts in, so
+    // two renames competing for one derivative location resolve the same way
+    // on every host.
+    renamed: [...renamed].sort((a, b) => comparePaths(a.source.path, b.source.path)),
     skipped: skipped.sort((a, b) => comparePaths(a.path, b.path)),
   };
 }
@@ -157,9 +137,6 @@ async function hasDerivative(
   // with nothing readable behind it.
   return (await fs.stat(entry.derivative))?.kind === "file";
 }
-
-/** A rename before its derivative decision is taken. */
-type PairedRename = Omit<Rename, "derivative">;
 
 /**
  * Index of the vanished path that best explains an addition at `to`.
@@ -195,7 +172,7 @@ function pairRenames(
   added: readonly DiscoveredSource[],
   vanished: readonly string[],
   manifest: IngestManifest,
-): { renamed: PairedRename[]; remainingAdded: DiscoveredSource[]; remainingDeleted: string[] } {
+): { renamed: Rename[]; remainingAdded: DiscoveredSource[]; remainingDeleted: string[] } {
   const vanishedByHash = new Map<string, string[]>();
   for (const path of vanished) {
     // Bucketed by hash: `CASCADE_PENDING` is not one, so a pending entry can
@@ -206,7 +183,7 @@ function pairRenames(
     else vanishedByHash.set(hash, [path]);
   }
 
-  const renamed: PairedRename[] = [];
+  const renamed: Rename[] = [];
   const remainingAdded: DiscoveredSource[] = [];
   const claimed = new Set<string>();
 
@@ -224,7 +201,7 @@ function pairRenames(
     const at = bestPairing(bucket, source.path);
     const from = bucket.splice(at, 1)[0] as string;
     claimed.add(from);
-    renamed.push({ from, to: source.path, hash: source.hash, format: source.format });
+    renamed.push({ from, source });
   }
 
   return {

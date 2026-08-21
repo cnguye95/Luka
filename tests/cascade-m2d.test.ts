@@ -512,10 +512,12 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     expect(manifestOf(fs)).toEqual({});
   });
 
-  it("restores the old path of a rename whose stale derivative could not be swept", async () => {
+  it("reports, once, a leftover copy it could not remove after a carry", async () => {
     // The source and its derivative both moved into a subfolder, leaving a copy
-    // of the derivative at the old location. `rename.from` is a manifest key,
-    // so it can be restored; without that nothing re-detects the orphan.
+    // of the derivative at the old location. The rename itself completed, so
+    // its entry records the new derivative — there is no second pointer to keep
+    // the leftover reachable, and inventing one would be exactly the extra
+    // failure state this design removes. The user is told instead.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
 
@@ -525,19 +527,21 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     const guarded = refusingToDelete(fs, "raw/a.md");
     const second = await core(guarded, new StubProvider(replyFor)).compile();
 
-    // A clean rename — the derivative travelled — but the stale copy stays.
-    expect(second).toMatchObject({ renamed: 1, modified: 0 });
-    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/a.html"]);
-    expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/a.html", "raw/sub/a.html"]);
-    // The travelled derivative is repointed even though the sweep failed.
+    // A clean rename — the derivative travelled, at no model call — but the
+    // stale copy stays.
+    expect(second).toMatchObject({ renamed: 1, modified: 0, modelCalls: 0, failed: [] });
+    // Nothing is owed, so nothing is `failed`: the compile is done with this
+    // source. The leftover is reported.
+    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/sub/a.html"]);
+    expect(second.reported[0]?.reason).toContain("raw/a.md");
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
-
-    // Next compile sees the old path vanish again — and cannot mistake it for a
-    // rename, because the restored entry is not a content hash.
-    const third = await core(fs, new StubProvider(replyFor)).compile();
-    expect(third).toMatchObject({ deleted: 1, renamed: 0, failed: [] });
-    expect(await fs.exists("raw/a.md")).toBe(false);
+    // The old key is gone: the rename completed, and re-presenting a completed
+    // rename to keep chasing a file is the compensation this replaces.
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/sub/a.html"]);
+
+    // And the vault settles rather than re-reporting every compile.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third).toMatchObject({ noop: true, reported: [], failed: [] });
   });
 
   it("does not let a blocked deletion pair as a rename with an unrelated copy", async () => {
@@ -664,6 +668,43 @@ describe("a source that cannot be read costs a page one run, not its content", (
   });
 });
 
+describe("a re-extracted rename still owes its pages", () => {
+  it("comes back for a page whose generation failed", async () => {
+    // The regression the single commit point closes. The rename could not carry,
+    // so the source re-extracted and its markdown is fine — but a page it owed
+    // could not be written. Recording the derivative pointer here would have the
+    // next compile read the source as fully ingested and never return to that
+    // page; recording the hash alone is what brings it back.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking only.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    // Nothing left to carry, so the rename below falls back to re-extraction.
+    await fs.delete("raw/one.md");
+    await fs.move("raw/one.html", "raw/moved.html");
+
+    const failing = new StubProvider((request) =>
+      request.task === "page-generation" ? fatalError("generation is down") : replyFor(request),
+    );
+    const second = await core(fs, failing).compile();
+    expect(second.failed.map((failure) => failure.path)).toContain("raw/moved.html");
+    // The markdown did land — this is not a normalization failure.
+    expect(fs.text("raw/moved.md")).toContain("Ranking here");
+    expect(manifestOf(fs)["raw/moved.html"]).toEqual({ hash: expect.any(String) });
+
+    // So the next compile reads it as modified and finishes the job.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third).toMatchObject({ modified: 1, failed: [] });
+    expect(third.pagesWritten).toBeGreaterThan(0);
+    expect(manifestOf(fs)["raw/moved.html"]?.derivative).toBe("raw/moved.md");
+
+    const fourth = await core(fs, new StubProvider(replyFor)).compile();
+    expect(fourth).toMatchObject({ noop: true });
+  });
+});
+
 describe("a failed derivative carry-over recovers", () => {
   it("rolls back and re-presents the rename so the next compile finishes it", async () => {
     // The move lands but the repoint write fails, so the move is undone and the
@@ -674,27 +715,40 @@ describe("a failed derivative carry-over recovers", () => {
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
+    const manifestBytes = fs.text(MANIFEST);
 
     await fs.move("raw/a.html", "raw/sub/a.html");
 
+    // Neither the repoint at the old location nor the re-extraction at the new
+    // one can write, so the carry fails and so does the fallback behind it.
     const guarded = Object.create(fs) as MemFs;
     guarded.write = async (path: string, data: string | Uint8Array): Promise<void> => {
-      if (path === "raw/sub/a.md") throw new Error("EACCES");
+      if (path === "raw/a.md" || path === "raw/sub/a.md") throw new Error("EACCES");
       return MemFs.prototype.write.call(fs, path, data);
     };
 
     const second = await core(guarded, new StubProvider(replyFor)).compile();
     expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/a.html");
-    // Rolled back: the derivative is where it started, repair intact.
+    // One problem, one notice: the detour that led nowhere is not reported
+    // separately from the failure that will retry.
+    expect(second.reported).toEqual([]);
+
+    // The single commit point: nothing wrote the manifest, so it is byte-for-byte
+    // what it was — which is the whole of this design's failure recovery. There
+    // is no withdrawal to get wrong and no restore to get wrong.
+    expect(fs.text(MANIFEST)).toBe(manifestBytes);
+    // Nothing was taken from the vault to arrange any of it: the repair is
+    // still at the location the entry records.
     expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
     expect(await fs.exists("raw/sub/a.md")).toBe(false);
     expect(second.derivativesDeleted).toBe(0);
 
-    // The rename is presented again, carried properly, and costs no model call.
+    // The untouched entry presents the same rename again, which now carries.
     const third = await core(fs, new StubProvider(replyFor)).compile();
     expect(third).toMatchObject({ renamed: 1, modelCalls: 0, failed: [] });
     expect(fs.text("raw/sub/a.md")).toContain("HAND REPAIRED.");
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
+    expect(await fs.exists("raw/a.md")).toBe(false);
 
     const fourth = await core(fs, new StubProvider(replyFor)).compile();
     expect(fourth).toMatchObject({ noop: true });
