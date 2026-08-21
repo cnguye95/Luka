@@ -1,5 +1,5 @@
 import { Notice } from "obsidian";
-import type { CompileResult } from "../core/index";
+import type { AnswerResult, CompileResult } from "../core/index";
 
 const NOTICE_MS = 10_000;
 
@@ -47,6 +47,18 @@ export function reportCompile(result: CompileResult): void {
   for (const entry of result.reported) {
     notify(`${entry.path} — ${entry.reason}`, NOTICE_MS);
   }
+}
+
+/**
+ * §8.3's answer, once written. The mode and the grounding are the two things a
+ * reader cannot see at a glance but will want to know before trusting it.
+ */
+export function reportAnswer(result: AnswerResult): void {
+  const grounding = result.grounded
+    ? `mode ${result.mode}`
+    : `mode ${result.mode}, not grounded in your wiki`;
+  const rounds = result.round2 ? ", after a follow-up round" : "";
+  notify(`answered — ${grounding}${rounds}.`);
 }
 
 function completionMessage(result: CompileResult): string {

@@ -164,6 +164,33 @@ Continues from the compiled vault above.
       "may be deleted" list is empty.
 - [ ] A compile whose diff is only additions opens no modal at all.
 
+### M3 — Ask, answers, filing
+
+Needs a real API key and a compiled vault. One question costs a few cents.
+
+- [ ] **Luka: Ask the wiki** opens a modal with a single question field, already
+      focused. Enter submits; Esc and Cancel both close it and do nothing.
+- [ ] Asking a question about something in the wiki writes
+      `answers/YYYY-MM-DD-HHmm <slug>.md` and **opens it in a new leaf**.
+- [ ] The note reads as prose with `[[links]]`, then `## Sources consulted`,
+      then `## Retrieval trace` — and its frontmatter carries `kind: answer`,
+      `question`, `asked`, `mode` and `grounded`.
+- [ ] Ctrl/Cmd-clicking a link in the answer opens the page it names.
+- [ ] Asking something the wiki says nothing about produces a note whose first
+      line is the `> [!warning] Not grounded in your wiki` callout, rendered as
+      a callout in reading view, with `grounded: false`.
+- [ ] Triggering **Ask the wiki** while a compile is running shows
+      "Luka is busy: compile"; triggering **Compile** while an ask is running
+      shows "Luka is busy: ask".
+- [ ] **Luka: File this answer** does not appear in the command palette while a
+      non-answer note is active, and does appear on an answer note.
+- [ ] Filing moves the note to `raw/answers/`, drops the `## Retrieval trace`
+      block, keeps `## Sources consulted`, and shows
+      "Filed. Run Compile to integrate." — with no compile starting on its own.
+- [ ] The next **Luka: Compile** ingests the filed answer as an ordinary source:
+      it gains a `wiki/sources/` page, and the answer's own links now connect it
+      into the graph.
+
 ### Deletion is recoverable
 
 The core is tested against in-memory and Node filesystems; only Obsidian's own

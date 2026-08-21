@@ -1,10 +1,11 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, TFile } from "obsidian";
 import { BusyError, createCore, type Core, type ProgressEvent } from "../core/index";
+import { askQuestion } from "./ask-modal";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../core/types";
 import { registerCommands } from "./commands";
 import { ObsidianFs } from "./fs-obsidian";
 import { ObsidianHttp } from "./http-obsidian";
-import { notify, progressNotice, reportCompile } from "./notices";
+import { notify, progressNotice, reportAnswer, reportCompile } from "./notices";
 import { confirmScope } from "./scope-modal";
 import { LukaSettingTab } from "./settings";
 
@@ -55,6 +56,57 @@ export default class LukaPlugin extends Plugin {
       if (error instanceof BusyError) new Notice(error.message, 6000);
       else notify(`compile failed — ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * §8.1's "Ask the wiki". The modal runs *before* the lock is taken: holding
+   * it across a modal the user may leave open indefinitely would block compile
+   * for no work, and §8.1 only asks compile's preview to be held that way.
+   */
+  async runAsk(): Promise<void> {
+    const question = await askQuestion(this.app);
+    if (question === null) return;
+
+    const progress = progressNotice("asking…");
+    try {
+      const result = await this.core.ask(question);
+      progress.hide();
+      reportAnswer(result);
+      // §8.3: "Open the note in a new leaf on success."
+      await this.app.workspace.openLinkText(result.path, "", true);
+    } catch (error) {
+      progress.hide();
+      // Invariant 2's wording is BusyError's own, so it bypasses the prefix.
+      if (error instanceof BusyError) new Notice(error.message, 6000);
+      // Invariant 11: nothing was written, so the notice says only that it
+      // failed — there is no partial note to point the user at.
+      else notify(`ask failed — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** §8.4's "File this answer", on the active answer note. */
+  async runFileBack(answerPath: string): Promise<void> {
+    try {
+      await this.core.fileBack(answerPath);
+      // §8.4 pins this string, and it is deliberately not a compile trigger:
+      // invariant 1 has no auto-compile.
+      new Notice("Filed. Run Compile to integrate.", 6000);
+    } catch (error) {
+      notify(`filing failed — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * The active file when it is an answer note Luka wrote, else `null`.
+   *
+   * Read from frontmatter rather than from the folder: a note the user has
+   * moved is still an answer, and a file that merely sits in `answers/` is not.
+   */
+  activeAnswerPath(): string | null {
+    const file = this.app.workspace.getActiveFile();
+    if (!(file instanceof TFile) || file.extension !== "md") return null;
+    const kind = this.app.metadataCache.getFileCache(file)?.frontmatter?.["kind"] as unknown;
+    return kind === "answer" ? file.path : null;
   }
 
   async loadSettings(): Promise<void> {

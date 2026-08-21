@@ -1021,3 +1021,25 @@ normalization test. All three tests were rewritten rather than accepted.
 Nine assertions, five mutation-checked: the trace left in, the kind check
 removed, the collision suffix removed, the delete moved before the write, and
 the suffix applied after the extension rather than to the stem.
+
+### The plugin surface for asking and filing (§8.1)
+
+`src/plugin/ask-modal.ts`, two commands, two methods on `LukaPlugin`. Untested
+by the suite, per §14's rule that UI is exercised by the README checklist — the
+checklist gained nine M3 items.
+
+- **The modal runs before the lock is taken.** Compile's preview is held under
+  the lock deliberately (§8.1) so it cannot go stale; an ask modal is different,
+  because the user may leave it open indefinitely and holding the lock across
+  that would block compile for no work.
+- **An empty question is a cancellation.** There is nothing to retrieve for, and
+  a blank query would spend a seed call to learn that.
+- **`File this answer` uses `checkCallback`**, so it hides itself rather than
+  failing when the active file is not an answer. What makes a file an answer is
+  `kind: answer` in its frontmatter, not its folder: a note the user has moved
+  is still an answer, and a file that merely sits in `answers/` is not.
+- **Two notice strings bypass the `Luka: ` prefix helper**, because the spec
+  pins them verbatim — `BusyError.message` for invariant 2, and §8.4's
+  "Filed. Run Compile to integrate."
+- **A failed ask says only that it failed.** Invariant 11 means nothing was
+  written, so there is no partial note to point the user at.
