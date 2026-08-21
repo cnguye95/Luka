@@ -665,6 +665,61 @@ describe("a source that cannot be read costs a page one run, not its content", (
   });
 });
 
+describe("a citer that cannot be read at all", () => {
+  it("costs its page one run, not the page's other citers", async () => {
+    // `readableFromManifest` answers "no readable markdown" for a citer whose
+    // file cannot be stat'd or read, rather than letting the error escape. An
+    // escaped error is not classified as an unreadable citer, so it blocks
+    // every *other* citer of the page — un-manifesting a healthy source and
+    // re-inventorying it forever, which is what M2d's fifth round fixed.
+    for (const failing of ["stat", "read"] as const) {
+      const fs = new MemFs({
+        "raw/one.md": "Ranking only.\n",
+        "raw/two.md": "Ranking too.\n",
+      });
+      await core(fs, new StubProvider(replyFor)).compile();
+      expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/one.md", "raw/two.md"]);
+
+      // Editing one citer requeues the page they share; the other is unchanged,
+      // so its body has to come from the manifest — which is the path under test.
+      await fs.write(
+        "raw/two.md",
+        "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking, edited.\n",
+      );
+
+      let reads = 0;
+      const guarded = Object.create(fs) as MemFs;
+      if (failing === "stat") {
+        guarded.stat = async (path: string) => {
+          if (path === "raw/one.md") throw new Error("EIO");
+          return MemFs.prototype.stat.call(fs, path);
+        };
+      } else {
+        // Discovery reads every markdown file under raw/ to recognise
+        // derivatives; the read under test is the later one, serving the body.
+        guarded.read = async (path: string) => {
+          if (path === "raw/one.md") {
+            reads += 1;
+            if (reads > 1) throw new Error("EIO");
+          }
+          return MemFs.prototype.read.call(fs, path);
+        };
+      }
+
+      const second = await core(guarded, new StubProvider(replyFor)).compile();
+
+      // The page pays, and says so.
+      expect(second.failed.map((failure) => failure.path)).toEqual(["wiki/concepts/Ranking.md"]);
+      // The edited co-citer is ingested rather than blocked: its new hash is
+      // recorded, so it is not re-inventoried on every future compile.
+      expect(manifestOf(fs)["raw/two.md"]?.hash).toBeDefined();
+      expect(
+        await core(fs, new StubProvider(replyFor)).compile(),
+      ).toMatchObject({ modified: 0 });
+    }
+  });
+});
+
 describe("a carried rename is still a citer", () => {
   it("serves its body to a page regenerating in the same run", async () => {
     // The carry deliberately skips normalization, so this source produces no

@@ -856,6 +856,46 @@ describe("source discovery", () => {
     expect(second).toMatchObject({ renamed: 2, failed: [], reported: [] });
   });
 
+  it("reports, and does not resolve, two sources that swap names", async () => {
+    // Each rename's destination holds the other's markdown, so both carries
+    // fall back — and then neither can re-extract, because the invariant-7
+    // guard rightly refuses a file naming a source that is not its own. There
+    // is no assignment this pass can reach without somewhere to park a file
+    // mid-swap. It is loud rather than quiet, and a user can end it by removing
+    // either derivative; the point of this test is that it stays loud.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.csv": "x,y\n1,2\n" });
+    await core(fs).instance.compile();
+
+    const a = fs.files.get("raw/a.html") as Uint8Array;
+    const b = fs.files.get("raw/b.csv") as Uint8Array;
+    fs.files.delete("raw/a.html");
+    fs.files.delete("raw/b.csv");
+    fs.files.set("raw/b.html", a);
+    fs.files.set("raw/a.csv", b);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const stuck = await core(fs).instance.compile();
+      expect(stuck).toMatchObject({ renamed: 2, modelCalls: 0 });
+      expect(stuck.failed.map((failure) => failure.path).sort()).toEqual([
+        "raw/a.csv",
+        "raw/b.html",
+      ]);
+      // Nothing is destroyed while it waits, and nothing is recorded either.
+      expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/a.html", "raw/b.csv"]);
+    }
+
+    // Removing one of the two files is what breaks the tie. The first compile
+    // ingests one source and sweeps the markdown the other one needs; the
+    // second finishes the job.
+    await fs.delete("raw/b.md");
+    await core(fs).instance.compile();
+    const done = await core(fs).instance.compile();
+
+    expect(done.failed).toEqual([]);
+    expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/a.csv", "raw/b.html"]);
+    expect(await core(fs).instance.compile()).toMatchObject({ noop: true });
+  });
+
   it("never overwrites markdown that names an origin, whoever that origin is", async () => {
     // The invariant-7 write guard admits exactly one thing: markdown naming an
     // origin this source is allowed to supersede. "Naming an origin that does

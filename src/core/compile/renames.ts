@@ -25,8 +25,10 @@
 //        and a rename has to decide whether markdown at the destination is the
 //        same file the user moved, `carryOne` computes `<stem>.md` and reads
 //        the origin there. Nothing else may. It is the price of letting a user
-//        move a source and its markdown together, it is logged, and it can only
-//        ever adopt a file naming the source's own old path.
+//        move a source and its markdown together, it is written up in
+//        BUILD-NOTES, and it can only ever adopt a file naming the source's own
+//        old path. It is not *reported* at runtime: the carry succeeded and
+//        nothing was lost, so there is nothing to tell the user.
 //
 //  (III) NO DESTRUCTIVE OPERATION IS EVER A FAILURE-RECOVERY STEP. Deletes and
 //        overwrites happen only to complete an outcome that succeeded, always
@@ -152,8 +154,17 @@ export async function carryRenames(
     if (target !== null) {
       // Free the destination first. Two renames each wanting the other's
       // location leave `pending` set, so the recursion stops and both are
-      // decided against the vault as it stands — which for a straight swap
-      // means both fall back and re-extract. Deterministic, and it converges.
+      // decided against the vault as it stands.
+      //
+      // For a straight swap that means both fall back — and then neither can
+      // re-extract, because each one's destination holds the *other* one's
+      // markdown, which the invariant-7 guard rightly refuses. Both sources
+      // stay un-ingested, reported every compile, until a user removes one of
+      // the two files. A swap needs somewhere to put a file while the other
+      // moves, and there is no such place that is not new machinery; recording
+      // the pointer wherever the file already lies would be the way out, but
+      // §6.1 names derivatives after their original, so that is a spec question
+      // and not this pass's to answer. Logged as a known limitation.
       const blocker = occupies.get(target);
       if (blocker !== undefined && blocker.source.path !== to) await carry(blocker, pending);
     }

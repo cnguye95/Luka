@@ -470,7 +470,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // wholesale so the old page would be gone. Failing here instead costs the
     // page one run — the existing text stands and the citers retry.
     if (target === null) throw new UnreadableCiter(path);
-    const text = bodyOf(decodeUtf8(await deps.fs.read(target)));
+    // Reading it can fail too, and a citer whose markdown cannot be read is in
+    // exactly the position of one that cannot be found: Call B is not getting
+    // that body either way. Letting the raw error out instead would reach the
+    // caller unclassified and block every *other* citer of the page.
+    let text: string;
+    try {
+      text = bodyOf(decodeUtf8(await deps.fs.read(target)));
+    } catch (error) {
+      throw new UnreadableCiter(`${path} — ${describe(error)}`);
+    }
     bodies.set(path, text);
     return text;
   };
@@ -702,10 +711,14 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
 
     if (outcome.kind === "carried") {
       // Deliberately not checking `blockedBy`. A page can fail while naming a
-      // carried rename among its citers, but §6.2 skips regeneration for a
-      // rename: this source contributed no inventory this run, so re-running it
-      // could not regenerate anything — the page comes back through whichever
-      // source actually queued it, which is un-manifested in the usual way.
+      // carried rename among its citers, but a page is only ever *queued* by a
+      // source that was added, modified or deleted — never by a rename, which
+      // §6.2 exempts from regeneration. So the source that owes this page is
+      // un-manifested in the usual way and brings it back on its own.
+      // Withholding the rename as well buys the page nothing it does not
+      // already have, and costs the carry: it would leave the old entry naming
+      // a path the carry had already vacated, so the retry could not recognise
+      // its own work and would re-extract over §6.2's sanctioned repair.
       // Withholding the entry here instead threw away a carry that had already
       // moved the file, leaving the old entry naming a vacated path so the
       // retry could not recognise its own work and re-extracted over §6.2's
