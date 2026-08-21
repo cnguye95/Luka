@@ -1171,3 +1171,23 @@ which lists pages by title — so a correct alias link failed it. "Inline links
 all validate" means each resolves to a page that was retrieved, not that it
 spells that page's title; the test resolves through the vault's own title table
 now.
+
+### The eval harness's `--live` mode (§13)
+
+One argv branch in `eval/run.ts` and one npm script, kept deliberately small
+because §15's cut-order names it the fourth thing to go under schedule pressure.
+
+- **Same metrics, real seed call.** The only difference from CI mode is where
+  the seeds come from: `selectSeeds` against a real provider rather than
+  `forceIncludeSeeds`. Everything downstream — ranking, scoring, floors — is
+  identical, so the two numbers are comparable and the gap between them is
+  exactly what the model's seeding is worth.
+- **The key comes from `ANTHROPIC_API_KEY` and nowhere else.** Invariant 9 keeps
+  it out of the vault; keeping it out of the repo is the same rule one step
+  further out. Without one, `--live` exits **2** — distinct from **1**, which
+  means a metric came in under its floor, so a CI misconfiguration can never be
+  mistaken for a ranking regression.
+- **Never in CI**, per §13. The workflow has no reference to it.
+
+Not exercised by the suite: it makes real calls by definition. Its CI-mode twin
+covers everything except the seeding source.
