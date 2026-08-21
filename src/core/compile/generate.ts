@@ -62,7 +62,27 @@ export async function generatePageBody(
     system: SYSTEM,
     user: renderCallBPrompt(input),
   });
-  return reply.trim();
+  const body = reply.trim();
+
+  // The prompt already tells the model which sources the budget dropped. The
+  // page has to say so too: code writes the citation block from the full citer
+  // set, so without this the page claims a source it was never grounded in —
+  // and §6.5 makes that block the persistent citer record, so the false claim
+  // outlives the run and feeds §7.1's graph.
+  const omitted = omittedForBudget(input);
+  if (omitted.length === 0) return body;
+  return `${body}\n\n${truncatedForContextBudget()}\nNot given to the model for budget: ${omitted.join(", ")}`;
+}
+
+/** The citing sources the budget could not fit, in citer order. */
+function omittedForBudget(input: GeneratePageInput): string[] {
+  const head = renderHead(input);
+  const packed = packUnderBudget(
+    input.sources,
+    (source) => renderSource(source),
+    Math.max(0, input.contextBudgetTokens - estimateHead(head)),
+  );
+  return input.sources.slice(packed.items.length).map((source) => source.path);
 }
 
 /**
@@ -71,11 +91,7 @@ export async function generatePageBody(
  * and is not shown — notably that the old page text never appears.
  */
 export function renderCallBPrompt(input: GeneratePageInput): string {
-  const head = [
-    `Title: ${input.title}`,
-    `Kind: ${input.kind}`,
-    `Aliases: ${input.aliases.length === 0 ? "(none)" : input.aliases.join(", ")}`,
-  ].join("\n");
+  const head = renderHead(input);
 
   const packed = packUnderBudget(
     input.sources,
@@ -83,7 +99,7 @@ export function renderCallBPrompt(input: GeneratePageInput): string {
     Math.max(0, input.contextBudgetTokens - estimateHead(head)),
   );
 
-  const parts = [head, ...packed.texts];
+  const parts: string[] = [head, ...packed.texts];
   // §6.5 says the input is "the full normalized bodies of *all* citing sources
   // … truncation marker if the budget forces it". A source the budget dropped
   // whole is the budget forcing it just as much as a tail cut is: without the
@@ -95,6 +111,15 @@ export function renderCallBPrompt(input: GeneratePageInput): string {
   }
 
   return parts.join("\n\n");
+}
+
+/** Title, kind and aliases — the part of the prompt that is not source text. */
+function renderHead(input: GeneratePageInput): string {
+  return [
+    `Title: ${input.title}`,
+    `Kind: ${input.kind}`,
+    `Aliases: ${input.aliases.length === 0 ? "(none)" : input.aliases.join(", ")}`,
+  ].join("\n");
 }
 
 function renderSource(source: CitingSource): string {

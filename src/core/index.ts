@@ -685,11 +685,24 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // user who has never compiled anything.
   if (table.length > 0 || (await deps.fs.exists(INDEX_PATH))) {
     emit({ phase: "writing-index" });
-    const rendered = renderIndex(table);
-    if (rendered !== (await readIfPresent(deps.fs, INDEX_PATH))) {
-      await deps.fs.mkdir(dirname(INDEX_PATH));
-      await deps.fs.write(INDEX_PATH, rendered);
-      wrote = true;
+    // Guarded for the same reason the page-write loop above is, and it matters
+    // more here: this runs *after* the model calls are spent and the pages are
+    // on disk, but *before* the manifest commit. An unguarded throw took the
+    // whole run with it — nothing that succeeded was recorded, so the next
+    // compile re-spent every call, and a persistently unwritable index (a
+    // read-only file, a sync conflict, a directory in its place) made that a
+    // loop with no way out and no notice explaining it.
+    try {
+      const rendered = renderIndex(table);
+      if (rendered !== (await readIfPresent(deps.fs, INDEX_PATH))) {
+        await deps.fs.mkdir(dirname(INDEX_PATH));
+        await deps.fs.write(INDEX_PATH, rendered);
+        wrote = true;
+      }
+    } catch (error) {
+      // §6.5 re-derives the index from the page table every compile, so the
+      // next run rebuilds it from scratch; nothing has to be remembered.
+      failed.push({ path: INDEX_PATH, reason: `could not write the index — ${describe(error)}` });
     }
   }
 

@@ -15,7 +15,19 @@ export const WIKI_FOLDER = "wiki";
 const KINDS: readonly PageKind[] = ["source", "entity", "concept"];
 
 /** Characters §4 strips from a title to make a filename. */
-const FORBIDDEN = /[[\]#^|\\/:]/g;
+// §4 names the characters a title may not contain, which is about wikilink
+// and path syntax. A filename has its own refusals on top of that — `?`, `*`,
+// quotes, angle brackets and control characters are rejected outright by
+// Windows — and a title that reaches the write unusable does not cost one page:
+// every source citing it is blocked, so nothing in the run is manifested, and
+// because inventory runs at temperature 0 the model returns the same title on
+// the next compile. Being stricter than §4 is not a deviation from it.
+// Control characters are in the class on purpose: a model can return one,
+// and a filename carrying it is rejected outright rather than merely ugly.
+// eslint-disable-next-line no-control-regex
+const FORBIDDEN = /[[\]#^|\\/:?*"<>\u0000-\u001f]/g;
+/** Comfortably inside the 255-byte component limit, with room for `-2.md`. */
+const MAX_TITLE_LENGTH = 120;
 
 export async function loadPageTable(fs: FsAdapter): Promise<PageMeta[]> {
   const pages: PageMeta[] = [];
@@ -91,11 +103,19 @@ function toStringArray(value: unknown): string[] {
  */
 export function sanitizeTitle(title: string): string {
   const cleaned = title
+    // One Unicode form. NFC and NFD spell the same word differently but name
+    // the same file on macOS, so without this two pages collapse into one and
+    // the second write destroys the first, silently.
+    .normalize("NFC")
     .replace(FORBIDDEN, "")
     .replace(/\s+/g, " ")
     .replace(/^[_.\s]+/, "")
     .trim();
-  return cleaned === "" ? "Untitled" : cleaned;
+  if (cleaned === "") return "Untitled";
+  // Trailing dots and spaces are also refused by Windows, and trimming the
+  // length can expose one.
+  const bounded = cleaned.slice(0, MAX_TITLE_LENGTH).replace(/[.\s]+$/, "");
+  return bounded === "" ? "Untitled" : bounded;
 }
 
 /**

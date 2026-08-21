@@ -73,6 +73,25 @@ export function mergeInventories(
   const index = buildTitleIndex(candidates);
   const byTitle = new Map(candidates.map((page) => [page.title.toLowerCase(), page]));
 
+  // Who owns each lowercased handle. §4 gives titles and aliases one namespace
+  // and the link post-pass resolves a handle to exactly one page, so an alias
+  // adopted for a second page is a claim written into frontmatter that every
+  // link using it contradicts — permanently, since it is re-read every compile.
+  // Seeded from the pages that already exist, then kept current as new ones are
+  // named.
+  const ownerOf = new Map<string, string>();
+  for (const candidate of candidates) {
+    ownerOf.set(candidate.title.toLowerCase(), candidate.path);
+    for (const alias of candidate.aliases) {
+      if (!ownerOf.has(alias.toLowerCase())) ownerOf.set(alias.toLowerCase(), candidate.path);
+    }
+  }
+  // Titles already spoken for by pages this merge does not own — source pages,
+  // most importantly — can never be handed out as an alias.
+  for (const title of reserved ?? []) {
+    if (!ownerOf.has(title)) ownerOf.set(title, "reserved");
+  }
+
   const regenerate = new Map<string, RegeneratedPage>();
   const newPages: NewPage[] = [];
   // Lowercased title-or-alias → position in `newPages`, so a second source
@@ -97,7 +116,7 @@ export function mergeInventories(
       if (existing !== undefined) {
         const entry = queue(regenerate, existing);
         if (!entry.newCiters.includes(sourcePath)) entry.newCiters.push(sourcePath);
-        addAliases(entry.newAliases, item, existing.aliases, existing.title);
+        addAliases(entry.newAliases, item, existing.aliases, existing.title, existing.path, ownerOf);
         if (item.summary !== "") entry.newSummary = item.summary;
         continue;
       }
@@ -108,9 +127,13 @@ export function mergeInventories(
         if (!page.citers.includes(sourcePath)) page.citers.push(sourcePath);
         // First encounter fixes title and kind; later mentions only add.
         for (const alias of aliasesOf(item)) {
+          const key = alias.toLowerCase();
+          const owner = ownerOf.get(key);
+          if (owner !== undefined && owner !== `new:${position}`) continue;
           if (!hasFold(page.aliases, alias) && !equalsFold(page.title, alias)) {
             page.aliases.push(alias);
-            newIndex.set(alias.toLowerCase(), position);
+            ownerOf.set(key, `new:${position}`);
+            newIndex.set(key, position);
           }
         }
         if (item.summary !== "") page.summary = item.summary;
@@ -120,15 +143,20 @@ export function mergeInventories(
       // §4: the filename is the sanitized title, unique across wiki/.
       const title = uniqueTitle(sanitizeTitle(item.title), claimed);
       claimed.add(title.toLowerCase());
+      const at = newPages.length;
       const page: NewPage = {
         title,
         kind: item.kind,
-        aliases: aliasesOf(item).filter((alias) => !equalsFold(title, alias)),
+        aliases: aliasesOf(item).filter(
+          (alias) =>
+            !equalsFold(title, alias) && !ownerOf.has(alias.toLowerCase()),
+        ),
         summary: item.summary,
         citers: [sourcePath],
       };
-      const at = newPages.length;
       newPages.push(page);
+      ownerOf.set(title.toLowerCase(), `new:${at}`);
+      for (const alias of page.aliases) ownerOf.set(alias.toLowerCase(), `new:${at}`);
       newIndex.set(title.toLowerCase(), at);
       // The unsanitized title is also a handle: a later item saying
       // "_Mercury" must find the page created for it.
@@ -198,10 +226,17 @@ function addAliases(
   item: InventoryItem,
   existing: readonly string[],
   title: string,
+  owner: string,
+  ownerOf: Map<string, string>,
 ): void {
   for (const alias of [item.title.trim(), ...aliasesOf(item)]) {
     if (alias === "" || equalsFold(title, alias)) continue;
     if (hasFold(existing, alias) || hasFold(into, alias)) continue;
+    // Free, or already this page's own.
+    const key = alias.toLowerCase();
+    const holder = ownerOf.get(key);
+    if (holder !== undefined && holder !== owner) continue;
+    ownerOf.set(key, owner);
     into.push(alias);
   }
 }
