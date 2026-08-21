@@ -148,6 +148,12 @@ export const DEFAULT_SETTINGS: LukaSettings = {
 export function normalizeSettings(settings: LukaSettings): LukaSettings {
   return {
     ...settings,
+    // `models` is copied, not shared. A spread is shallow, so the nested object
+    // stayed live — and the settings tab writes into it on every keystroke, so
+    // a run in flight could send a half-typed model id to the vendor. Copying
+    // it is what makes "one settings state for the whole run" true rather than
+    // true of four values out of five.
+    models: { ...settings.models },
     contextBudgetTokens: positive(settings.contextBudgetTokens, DEFAULT_SETTINGS.contextBudgetTokens),
     requestTimeoutMs: positive(settings.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs),
     compileConcurrency: clamp(

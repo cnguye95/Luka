@@ -78,6 +78,25 @@ export function mergeInventories(
   // and kept current as new ones are named.
   const { index, owner } = buildTitleTable(candidates);
   const byTitle = new Map(candidates.map((page) => [handleOf(page.title), page]));
+  // §4's `-N` suffix is part of how a page was named, so it has to be part of
+  // how a page is found. §4 requires titles unique across *all* of wiki/, so a
+  // concept whose name a source page already holds is named `X-2` — and
+  // nothing a model returns ever spells `X-2`. Without the inverse the merge
+  // creates `X-3` next compile, then `X-4`, each with its own Call B and each
+  // keeping a citer so §6.6 never dooms it.
+  //
+  // Only a base some page actually holds counts, which is the thing that
+  // forced the suffix. That keeps an ordinary title like "Q3-2024" from being
+  // read as "Q3" plus one.
+  const held = new Set(pages.map((page) => handleOf(page.title)));
+  const bySuffixBase = new Map<string, PageMeta>();
+  for (const candidate of candidates) {
+    const base = /^(.*)-\d+$/.exec(candidate.title)?.[1];
+    if (base === undefined || base === "") continue;
+    const key = handleOf(base);
+    if (index.has(key) || !held.has(key) || bySuffixBase.has(key)) continue;
+    bySuffixBase.set(key, candidate);
+  }
   const ownerOf = new Map(owner);
   // Titles already spoken for by pages this merge does not own — source pages,
   // most importantly — can never be handed out as an alias. Canonicalized
@@ -108,7 +127,7 @@ export function mergeInventories(
 
   for (const { sourcePath, items } of ordered) {
     for (const item of items) {
-      const existing = matchExisting(item, index, byTitle);
+      const existing = matchExisting(item, index, byTitle, bySuffixBase);
       if (existing !== undefined) {
         const entry = queue(regenerate, existing);
         if (!entry.newCiters.includes(sourcePath)) entry.newCiters.push(sourcePath);
@@ -180,6 +199,7 @@ function matchExisting(
   item: InventoryItem,
   index: ReadonlyMap<string, string>,
   byTitle: ReadonlyMap<string, PageMeta>,
+  bySuffixBase: ReadonlyMap<string, PageMeta>,
 ): PageMeta | undefined {
   // `titleStem` is the third candidate because it is the rule that *named* any
   // page already on disk: §4 stores a title only as a filename, so a title
@@ -197,6 +217,13 @@ function matchExisting(
     const page = byTitle.get(handleOf(title));
     if (page !== undefined) return page;
   }
+  // Then the inverse of §4's uniqueness suffix, which is the only way to
+  // reach a page whose own name no model reply will ever spell.
+  for (const candidate of candidates) {
+    if (candidate === "") continue;
+    const page = bySuffixBase.get(handleOf(candidate));
+    if (page !== undefined) return page;
+  }
   return undefined;
 }
 
@@ -204,6 +231,11 @@ function matchNew(item: InventoryItem, newIndex: ReadonlyMap<string, number>): n
   // `titleStem` is the third candidate because it is the rule that *named* any
   // page already on disk: §4 stores a title only as a filename, so a title
   // long enough to have been cut is only findable by the cut form.
+  // Same four candidates as `matchExisting`, so the two lookups are one rule.
+  // `titleStem` cannot currently fire here — `newIndex` already keys the raw
+  // title's handle, so any repeat within a run matches on candidate 1 — and it
+  // is kept for that symmetry rather than for reach: a lookup that differs
+  // from its sibling is how this namespace fragmented twice already.
   const candidates = [
     item.title.trim(),
     sanitizeTitle(item.title),

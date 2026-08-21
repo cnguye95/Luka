@@ -172,7 +172,11 @@ export function titleStem(title: string): string {
  */
 function boundTitle(title: string, budget: number): string {
   if (!cutToBytes(title, budget).cut) return title;
-  const tag = `-${titleTag(title)}`;
+  // Tagged from the *handle*, not the raw title. §4 gives the namespace one
+  // spelling rule, so two casings §4 calls one name must not take two stems —
+  // the kept prefix already folds under `handleOf`, and a tag that did not
+  // would split them into two permanent pages.
+  const tag = `-${titleTag(handleOf(title))}`;
   const kept = cutToBytes(title, budget - tag.length).text.replace(/[.\s]+$/, "");
   return kept === "" ? `Untitled${tag}` : `${kept}${tag}`;
 }

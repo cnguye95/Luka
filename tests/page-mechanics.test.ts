@@ -4,7 +4,13 @@ import { DEFAULT_SETTINGS } from "../src/core/types";
 import { mergeInventories } from "../src/core/compile/dedup";
 import { generatePageBody } from "../src/core/compile/generate";
 import { buildTitleIndex, resolveLinks } from "../src/core/compile/links";
-import { sanitizeTitle, takenTitles, uniqueTitle } from "../src/core/compile/pagetable";
+import {
+  handleOf,
+  sanitizeTitle,
+  takenTitles,
+  titleStem,
+  uniqueTitle,
+} from "../src/core/compile/pagetable";
 import type { PageMeta } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
@@ -390,7 +396,72 @@ describe("a page whose title was cut can still be found again", () => {
 
   it("keeps a cut title inside the byte bound, tag and all", () => {
     const title = uniqueTitle(sanitizeTitle("\u6587".repeat(300)), new Set());
+    const bytes = new TextEncoder().encode(title).length;
 
-    expect(new TextEncoder().encode(`${title}.md`).length).toBeLessThanOrEqual(255);
+    // Pins the bound, not the host's 255 — the weak form passes unchanged
+    // under any bound up to 252, which is how the previous two rounds shipped
+    // assertions that could not fail.
+    expect(bytes).toBeLessThanOrEqual(200);
+    expect(bytes).toBeGreaterThan(190);
+    expect(title).toMatch(/-[0-9a-z]{7}$/);
+  });
+});
+
+describe("naming and lookup are inverses", () => {
+  const source = (title: string): PageMeta => ({
+    path: `wiki/sources/${title}.md`,
+    title,
+    kind: "source",
+    aliases: [],
+    summary: "",
+    updated: "",
+  });
+
+  it("finds the page the uniqueness suffix was forced onto", () => {
+    // §4 requires titles unique across all of wiki/, so a concept whose name a
+    // source page already holds is named `X-2`. Nothing the model returns next
+    // compile ever spells `X-2`, so without a lookup that inverts the suffix
+    // the merge creates `X-3`, then `X-4`, for ever — one page and one Call B
+    // per compile, and none of them ever loses its last citer.
+    const first = mergeInventories([source("PageRank")], [
+      { sourcePath: "raw/PageRank.md", items: [item("PageRank")] },
+    ]);
+    const named = (first.newPages[0] as { title: string }).title;
+    expect(named).toBe("PageRank-2");
+
+    const stored: PageMeta = {
+      path: `wiki/concepts/${named}.md`,
+      title: named,
+      kind: "concept",
+      aliases: [],
+      summary: "",
+      updated: "",
+    };
+    const second = mergeInventories([source("PageRank"), stored], [
+      { sourcePath: "raw/PageRank.md", items: [item("PageRank")] },
+    ]);
+
+    expect(second.newPages).toEqual([]);
+    expect(second.regenerate.map((r) => r.page.title)).toEqual(["PageRank-2"]);
+  });
+
+  it("does not read a number in a title as a uniqueness suffix", () => {
+    // "Q3-2024" is a title, not "Q3" plus a suffix. The inverse only applies
+    // to a base some page actually holds — which is what forced the suffix.
+    const work = mergeInventories(
+      [{ ...source("Q3-2024"), kind: "concept", path: "wiki/concepts/Q3-2024.md" }],
+      [{ sourcePath: "raw/a.md", items: [item("Q3")] }],
+    );
+
+    expect(work.newPages.map((p) => p.title)).toEqual(["Q3"]);
+  });
+
+  it("gives one page to two spellings §4 calls one name", () => {
+    // handleOf folds case; the stem's tag must fold it too, or a long title
+    // re-emitted in another casing takes a second permanent page.
+    const a = `${"Q".repeat(250)} Zebra`;
+    const b = `${"Q".repeat(250)} zebra`;
+
+    expect(handleOf(titleStem(a))).toBe(handleOf(titleStem(b)));
   });
 });

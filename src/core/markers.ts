@@ -45,13 +45,6 @@ export function normalizationSuspect(reasons: readonly string[]): string {
 }
 
 /**
- * §6.5's budget marker. Naming sources is optional because `tokens.ts` marks
- * a cut inside a prompt, where there is nothing to name; a page marks which
- * of its citers the model did not receive in full, so it never claims
- * grounding that code wrote into its citation block and the model never saw.
- * The names go *inside* the comment, like every other marker's payload.
- */
-/**
  * A citing source that reached the model with nothing in it.
  *
  * Its own marker rather than the budget one: §4 fixes that marker's wording to
@@ -63,6 +56,13 @@ export function sourceWithoutContent(sources: readonly string[]): string {
   return `<!-- source with no content: ${inComment(sources.join(", "))} -->`;
 }
 
+/**
+ * §6.5's budget marker. Naming sources is optional because `tokens.ts` marks
+ * a cut inside a prompt, where there is nothing to name; a page marks which
+ * of its citers the model did not receive in full, so it never claims
+ * grounding that code wrote into its citation block and the model never saw.
+ * The names go *inside* the comment, like every other marker's payload.
+ */
 export function truncatedForContextBudget(sources: readonly string[] = []): string {
   if (sources.length === 0) return "<!-- truncated for context budget -->";
   return `<!-- truncated for context budget: ${inComment(sources.join(", "))} -->`;
