@@ -88,15 +88,32 @@ export function mergeInventories(
   // Only a base some page actually holds counts, which is the thing that
   // forced the suffix. That keeps an ordinary title like "Q3-2024" from being
   // read as "Q3" plus one.
-  const held = new Set(pages.map((page) => handleOf(page.title)));
-  const bySuffixBase = new Map<string, PageMeta>();
+  // `pages` *and* `reserved`, which is exactly the set the namer claims from.
+  // Seeded from `pages` alone, a source page named earlier in this same run is
+  // invisible to the lookup while being visible to the namer — so deleting and
+  // re-adding a source leaves `X-2` and `X-3` standing for one concept, for
+  // ever, each holding one citer.
+  const held = new Set([
+    ...pages.map((page) => handleOf(page.title)),
+    ...[...(reserved ?? [])].map(handleOf),
+  ]);
+  const suffixed: { page: PageMeta; key: string; nth: number }[] = [];
   for (const candidate of candidates) {
-    const base = /^(.*)-\d+$/.exec(candidate.title)?.[1];
-    if (base === undefined || base === "") continue;
+    const match = /^(.*)-(\d+)$/.exec(candidate.title);
+    const base = match?.[1];
+    if (match === null || base === undefined || base === "") continue;
     const key = handleOf(base);
-    if (index.has(key) || !held.has(key) || bySuffixBase.has(key)) continue;
-    bySuffixBase.set(key, candidate);
+    if (index.has(key) || !held.has(key)) continue;
+    suffixed.push({ page: candidate, key, nth: Number(match[2]) });
   }
+  // Lowest suffix wins — the page named first, and therefore the one the
+  // others were named around. Ordered explicitly rather than by arrival, for
+  // the reason `buildTitleTable` sorts: a table that depends on the order
+  // pages were discovered in is a table two callers can disagree about. Code
+  // unit order would answer `X-10` before `X-2`.
+  suffixed.sort((a, b) => a.nth - b.nth || comparePaths(a.page.path, b.page.path));
+  const bySuffixBase = new Map<string, PageMeta>();
+  for (const { page, key } of suffixed) if (!bySuffixBase.has(key)) bySuffixBase.set(key, page);
   const ownerOf = new Map(owner);
   // Titles already spoken for by pages this merge does not own — source pages,
   // most importantly — can never be handed out as an alias. Canonicalized
@@ -232,10 +249,12 @@ function matchNew(item: InventoryItem, newIndex: ReadonlyMap<string, number>): n
   // page already on disk: §4 stores a title only as a filename, so a title
   // long enough to have been cut is only findable by the cut form.
   // Same four candidates as `matchExisting`, so the two lookups are one rule.
-  // `titleStem` cannot currently fire here — `newIndex` already keys the raw
-  // title's handle, so any repeat within a run matches on candidate 1 — and it
-  // is kept for that symmetry rather than for reach: a lookup that differs
-  // from its sibling is how this namespace fragmented twice already.
+  // `titleStem` is load-bearing here, not decorative: `newIndex` keys the
+  // bounded title's handle and the raw title's handle but never the unbounded
+  // *sanitized* one, so for a title long enough to be cut this is the only
+  // candidate that can match. Two items differing only where `sanitizeTitle`
+  // strips — a `#`, a doubled space — are one concept, and without it they
+  // become two pages in a single run.
   const candidates = [
     item.title.trim(),
     sanitizeTitle(item.title),

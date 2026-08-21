@@ -465,3 +465,66 @@ describe("naming and lookup are inverses", () => {
     expect(handleOf(titleStem(a))).toBe(handleOf(titleStem(b)));
   });
 });
+
+describe("the two lookups are one rule", () => {
+  it("merges two long titles that differ only where sanitizeTitle strips", () => {
+    // `newIndex` keys the bounded handle and the raw handle, never the
+    // unbounded sanitized one — so for a title long enough to be cut, this is
+    // the only candidate that can match, and both items are one concept.
+    const base = "A".repeat(300);
+    const work = mergeInventories([], [
+      { sourcePath: "raw/a.md", items: [item(`${base}#B`), item(`${base}B`)] },
+    ]);
+
+    expect(work.newPages).toHaveLength(1);
+  });
+
+  it("finds a page whose base is a source page named earlier in the same run", () => {
+    // The namer's `claimed` is pages ∪ reserved; the lookup's `held` has to be
+    // the same set, or a source page named this run is invisible to it and the
+    // concept takes a second name it will keep for ever.
+    const stored: PageMeta = {
+      path: "wiki/concepts/PageRank-2.md",
+      title: "PageRank-2",
+      kind: "concept",
+      aliases: [],
+      summary: "",
+      updated: "",
+    };
+    const work = mergeInventories(
+      [stored],
+      [{ sourcePath: "raw/a.md", items: [item("PageRank")] }],
+      [],
+      new Set(["PageRank"]),
+    );
+
+    expect(work.newPages).toEqual([]);
+    expect(work.regenerate.map((r) => r.page.title)).toEqual(["PageRank-2"]);
+  });
+
+  it("prefers the lowest suffix regardless of the order pages arrive in", () => {
+    const page = (title: string): PageMeta => ({
+      path: `wiki/concepts/${title}.md`,
+      title,
+      kind: "concept",
+      aliases: [],
+      summary: "",
+      updated: "",
+    });
+    const source: PageMeta = {
+      path: "wiki/sources/X.md",
+      title: "X",
+      kind: "source",
+      aliases: [],
+      summary: "",
+      updated: "",
+    };
+    const entry = [{ sourcePath: "raw/a.md", items: [item("X")] }];
+
+    const forward = mergeInventories([source, page("X-2"), page("X-10")], entry);
+    const reversed = mergeInventories([page("X-10"), page("X-2"), source], entry);
+
+    expect(forward.regenerate.map((r) => r.page.title)).toEqual(["X-2"]);
+    expect(reversed.regenerate.map((r) => r.page.title)).toEqual(["X-2"]);
+  });
+});
