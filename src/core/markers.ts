@@ -51,6 +51,18 @@ export function normalizationSuspect(reasons: readonly string[]): string {
  * grounding that code wrote into its citation block and the model never saw.
  * The names go *inside* the comment, like every other marker's payload.
  */
+/**
+ * A citing source that reached the model with nothing in it.
+ *
+ * Its own marker rather than the budget one: §4 fixes that marker's wording to
+ * "truncated for context budget", and an empty file under a 40,000-token
+ * budget was neither truncated nor over budget. One marker per problem, and
+ * this is a different problem.
+ */
+export function sourceWithoutContent(sources: readonly string[]): string {
+  return `<!-- source with no content: ${inComment(sources.join(", "))} -->`;
+}
+
 export function truncatedForContextBudget(sources: readonly string[] = []): string {
   if (sources.length === 0) return "<!-- truncated for context budget -->";
   return `<!-- truncated for context budget: ${inComment(sources.join(", "))} -->`;

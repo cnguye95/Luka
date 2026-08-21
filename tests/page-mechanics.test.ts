@@ -259,8 +259,12 @@ describe("the length bound is a filename rule, not a matching rule", () => {
 
   it("bounds the filename in bytes, because that is what the limit counts", () => {
     const title = uniqueTitle(sanitizeTitle("\u6587".repeat(300)), new Set());
+    const bytes = new TextEncoder().encode(title).length;
 
-    expect(new TextEncoder().encode(`${title}.md`).length).toBeLessThanOrEqual(255);
+    // Pins the bound itself, not just the host's 255: an assertion that only
+    // says "under 255" passes unchanged under the old 120-code-unit cap.
+    expect(bytes).toBeLessThanOrEqual(200);
+    expect(bytes).toBeGreaterThan(190);
   });
 
   it("never cuts between the halves of a surrogate pair", () => {
@@ -346,5 +350,47 @@ describe("a source with no body is not grounding", () => {
 
     expect(body).toContain("raw/empty.md");
     expect(body).not.toContain("raw/real.md");
+  });
+});
+
+describe("a page whose title was cut can still be found again", () => {
+  // §4 stores a page's title only as its filename, so a cut is the one place
+  // the namespace can lose identity. The stored key and the lookup key have to
+  // be the same rule — a name free in one table and taken in another is the
+  // defect handleOf exists to prevent, one axis over.
+  const long = (tail: string) => `${"A".repeat(260)} ${tail}`;
+
+  const compileOnce = (existing: PageMeta[], title: string) =>
+    mergeInventories(existing, [{ sourcePath: "raw/a.md", items: [item(title)] }]);
+
+  it("re-matches its own page instead of creating another every compile", () => {
+    const first = compileOnce([], long("Zebra"));
+    const created = first.newPages[0] as { title: string };
+    const stored: PageMeta = {
+      path: `wiki/concepts/${created.title}.md`,
+      title: created.title,
+      kind: "concept",
+      aliases: [],
+      summary: "",
+      updated: "",
+    };
+
+    const second = compileOnce([stored], long("Zebra"));
+
+    expect(second.newPages).toEqual([]);
+    expect(second.regenerate.map((r) => r.page.title)).toEqual([created.title]);
+  });
+
+  it("still keeps two different long titles apart", () => {
+    const zebra = (compileOnce([], long("Zebra")).newPages[0] as { title: string }).title;
+    const quokka = (compileOnce([], long("Quokka")).newPages[0] as { title: string }).title;
+
+    expect(zebra).not.toBe(quokka);
+  });
+
+  it("keeps a cut title inside the byte bound, tag and all", () => {
+    const title = uniqueTitle(sanitizeTitle("\u6587".repeat(300)), new Set());
+
+    expect(new TextEncoder().encode(`${title}.md`).length).toBeLessThanOrEqual(255);
   });
 });

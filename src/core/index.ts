@@ -168,16 +168,17 @@ export interface Core {
 
 export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
-  // §17's numbers are made safe once, here, so nothing downstream has to ask
-  // whether a hand-edited `data.json` can be acted on.
-  const safe: CoreDeps = { ...deps, settings: normalizeSettings(deps.settings) };
+  // `deps` is passed through, not copied. The plugin mutates its settings
+  // object in place and this runs once in `onload()`, so a snapshot here would
+  // freeze the API key as it stood at load — invariant 9 requires it be read
+  // when the call is made. Each run makes §17's numbers safe for itself.
   return {
-    compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(safe, options)),
+    compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(deps, options)),
     // Deliberately outside the lock: it does no work and writes nothing, so it
     // can answer while a compile runs — the same reason §9's pane is never
     // blocked by the lock. §8.1's flow does not use it; compile's own confirm
     // callback holds the lock across preview → confirm → work.
-    previewCompile: () => runPreview(safe),
+    previewCompile: () => runPreview(deps),
     get busyWith(): OperationName | null {
       return lock.busyWith;
     },
@@ -185,7 +186,8 @@ export function createCore(deps: CoreDeps): Core {
 }
 
 /** §5's `previewCompile`. Every step here reads; none of them writes. */
-async function runPreview(deps: CoreDeps): Promise<ScopePreview> {
+async function runPreview(input: CoreDeps): Promise<ScopePreview> {
+  const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const manifest = await loadManifest(deps.fs, deps.manifestPath);
   const discovery = await discover(deps.fs, manifest);
   const pages = await loadPageTable(deps.fs);
@@ -218,7 +220,11 @@ interface NormalizedSource {
   derivativePath: string | null;
 }
 
-async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<CompileResult> {
+async function runCompile(input: CoreDeps, options: CompileOptions): Promise<CompileResult> {
+  // One consistent settings state for the whole run, taken now rather than at
+  // `createCore`, so a key typed since load is seen and a key typed mid-run
+  // cannot change the rules underneath a compile already in flight.
+  const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const emit = options.onProgress ?? (() => {});
   const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
   const before = provider.stats().requests;

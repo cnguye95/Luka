@@ -10,7 +10,7 @@
 // afterward. Output is the page body prose with [[wikilinks]]."
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
-import { truncatedForContextBudget } from "../markers";
+import { sourceWithoutContent, truncatedForContextBudget } from "../markers";
 import { isPassthrough } from "../normalize/index";
 import type { LLMProvider } from "../provider/types";
 import { packUnderBudget } from "../tokens";
@@ -69,42 +69,44 @@ export async function generatePageBody(
   // set, so without this the page claims a source it was never grounded in —
   // and §6.5 makes that block the persistent citer record, so the false claim
   // outlives the run and feeds §7.1's graph.
-  const short = budgetShortfall(input);
-  if (short.length === 0) return body;
-  return `${body}\n\n${truncatedForContextBudget(short)}`;
+  const { overBudget, empty } = shortfall(input);
+  const notes = [
+    ...(overBudget.length === 0 ? [] : [truncatedForContextBudget(overBudget)]),
+    ...(empty.length === 0 ? [] : [sourceWithoutContent(empty)]),
+  ];
+  return notes.length === 0 ? body : `${body}\n\n${notes.join("\n")}`;
 }
 
 /**
- * The citing sources the model did not receive in full, in citer order.
+ * The citing sources the model did not receive in full, split by cause.
  *
- * Both classes count. A source the budget could not fit at all is obvious; a
- * source that was *truncated* is not, because §7.4 truncates the first item
- * rather than dropping it, so it stays in `items` while the model saw only
- * part of it — and at a small enough budget, none of it, since a budget too
- * small to hold the marker yields the bare marker. Naming only what was
- * dropped implies the rest arrived whole, which is the same false claim the
- * marker exists to prevent.
+ * Two classes are over budget. A source the budget could not fit at all is
+ * obvious; a source that was *truncated* is not, because §7.4 truncates the
+ * first item rather than dropping it, so it stays in `items` while the model
+ * saw only part of it — and at a small enough budget, none of it. Naming only
+ * what was dropped implies the rest arrived whole.
+ *
+ * A source that fitted but has no body is a different problem with the same
+ * consequence, and it gets its own marker: §4 fixes the budget marker's
+ * wording, and an empty file under a 40,000-token budget was neither
+ * truncated nor over budget.
  */
-function budgetShortfall(input: GeneratePageInput): string[] {
+function shortfall(input: GeneratePageInput): { overBudget: string[]; empty: string[] } {
   const head = renderHead(input);
   const packed = packUnderBudget(
     input.sources,
     (source) => renderSource(source),
     Math.max(0, input.contextBudgetTokens - estimateHead(head)),
   );
-  const short = input.sources.slice(packed.items.length).map((source) => source.path);
+  const overBudget = input.sources.slice(packed.items.length).map((source) => source.path);
   if (packed.truncated && packed.items.length > 0) {
     const cut = input.sources[packed.items.length - 1];
-    if (cut !== undefined) short.unshift(cut.path);
+    if (cut !== undefined) overBudget.unshift(cut.path);
   }
-  // A source that fitted but has no body is the same claim by a different
-  // route: the model received a header and nothing under it, while code writes
-  // the citation block from the full citer set either way.
-  for (const source of input.sources.slice(0, packed.items.length)) {
-    if (source.body.trim() === "" && !short.includes(source.path)) short.unshift(source.path);
-  }
-  return short.sort((a, b) => input.sources.findIndex((s) => s.path === a)
-    - input.sources.findIndex((s) => s.path === b));
+  const empty = input.sources
+    .filter((source) => source.body.trim() === "" && !overBudget.includes(source.path))
+    .map((source) => source.path);
+  return { overBudget, empty };
 }
 
 /**

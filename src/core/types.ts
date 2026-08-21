@@ -150,8 +150,13 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
     ...settings,
     contextBudgetTokens: positive(settings.contextBudgetTokens, DEFAULT_SETTINGS.contextBudgetTokens),
     requestTimeoutMs: positive(settings.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs),
-    compileConcurrency: clamp(settings.compileConcurrency, 1, MAX_COMPILE_CONCURRENCY, 1),
-    maxRetries: clamp(settings.maxRetries, 0, MAX_RETRY_BUDGET, 0),
+    compileConcurrency: clamp(
+      settings.compileConcurrency,
+      1,
+      MAX_COMPILE_CONCURRENCY,
+      DEFAULT_SETTINGS.compileConcurrency,
+    ),
+    maxRetries: clamp(settings.maxRetries, 0, MAX_RETRY_BUDGET, DEFAULT_SETTINGS.maxRetries),
   };
 }
 
@@ -170,6 +175,9 @@ function positive(value: number, fallback: number): number {
 }
 
 function clamp(value: number, low: number, high: number, fallback: number): number {
+  // The fallback is §17's default, not the range floor. `"compileConcurrency":
+  // "4"` — a quoted number, the likeliest hand-edit of all — is not finite, and
+  // falling back to the floor would silently answer 1 for it.
   if (!Number.isFinite(value)) return fallback;
   return Math.min(Math.max(Math.floor(value), low), high);
 }

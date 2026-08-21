@@ -22,6 +22,16 @@ export interface FsAdapter {
   exists(path: string): Promise<boolean>;
   /** Creates the folder and any missing parents; a no-op when it already exists. */
   mkdir(path: string): Promise<void>;
+  /**
+   * Removes the file at `path`, leaving the path free. Where the host offers a
+   * recovery path — a trash — that is what this uses; nothing here promises a
+   * permanent unlink, and §16 forbids Luka keeping its own backups.
+   *
+   * Deleting a path that does not exist **may reject**: the in-memory and Node
+   * adapters resolve, Obsidian's does not, and callers must not read one
+   * implementation's forgiveness as the contract. Every caller that cannot
+   * afford the throw checks `exists` first.
+   */
   delete(path: string): Promise<void>;
 }
 

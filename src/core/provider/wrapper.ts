@@ -33,10 +33,19 @@ export interface CreateProviderOptions {
 }
 
 export function createProvider(options: CreateProviderOptions): LLMProvider {
-  // §17's numbers are made safe here as well as in `createCore`, because this
-  // is a second public entry point. `normalizeSettings` is idempotent.
-  const settings = normalizeSettings(options.settings);
-  const raw = options.raw ?? createAnthropicProvider(options.http, settings);
+  /**
+   * Read at call time, never snapshotted.
+   *
+   * Invariant 9 says the API key is read from settings when the call is made,
+   * and the plugin mutates its settings object *in place* while `createCore`
+   * runs once in `onload()` — so a copy taken here makes a freshly typed key
+   * invisible until Obsidian reloads, with the settings tab and data.json both
+   * reporting success. §17's numbers are made safe on the way past;
+   * `normalizeSettings` is idempotent, so a caller that already normalized
+   * loses nothing.
+   */
+  const current = (): LukaSettings => normalizeSettings(options.settings);
+  const raw = options.raw ?? createAnthropicProvider(options.http, options.settings);
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const random = options.random ?? Math.random;
 
@@ -68,9 +77,6 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     }
   }
 
-  // Already floored and capped by `normalizeSettings`, which owns that rule
-  // for every §17 number rather than each consumer owning it for one.
-  const retryBudget = settings.maxRetries;
 
   async function attemptLoop(
     task: ProviderTask,
@@ -83,6 +89,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
   ): Promise<string> {
     let lastError: unknown;
 
+    const retryBudget = current().maxRetries;
     for (let attempt = 0; attempt <= retryBudget; attempt++) {
       if (attempt > 0) {
         await sleep(delayBeforeAttempt(attempt, lastError, random));
@@ -97,7 +104,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
           maxTokens,
           temperature,
           images,
-          timeoutMs: settings.requestTimeoutMs,
+          timeoutMs: current().requestTimeoutMs,
         });
       } catch (error) {
         // Anything that is not a typed non-retryable failure — a network
@@ -112,22 +119,28 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     const attempts = retryBudget + 1;
     throw new ProviderError(
       `${task}: giving up after ${attempts} attempt${attempts === 1 ? "" : "s"} — ${describe(lastError)}`,
+      // Every field of the underlying error is carried, for the same reason
+      // `withTask` carries them: a rebuild that drops one is a decision the
+      // wrapper stops being able to make. `describe(lastError)` above is the
+      // *clipped* message, so `vendorMessage` is the only unclipped copy left.
       {
         task,
         retryable: false,
         status: lastError instanceof ProviderError ? lastError.status : undefined,
+        retryAfterMs: lastError instanceof ProviderError ? lastError.retryAfterMs : undefined,
+        vendorMessage: lastError instanceof ProviderError ? lastError.vendorMessage : undefined,
       },
     );
   }
 
   async function complete(request: CompletionRequest): Promise<unknown> {
-    if (settings.apiKey.trim() === "") {
+    if (current().apiKey.trim() === "") {
       throw new ProviderError("API key is not set — add it in Luka's settings", {
         task: request.task,
         retryable: false,
       });
     }
-    const model = settings.models[request.task]?.trim();
+    const model = current().models[request.task]?.trim();
     if (model === undefined || model === "") {
       throw new ProviderError(`no model configured for task ${request.task}`, {
         task: request.task,

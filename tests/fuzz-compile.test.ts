@@ -187,7 +187,7 @@ function snapshot(fs: MemFs): Map<string, string> {
 }
 
 /** Luka's own markers must each be one well-formed comment on one line. */
-const MARKER = /<!--\s*(image not fetched|repo file omitted|normalization suspect|truncated for)/;
+const MARKER = /<!--\s*(image not fetched|repo file omitted|normalization suspect|truncated for|dataset columns omitted|source with no content)/;
 
 function markerBreakouts(fs: MemFs): string[] {
   const bad: string[] = [];

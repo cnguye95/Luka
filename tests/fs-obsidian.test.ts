@@ -113,3 +113,19 @@ describe("listing agrees with core's ordering", () => {
     expect(listed.map((e) => e.path)).toEqual(["raw/B.md", "raw/_x.md", "raw/a.md"]);
   });
 });
+
+describe("the trash fallback covers a host that rejects", () => {
+  it("still reaches the vault's own trash when trashSystem throws", async () => {
+    // Documented to answer false where there is no usable system trash, but a
+    // sandboxed host can reject instead — and a rejection that skipped the
+    // fallback would leave the file in place with no second attempt.
+    const adapter = new StubAdapter(new Map([["raw/paper.md", { kind: "file" }]]));
+    adapter.trashSystem = async () => {
+      throw new Error("EPERM: no system trash here");
+    };
+
+    await fsOver(adapter).delete("raw/paper.md");
+
+    expect(adapter.calls).toEqual(["trashLocal raw/paper.md"]);
+  });
+});

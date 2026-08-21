@@ -143,28 +143,64 @@ export function sanitizeTitle(title: string): string {
 }
 
 /**
- * Cut to a UTF-8 byte budget without splitting a code point.
+ * The filename stem a title becomes, before §4's uniqueness suffix.
+ *
+ * §6.5 looks a page up by the same rule that named it. §4 stores a page's
+ * title only as its filename, so if the stored name is cut and the lookup key
+ * is not, the two stop being the same rule: a page can never be found again,
+ * and every compile creates another one. That is what `handleOf` exists to
+ * prevent, on the other of §4's two namespace properties — how names compare,
+ * and how long a name may be. Both are answered here.
+ */
+export function titleStem(title: string): string {
+  return boundTitle(sanitizeTitle(title), MAX_TITLE_BYTES);
+}
+
+/**
+ * Cut to a UTF-8 byte budget without splitting a code point, tagging the cut.
  *
  * Counting code units against a byte limit lets a CJK title through at three
  * bytes each and still overflow the host. Cutting between the halves of a
  * surrogate pair is worse: the lone half encodes as U+FFFD, so the name on
- * disk and the title in memory stop being the same string and every table
- * keyed by it splits.
+ * disk and the title in memory stop being the same string.
+ *
+ * The tag is what keeps the stem a *function of the whole title*. Without it a
+ * cut is lossy in both directions: two different titles sharing a 200-byte
+ * opening take one stem, so §6.5 matches a new concept onto an older one's
+ * page — and the stem carries no evidence of which title made it, so it cannot
+ * be recomputed from a model reply to find that page again.
  */
 function boundTitle(title: string, budget: number): string {
+  if (!cutToBytes(title, budget).cut) return title;
+  const tag = `-${titleTag(title)}`;
+  const kept = cutToBytes(title, budget - tag.length).text.replace(/[.\s]+$/, "");
+  return kept === "" ? `Untitled${tag}` : `${kept}${tag}`;
+}
+
+function cutToBytes(title: string, budget: number): { text: string; cut: boolean } {
   let used = 0;
-  let cut = 0;
+  let at = 0;
   for (const point of title) {
     const code = point.codePointAt(0) as number;
     const size = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-    if (used + size > budget) break;
+    if (used + size > budget) return { text: title.slice(0, at), cut: true };
     used += size;
-    cut += point.length;
+    at += point.length;
   }
-  if (cut === title.length) return title;
-  // The cut can expose a trailing dot or space, which Windows refuses.
-  const bounded = title.slice(0, cut).replace(/[.\s]+$/, "");
-  return bounded === "" ? "Untitled" : bounded;
+  return { text: title, cut: false };
+}
+
+/**
+ * FNV-1a, 32 bits, base36. Not a security boundary and not a content hash:
+ * a collision costs one merged page, which is what *every* untagged cut costs.
+ */
+function titleTag(title: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < title.length; index++) {
+    hash ^= title.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36).padStart(7, "0");
 }
 
 /**

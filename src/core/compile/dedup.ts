@@ -13,7 +13,7 @@ import { comparePaths } from "../paths";
 import type { PageKind, PageMeta } from "../types";
 import type { InventoryItem } from "./inventory";
 import { buildTitleTable } from "./links";
-import { handleOf, sanitizeTitle, takenTitles, uniqueTitle } from "./pagetable";
+import { handleOf, sanitizeTitle, takenTitles, titleStem, uniqueTitle } from "./pagetable";
 
 export interface SourceInventoryEntry {
   sourcePath: string;
@@ -181,7 +181,15 @@ function matchExisting(
   index: ReadonlyMap<string, string>,
   byTitle: ReadonlyMap<string, PageMeta>,
 ): PageMeta | undefined {
-  const candidates = [item.title.trim(), sanitizeTitle(item.title), ...aliasesOf(item)];
+  // `titleStem` is the third candidate because it is the rule that *named* any
+  // page already on disk: §4 stores a title only as a filename, so a title
+  // long enough to have been cut is only findable by the cut form.
+  const candidates = [
+    item.title.trim(),
+    sanitizeTitle(item.title),
+    titleStem(item.title),
+    ...aliasesOf(item),
+  ];
   for (const candidate of candidates) {
     if (candidate === "") continue;
     const title = index.get(handleOf(candidate));
@@ -193,7 +201,15 @@ function matchExisting(
 }
 
 function matchNew(item: InventoryItem, newIndex: ReadonlyMap<string, number>): number | undefined {
-  const candidates = [item.title.trim(), sanitizeTitle(item.title), ...aliasesOf(item)];
+  // `titleStem` is the third candidate because it is the rule that *named* any
+  // page already on disk: §4 stores a title only as a filename, so a title
+  // long enough to have been cut is only findable by the cut form.
+  const candidates = [
+    item.title.trim(),
+    sanitizeTitle(item.title),
+    titleStem(item.title),
+    ...aliasesOf(item),
+  ];
   for (const candidate of candidates) {
     if (candidate === "") continue;
     const at = newIndex.get(handleOf(candidate));

@@ -14,7 +14,6 @@
 import { dump, load } from "js-yaml";
 
 export interface ParsedFrontmatter {
-  /** Whether the document opened with a `---` fence at all. */
   /** The document opens a `---` fence — not that this reader could parse it. */
   present: boolean;
   /**

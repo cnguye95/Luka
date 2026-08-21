@@ -79,7 +79,15 @@ export class ObsidianFs implements FsAdapter {
     // beyond recovery while `trashSystem`/`trashLocal` sat on the same adapter
     // unused. This is not §16's forbidden backup rotation; it is the
     // platform's own default.
-    if (await this.adapter.trashSystem(target)) return;
+    // `trashSystem` is documented to answer false where the platform has no
+    // usable trash, but a sandboxed host can reject instead — and a rejection
+    // that skipped the fallback would leave the file in place with no second
+    // attempt. Either way the answer is "try the vault's own trash".
+    try {
+      if (await this.adapter.trashSystem(target)) return;
+    } catch {
+      // Fall through: the vault's own .trash is the answer either way.
+    }
     await this.adapter.trashLocal(target);
   }
 }
