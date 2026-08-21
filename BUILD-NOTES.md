@@ -768,3 +768,35 @@ One test needed rewriting to be honest. The snapshot-cap case first tried to
 force more than 100 iterations with α = 0.999999 and got 62: a small dense graph
 converges in tens of steps whatever the damping, because the rate is set by the
 second eigenvalue and not by α alone. It uses a 60-node chain instead.
+
+### The PPR instrument
+
+`tests/fuzz-ppr.test.ts`, default `PPR_SEEDS=250` and well under a second; 2,000
+seeds runs in about half of one.
+
+PPR earns an instrument for the reason churn did: a transposed normalization, α
+and 1−α exchanged, or a mishandled zero column all produce numbers that look
+entirely plausible, and no hand-written fixture would flag them. The oracle is a
+*different algorithm* reaching the same equation — dense Gaussian elimination
+solving `(I − αA)v = (1−α)p` directly, written in the test file and sharing no
+code with the product. Two routes to one equation is the whole point; an
+instrument that derives its expectations from the code it checks cannot notice
+that code being wrong, which is what the provider matrix did before Wave 1
+caught it.
+
+Beyond agreement to 1e-6 it asserts: no score negative or non-finite; total mass
+never above 1; mass conserved *exactly* when the graph has no degree-0 node,
+which is the sharpest form of §7.2's zero-column rule; and bitwise-identical
+output when the node and edge lists are reversed, since `comparePaths` pins the
+arithmetic order and anything less than bitwise equality would be hiding a
+reordering.
+
+The generator gives each unordered pair an independent chance, so the sweep
+meets isolated nodes, trees, dense clusters and disconnected components without
+any of them being constructed on purpose. α is sampled across (0.05, 0.95)
+rather than fixed at §17's default.
+
+Mutation-validated before it was trusted, each named in the file header:
+row-normalized instead of column-normalized adjacency, α exchanged with 1−α, a
+degree-0 node retaining its own mass, and the L1 threshold loosened by 10⁴. All
+four turn it red.
