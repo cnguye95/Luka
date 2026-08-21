@@ -153,8 +153,34 @@ describe("demo corpus", { timeout: SLOW }, () => {
   it("writes a derivative for every converting format", async () => {
     await compile();
 
-    for (const derivative of ["raw/page.md", "raw/paper.md", "raw/runs.md", "raw/toy-repo.md"]) {
+    // raw/orphan.md is §6.1's vision-pass derivative. It appeared in this
+    // suite only as a *value* in the manifest-ownership map, which asserts
+    // what the entry says and not that a file stands there — so the vision
+    // pass could stop writing it, or write it empty, undetected.
+    for (const derivative of [
+      "raw/page.md",
+      "raw/paper.md",
+      "raw/runs.md",
+      "raw/toy-repo.md",
+      "raw/orphan.md",
+    ]) {
       expect(await fs.exists(derivative)).toBe(true);
+    }
+    expect((await read("raw/orphan.md")).trim()).not.toBe("");
+
+    // Every converting derivative carries the ownership key. Without
+    // `derived-from` a derivative is disowned by `derivativeOrigin` and
+    // re-extracts on every compile; only raw/page.md was ever checked for it.
+    for (const [derivative, origin] of [
+      ["raw/page.md", "raw/page.html"],
+      ["raw/paper.md", "raw/paper.pdf"],
+      ["raw/runs.md", "raw/runs.csv"],
+      ["raw/toy-repo.md", "raw/toy-repo"],
+      ["raw/orphan.md", "raw/orphan.png"],
+    ] as const) {
+      const text = await read(derivative);
+      expect(text, derivative).toContain(`derived-from: ${origin}`);
+      expect(text, derivative).toContain("ingested: '2026-08-19'");
     }
 
     const html = await read("raw/page.md");
@@ -309,6 +335,13 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(provider.callsFor("inventory")).toHaveLength(1);
     expect(provider.callsFor("inventory")[0]?.user).toContain("A new paragraph about ranking.");
     expect(await read("wiki/sources/note.md")).toContain("A demo source.");
+    // "and only the pages citing it" — the clause this test's name claims and
+    // nothing measured. Requeueing every entity page instead would be six
+    // extra Call B invocations against invariant 12, and every assertion above
+    // would still pass, because the settle-compile below regenerates nothing
+    // either way.
+    expect(result.modelCalls).toBe(3);
+    expect(result.pagesWritten).toBe(3);
 
     // And it settles.
     fs.resetCounters();
