@@ -151,7 +151,11 @@ async function hasDerivative(
 ): Promise<boolean> {
   // A passthrough source is its own readable markdown and owes no derivative.
   if (derivativePathFor(source.path, source.format) === null) return true;
-  return entry.derivative !== undefined && (await fs.exists(entry.derivative));
+  if (entry.derivative === undefined) return false;
+  // A *file*, not merely a path that resolves: a directory standing where the
+  // derivative was would otherwise read as one, leaving the source manifested
+  // with nothing readable behind it.
+  return (await fs.stat(entry.derivative))?.kind === "file";
 }
 
 /** A rename before its derivative decision is taken. */

@@ -496,7 +496,13 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // have to be re-inventoried to retry it.
   const blockedBy = new Map<string, string[]>();
 
-  const readable = new Map(ready.map((entry) => [entry.source.path, entry.readablePath]));
+  // Keyed off `normalized`, not `ready`: normalization is what creates a
+  // source's readable markdown, and a later failure of that source's *own*
+  // Call A does not un-write the derivative it produced. Narrowing this to the
+  // sources that also inventoried cleanly would refuse a body that is sitting
+  // on disk — and the citer set §6.5 hands Call B is about who cites the page,
+  // not about whose inventory succeeded.
+  const readable = new Map(normalized.map((entry) => [entry.source.path, entry.readablePath]));
   const bodies = new Map<string, string>();
   const bodyOfSource = async (path: string): Promise<string> => {
     const cached = bodies.get(path);

@@ -38,6 +38,11 @@ export function isPending(entry: ManifestEntry): boolean {
  * `.md`/`.txt`, else its derivative)" — the whole point of recording the
  * derivative. `null` for a source that is not readable: one whose cascade is
  * still pending, and so is not in the vault at all.
+ *
+ * This is the path the entry names, not a promise that a file stands there.
+ * A caller that is about to read it must still check — `stat().kind === "file"`
+ * — because a user can move, delete, or build a directory over a derivative
+ * between two compiles.
  */
 export function readablePathOf(path: string, entry: ManifestEntry): string | null {
   if (isPending(entry)) return null;

@@ -625,6 +625,43 @@ describe("a source that cannot be read costs a page one run, not its content", (
       expect(call.user).not.toMatch(/--- source: \S+ ---\n\n/);
     }
   });
+
+  it("still serves the body of a citer whose own inventory failed", async () => {
+    // Normalization is what creates readable markdown, and it succeeded — only
+    // this source's own Call A came back an error. The body is sitting on disk,
+    // and §6.5 wants "the full normalized bodies of *all* citing sources", so
+    // refusing it would cost the page a citer it still claims in its block.
+    //
+    // The source is a rename that had to re-extract, which is the case with no
+    // usable manifest entry to fall back on: the old entry is under the old
+    // path, and the new one is not written until the source completes.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking only.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+    expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/one.html", "raw/two.md"]);
+
+    // Removing the derivative is what makes the rename below re-extract rather
+    // than carry, so its entry records no pointer.
+    await fs.delete("raw/one.md");
+    await fs.move("raw/one.html", "raw/moved.html");
+
+    const provider = new StubProvider((request) =>
+      request.task === "inventory" && request.user.includes("Ranking here")
+        ? fatalError("inventory is down")
+        : replyFor(request),
+    );
+    const result = await core(fs, provider).compile();
+
+    // The re-extraction landed, so the body Call B needs is right there.
+    expect(fs.text("raw/moved.md")).toContain("Ranking here");
+    // One failure, the inventory call — not a second one for a page that could
+    // not be regenerated.
+    expect(result.failed.map((failure) => failure.path)).toEqual(["raw/moved.html"]);
+    expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/moved.html", "raw/two.md"]);
+    expect(fs.text("wiki/concepts/Ranking.md")).toContain("raw/moved.html");
+  });
 });
 
 describe("a failed derivative carry-over recovers", () => {

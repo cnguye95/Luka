@@ -704,6 +704,31 @@ describe("source discovery", () => {
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/photo.png"]);
   });
 
+  it("reprocesses when a folder has taken the derivative's place", async () => {
+    // Mere existence is not enough: a directory at the recorded path is not
+    // readable markdown, and reading it as the derivative would leave the
+    // source manifested with nothing behind it.
+    const fs = new MemFs({ "raw/page.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+
+    await fs.delete("raw/page.md");
+    await fs.mkdir("raw/page.md");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ modified: 1, unchanged: 0 });
+    // Re-extraction cannot land on a directory either, so it is reported —
+    // which is the point: the problem surfaces instead of going quiet.
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/page.html"]);
+
+    // Invariant 3 keeps the previous entry, so the source reads as modified
+    // again and keeps being reported — rather than going quiet with a
+    // directory standing in for its markdown.
+    expect(manifestOf(fs)["raw/page.html"]?.derivative).toBe("raw/page.md");
+    const third = await core(fs).instance.compile();
+    expect(third).toMatchObject({ modified: 1, unchanged: 0 });
+    expect(third.failed.map((failure) => failure.path)).toEqual(["raw/page.html"]);
+  });
+
   it("re-extracts once from a manifest written before ownership was recorded", async () => {
     // The old shape was `path -> hash`, which names no derivative — so a
     // converting source's cannot be located and §6.2's missing-derivative rule
