@@ -1,5 +1,5 @@
 import { Notice, Plugin, TFile } from "obsidian";
-import { BusyError, createCore, type Core, type ProgressEvent } from "../core/index";
+import { BusyError, HEALTH_PATH, createCore, type Core, type ProgressEvent } from "../core/index";
 import { askQuestion } from "./ask-modal";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../core/types";
 import { registerCommands } from "./commands";
@@ -81,6 +81,18 @@ export default class LukaPlugin extends Plugin {
       // Invariant 11: nothing was written, so the notice says only that it
       // failed — there is no partial note to point the user at.
       else notify(`ask failed — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** §8.1's "Health check". No model calls (§10), so no progress notice. */
+  async runHealthCheck(): Promise<void> {
+    try {
+      await this.core.healthCheck();
+      notify("health check written to wiki/_health.md.");
+      await this.app.workspace.openLinkText(HEALTH_PATH, "", true);
+    } catch (error) {
+      if (error instanceof BusyError) new Notice(error.message, 6000);
+      else notify(`health check failed — ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

@@ -211,6 +211,17 @@ Needs a real API key and a compiled vault. One question costs a few cents.
       it gains a `wiki/sources/` page, and the answer's own links now connect it
       into the graph.
 
+### M3 — Health check
+
+- [ ] **Luka: Health check** writes `wiki/_health.md` and opens it, with no
+      notice about model calls because it makes none.
+- [ ] It lists article candidates (links that resolve to nothing), orphan pages,
+      citations naming files the manifest does not know, filed answers with
+      their ages, and counts.
+- [ ] Running it twice in a row produces the same file; resolving a link by
+      writing the page it wanted removes it from the candidates on the next run.
+- [ ] Running it while a compile is in flight shows "Luka is busy: compile".
+
 ### M3 — Settings
 
 - [ ] The settings tab shows a **Retrieval** section: context budget, pages per

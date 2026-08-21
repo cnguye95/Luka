@@ -69,6 +69,7 @@ import {
 } from "./retrieve/pipeline";
 import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
 import { fileBack } from "./answer/fileback";
+import { healthCheck } from "./health";
 import {
   normalizeSettings,
   type GraphSnapshot,
@@ -93,6 +94,7 @@ export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types
 // outside core keep going through the one façade.
 export { readablePathOf } from "./manifest";
 export { FILED_ANSWERS_FOLDER } from "./answer/fileback";
+export { HEALTH_PATH } from "./health";
 export { parseTrace, writeTrace, type Trace } from "./answer/trace";
 export type { PPROptions, PPRResult } from "./graph/ppr";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
@@ -199,6 +201,13 @@ export interface Core {
    * the next compile picks it up through the normal path.
    */
   fileBack(answerPath: string): Promise<string>;
+  /**
+   * §10: rewrites `wiki/_health.md` from one vault scan, with no model
+   * calls. Holds the lock — it reads the whole vault and writes a file, so a
+   * compile running underneath it would make the report describe a vault that
+   * no longer exists.
+   */
+  healthCheck(): Promise<void>;
   /** §7.2's personalized PageRank over the current graph. */
   computePPR(
     seedPaths: readonly string[],
@@ -249,6 +258,14 @@ export function createCore(deps: CoreDeps): Core {
     ask: (question: string) => lock.run("ask", () => runAsk(deps, question)),
     // Outside the lock: no model calls, no compile, and §8.4 ends at a notice.
     fileBack: (answerPath: string) => fileBack(deps.fs, answerPath),
+    healthCheck: () =>
+      lock.run("health check", () =>
+        healthCheck({
+          fs: deps.fs,
+          manifestPath: deps.manifestPath,
+          ...(deps.now === undefined ? {} : { now: deps.now }),
+        }),
+      ),
     getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);

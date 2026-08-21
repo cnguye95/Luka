@@ -1191,3 +1191,37 @@ because §15's cut-order names it the fourth thing to go under schedule pressure
 
 Not exercised by the suite: it makes real calls by definition. Its CI-mode twin
 covers everything except the seeding source.
+
+### The health check (§10)
+
+`src/core/health.ts`, and the third command. Included in M3 on the user's
+decision — §5, §8.1 and §10 all specify it while §15 assigns it to no milestone,
+so it would otherwise never have been built.
+
+One vault scan, no model calls, rewritten wholesale. Every section answers a
+question that has a different right answer tomorrow, so a merged report would be
+half stale, and §16 forbids the LLM-driven alternative outright.
+
+- **Article candidates are ordered by how many pages want them**, not
+  alphabetically. §4 calls an unresolved link "a future-article signal, not an
+  error", so the section reads as a queue of things worth writing.
+- **Resolution goes through `buildTitleIndex`**, so a page reached by an alias
+  is not reported as missing — the same table §4 resolves every link with.
+- **An age comes from the answer's own `asked` frontmatter**, and reads
+  "unknown" when that is missing rather than falling back to a file mtime: §4
+  records when the *question* was asked, and a sync or a copy would make the
+  filesystem answer a different question.
+- **The report is `_`-prefixed**, so invariant 8 keeps it out of its own graph:
+  it links to many pages, and as a node those links would be edges and it would
+  list itself among the orphans.
+
+Six mutations, five red. The sixth is recorded rather than dressed up: the
+`Object.hasOwn` guard on the manifest lookup **cannot currently fire**, because
+the `raw/` prefix test runs first and no `Object.prototype` key starts with
+`raw/`. It is kept as the right idiom for the question it asks, and the test
+beside it now pins the behaviour that actually exists — a citation entry naming
+no raw file is ignored — instead of claiming coverage it does not have.
+
+The ordering test also had to be rewritten. Its first version used the names
+"Nowhere" and "Rare", where alphabetical order and demand order happen to agree,
+so it passed whichever sort was in place.
