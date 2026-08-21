@@ -16,7 +16,7 @@ import { loadPageTable } from "../src/core/compile/pagetable";
 import { decodeUtf8 } from "../src/core/hash";
 import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
-import { NodeFs } from "./helpers/nodefs";
+import { NodeFs } from "../eval/nodefs";
 import type { CompletionRequest } from "../src/core/provider/types";
 import { StubProvider, inventoryReply } from "./helpers/provider";
 

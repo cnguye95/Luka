@@ -1061,3 +1061,17 @@ maximum iterations, and ε.
   hand-edited file lives.
 
 Three README checklist items cover it, per §14.
+
+### The node adapters move to eval/ (§3)
+
+`tests/helpers/nodefs.ts` and `nodehttp.ts` are now `eval/nodefs.ts` and
+`eval/nodehttp.ts`, where §3's tree puts them: "eval and tests implement them
+over `node:fs` and `fetch`". Both files carried a comment promising this move
+once M3 built the harness that needs them; those comments now describe where
+they are rather than where they are going.
+
+Moved rather than copied. Two implementations of one adapter is exactly the
+divergence `fs-obsidian.ts`'s ordering bug came from, and the tests that use
+them import across the boundary instead. `tsconfig.json` and the lint script
+now include `eval/`, so the harness is typechecked and linted like everything
+else.

@@ -1,12 +1,13 @@
 import { constants } from "node:fs";
 import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { DirEntry, FileStat, FsAdapter } from "../../src/core/adapters";
-import { normalizePath } from "../../src/core/paths";
+import type { DirEntry, FileStat, FsAdapter } from "../src/core/adapters";
+import { normalizePath } from "../src/core/paths";
 
 /**
- * FsAdapter over node:fs, rooted at a vault directory. handoff.md §3 calls for
- * this in tests and eval; it also proves src/core runs with no Obsidian at all.
+ * FsAdapter over node:fs, rooted at a vault directory. handoff.md §3 puts it here — "eval and
+ * tests implement them over node:fs and fetch" — and it also proves src/core
+ * runs with no Obsidian at all.
  */
 export class NodeFs implements FsAdapter {
   writes = 0;

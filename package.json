@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "node scripts/check-boundary.mjs",
-    "lint": "eslint src scripts tests",
+    "lint": "eslint src scripts tests eval",
     "install:vault": "node scripts/install-vault.mjs"
   },
   "dependencies": {

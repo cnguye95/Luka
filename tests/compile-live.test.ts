@@ -13,8 +13,8 @@ import { parseCitationBlock } from "../src/core/compile/citations";
 import { loadPageTable } from "../src/core/compile/pagetable";
 import { createCore } from "../src/core/index";
 import { DEFAULT_SETTINGS } from "../src/core/types";
-import { NodeFs } from "./helpers/nodefs";
-import { NodeHttp } from "./helpers/nodehttp";
+import { NodeFs } from "../eval/nodefs";
+import { NodeHttp } from "../eval/nodehttp";
 import { StubHttp } from "./helpers/http";
 
 const key = process.env["ANTHROPIC_API_KEY"];

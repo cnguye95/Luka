@@ -1,9 +1,9 @@
-import type { HttpAdapter, HttpRequest, HttpResponse } from "../../src/core/adapters";
+import type { HttpAdapter, HttpRequest, HttpResponse } from "../src/core/adapters";
 
 /**
  * HttpAdapter over fetch with a real abort on timeout. Used by the env-gated
- * live provider test; moves to eval/ when M3 builds the harness handoff.md §3
- * assigns it to.
+ * live provider test and by the eval harness's `--live` mode; it lives here
+ * because §3 puts both node adapters in eval/.
  */
 export class NodeHttp implements HttpAdapter {
   async request(req: HttpRequest): Promise<HttpResponse> {

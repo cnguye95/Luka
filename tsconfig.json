@@ -16,5 +16,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "tests", "scripts", "esbuild.config.mjs", "vitest.config.mts"]
+  "include": ["src", "tests", "scripts", "eval", "esbuild.config.mjs", "vitest.config.mts"]
 }

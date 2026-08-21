@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { createProvider } from "../src/core/provider/wrapper";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../src/core/types";
-import { NodeHttp } from "./helpers/nodehttp";
+import { NodeHttp } from "../eval/nodehttp";
 
 const key = process.env["ANTHROPIC_API_KEY"];
 
