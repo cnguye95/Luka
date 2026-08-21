@@ -167,6 +167,14 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
     // at 1 it never teleports and at 0 it never walks — so a hand-edited value
     // falls back rather than being clamped to a boundary that means neither.
     pprAlpha: fraction(settings.pprAlpha, DEFAULT_SETTINGS.pprAlpha),
+    // §7.3's predicate and §7.4's caps. A node count or ratio below zero makes
+    // the predicate meaningless rather than merely strict, and a cap below one
+    // asks the model for nothing at all.
+    modeMinNodes: clamp(settings.modeMinNodes, 0, 1_000_000, DEFAULT_SETTINGS.modeMinNodes),
+    modeMinLinkRatio: atLeastZero(settings.modeMinLinkRatio, DEFAULT_SETTINGS.modeMinLinkRatio),
+    seedsCap: clamp(settings.seedsCap, 1, MAX_LIST_CAP, DEFAULT_SETTINGS.seedsCap),
+    keywordsCap: clamp(settings.keywordsCap, 1, MAX_LIST_CAP, DEFAULT_SETTINGS.keywordsCap),
+    assemblyCap: clamp(settings.assemblyCap, 1, MAX_LIST_CAP, DEFAULT_SETTINGS.assemblyCap),
     pprMaxIterations: clamp(
       settings.pprMaxIterations,
       1,
@@ -190,10 +198,22 @@ export const MAX_COMPILE_CONCURRENCY = 16;
  * iterates a converged vector.
  */
 export const MAX_PPR_ITERATIONS = 1000;
+/**
+ * A ceiling on the hand-editable list caps — seeds, keywords, and §7.4's K.
+ * Each one bounds work that is paid for per item: a seed is a PPR
+ * personalization entry, a keyword is a pass over every page's body, and K is a
+ * whole file read into the context budget.
+ */
+export const MAX_LIST_CAP = 100;
 
 /** Finite and above zero, or §17's default — there is no useful smaller value. */
 function positive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** Finite and not negative, or §17's default. */
+function atLeastZero(value: number, fallback: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 /** Finite and strictly between 0 and 1, or §17's default. */

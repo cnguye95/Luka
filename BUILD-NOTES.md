@@ -825,3 +825,41 @@ marking them fixed.
 Six mutations turn the tests red: removing the title-exact, alias-exact or
 summary tier; admitting blank keywords; making substring one-directional; and
 taking the maximum across keywords rather than the sum.
+
+### The retrieval pipeline (§7.3, §7.4)
+
+`src/core/retrieve/pipeline.ts` and `assemble.ts`.
+
+- **The index text comes from `renderIndex`**, the same renderer that writes
+  `wiki/_index.md`. Its doc comment asked for this in M2b: the seed call and the
+  file the user reads must never drift apart, so there is one renderer, not two.
+- **An invented seed path is dropped, not fatal.** Same treatment Call A gives a
+  malformed inventory item, for the same reason: one bad entry should not cost
+  the user the whole answer. A reply that is not an object at all still throws —
+  that is a broken call, not a bad item.
+- **Force-included seeds are additive and uncapped.** §17's caps bound what the
+  *model* may return; a page the question names outright is not a guess that
+  needs rationing.
+- **Mode A keeps a seed no keyword touches, at score 0.** The model chose it
+  from the index, which is a judgement the lexical score has no way to express.
+  Mode B drops a zero score, because there it means the walk never reached the
+  node at all.
+- **`modeOf` is inclusive on both thresholds** — §7.3 says "≥ 20 AND … ≥ 1.5" —
+  and answers Mode A for an empty vault rather than dividing by zero.
+- **Assembly consumes `packUnderBudget` rather than reimplementing §7.4 step 4.**
+  Whole nodes in rank order, stop at the first that does not fit, truncate the
+  first item rather than dropping it: all three are already that function's
+  contract, and §6.5's page assembly shares the definition of "fits" on purpose.
+  Only the first node can carry the truncation flag, because nothing else is
+  ever split.
+- **Reading stops at K, not just packing.** `packUnderBudget` caps the output
+  either way, so this is invisible in the result — and without it a large vault
+  is read end to end to assemble twelve pages. The test pins the read count, not
+  just the node count, because that is the only way the guard can fail.
+- A node that cannot be read, or has no body, is skipped rather than failing the
+  query: it was ranked from the page table or the manifest, either of which can
+  name a file the user has since moved.
+
+Eight mutations turn the tests red, including both mode thresholds made
+exclusive, invented paths admitted, a chosen seed dropped, ties left unbroken,
+and the truncation flag never set.
