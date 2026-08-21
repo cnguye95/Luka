@@ -163,3 +163,28 @@ Continues from the compiled vault above.
 - [ ] Editing a source rather than deleting it also opens the modal, and its
       "may be deleted" list is empty.
 - [ ] A compile whose diff is only additions opens no modal at all.
+
+### Deletion is recoverable
+
+The core is tested against in-memory and Node filesystems; only Obsidian's own
+adapter can show this.
+
+- [ ] After the deletion above, `wiki/sources/page.md` and `raw/page.md` are in
+      the system trash (or the vault's `.trash/` folder, if the platform has no
+      usable system trash) — **not** gone. This is what makes a mistaken
+      confirmation at the scope modal survivable, and it is the one thing the
+      modal's "pages that *may* be deleted" wording promises but code cannot
+      assert.
+- [ ] `.trash/`, if it appears, is not picked up as a source by a later
+      compile: the next **Luka: Compile** still reports "nothing to do".
+
+### Concurrency and settings
+
+- [ ] A markdown source with **two or more** reachable remote images localizes
+      all of them on its *first* compile, with no source failing. (§6.3 fetches
+      four at a time into a `raw/assets/` folder none of them has created yet.)
+- [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
+      `"contextBudgetTokens": 0`, `"compileConcurrency": "two"` or
+      `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
+      pages keep their grounding, and nothing is rewritten from an empty
+      context. Restore the file afterwards.
