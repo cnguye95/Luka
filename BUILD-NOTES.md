@@ -863,3 +863,37 @@ taking the maximum across keywords rather than the sum.
 Eight mutations turn the tests red, including both mode thresholds made
 exclusive, invented paths admitted, a chosen seed dropped, ties left unbroken,
 and the truncation flag never set.
+
+### The retrieval trace (§8.3)
+
+`src/core/answer/trace.ts`. §5 names `writeTrace` and `parseTrace` together
+because §9's pane replays a trace it did not write, so parsing has to recover
+exactly what rendering put down. That is `citations.ts`'s contract, and this
+reuses its discipline rather than inventing a second one: fences anchored to a
+line start, a required heading, the last block authoritative, every block
+stripped so regeneration cannot accumulate them, and a greedy link capture so a
+title containing `]` or `|` round-trips.
+
+- **An empty list renders `(none)`**, not an empty line, so a reader can tell
+  "nothing was seeded" from "the writer forgot the line".
+- **`top:` caps at ten while K is twelve.** §8.3 says so outright; the trace is a
+  summary of the ranking, not a second copy of the assembled set.
+- **A block whose `mode:` is unreadable yields no trace but is still stripped.**
+  Leaving it would let a second accumulate beside it — the failure
+  `citations.ts` was written to avoid.
+- **The heading requirement protects the user, not the parser.** A filed answer
+  note lives under `raw/` and is the user's to edit (§8.4), so `parseTrace` runs
+  over text nobody promised Luka wrote. A complete but heading-less fenced pair
+  is not this module's block, and recognizing it would strip the user's own
+  prose out of their own file.
+
+Six mutations turn the tests red: no ten-entry cap, scores not fixed to four
+decimals, first block winning over last, the heading requirement dropped, an
+unreadable mode accepted, and a non-greedy top-entry capture.
+
+Two of those needed the tests strengthened before they could fail. The greedy
+capture only matters for a label containing `]`, and the first version used one
+containing only `|`. The heading requirement is not what stops a stray fence
+pairing with the real block — the "no inner fence" rule already does that — so
+it needed the case where it is the only thing that matters: a complete fake
+block, which without it is stripped as though Luka had written it.
