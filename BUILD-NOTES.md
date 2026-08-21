@@ -1075,3 +1075,33 @@ divergence `fs-obsidian.ts`'s ordering bug came from, and the tests that use
 them import across the boundary instead. `tsconfig.json` and the lint script
 now include `eval/`, so the harness is typechecked and linted like everything
 else.
+
+### The eval fixture vault (§13)
+
+`eval/fixture-vault/`, committed: 18 hand-written sources under `raw/`, and 44
+wiki pages, a manifest and an index produced by running the **real** compile
+pipeline over them with a scripted provider and a frozen clock
+(`eval/build-fixture.ts`, `npm run eval:fixture`).
+
+- **Compiled, not imitated.** The manifest, the citation blocks and the index
+  are structurally exactly what compile writes, because compile wrote them. A
+  hand-authored manifest is a second implementation of a format, and the two
+  drift.
+- **No model call, ever** — not at build time and not at eval time. Rebuilding
+  is byte-identical, verified by copying the vault, rebuilding, and diffing.
+  That is what lets the fixture be regenerated without moving the floors in
+  `queries.yaml`.
+- **The manifest sits at the vault root**, not in a plugin folder: §13 wants it
+  committed *with* the vault, and the runner passes `manifestPath` explicitly.
+- **Mode B is reached with margin.** The first build landed at a ratio of
+  exactly 1.50 — passing §7.3's `≥ 1.5` by nothing at all, so any edit to the
+  corpus would flip the harness into Mode A and quietly stop measuring what it
+  claims to. The link structure was enriched to 1.71, and the guard test
+  asserts margin rather than passage.
+- **The corpus is shaped, not arbitrary**: two hubs, chains that make a two-hop
+  question meaningful, an alias-rich page, and the near-miss pair "Turing
+  machine" / "Turing test" that a ranker has to tell apart.
+
+One thing the bundling taught: `import.meta.dirname` is the *output* directory,
+because the script is bundled into `.eval-cache/` before it runs. Paths anchor
+to `process.cwd()`, which npm scripts set to the package root.

@@ -1,0 +1,8 @@
+---
+ingested: '2026-03-01'
+source-format: txt
+---
+Open questions
+
+Why did the stored-program idea take until 1945 when the pieces existed earlier?
+How much of Colossus was reinvented after the secrecy lifted?

@@ -1,0 +1,10 @@
+---
+ingested: '2026-03-01'
+source-format: txt
+---
+Reading
+
+- Turing 1936, On Computable Numbers
+- Church 1936, An Unsolvable Problem
+- Von Neumann 1945, First Draft of a Report on the EDVAC
+- Hopper 1952, The Education of a Computer

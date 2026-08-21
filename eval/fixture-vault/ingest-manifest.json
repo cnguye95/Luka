@@ -1,0 +1,59 @@
+{
+  "raw/bletchley-park.md": {
+    "hash": "7c0fd0f095451f16a84975c6b0dac145f04458c18612101fc06516272b9e1244"
+  },
+  "raw/church-turing-thesis.md": {
+    "hash": "1ebad9c72083e91065a63450afc2de66b6b3c3ddd36674d168e519a9994d2b67"
+  },
+  "raw/cobol.md": {
+    "hash": "19b87501f9a96a4412b5cfe82ab1e2fab93766c40e0dc6d0a15f60b832d9f450"
+  },
+  "raw/colossus.md": {
+    "hash": "eb0956a5943cba2b942ae6de5a8c19b20696eb686ad45dbc0effb2d0bd00250d"
+  },
+  "raw/compiler.md": {
+    "hash": "b6eaa4c9af3e1db72229a54188925b0e2ab284a59420f127fb93b5ff8aed6c68"
+  },
+  "raw/early-machines.csv": {
+    "hash": "db30f701e35bb37e7d78659859133710727ce2cc1cf5482bdc8e54a0a0afb3a5",
+    "derivative": "raw/early-machines.md"
+  },
+  "raw/edvac-report.md": {
+    "hash": "cc59634a59c909f7eba6ff080432f2a83aa03f35eabef5a89599d396379452fa"
+  },
+  "raw/eniac.md": {
+    "hash": "a0d9fef83a8d8634f3b355a89c2ee6b316ac8b8f2c1559a81be87183f4b40994"
+  },
+  "raw/garbage-collection.md": {
+    "hash": "8bb988d18fab5c1601704b9c2b243f60cd505b6796b8771b78384188fa0536a2"
+  },
+  "raw/hopper-biography.html": {
+    "hash": "ed1259ef0e67b52aa2111227bf1a1a52edd074f1d3c751310865129e3d40aa51",
+    "derivative": "raw/hopper-biography.md"
+  },
+  "raw/lambda-calculus.md": {
+    "hash": "18f1b7bd5de3290e62adaaeba4c457053863dc618649b564be4dd5d166c154fb"
+  },
+  "raw/notes-on-recursion.txt": {
+    "hash": "4a48163066e106ff94c3366ffd9105ba5849263692a0cb3f1dffcf49d2d241d1"
+  },
+  "raw/open-questions.txt": {
+    "hash": "10772e0e60f2cfd2dc489496f700afca838d43bcb04f242a396fab26b17a8907"
+  },
+  "raw/reading-list.txt": {
+    "hash": "75755da2ded408fb783627e1d9e2e3104b2ddfd745f020fb898902bdcf407410"
+  },
+  "raw/stored-program.md": {
+    "hash": "26400af939b19833c488780167e18d8ebfe1cedd72f1e3e32a9ee9d15e953fcc"
+  },
+  "raw/turing-machine.md": {
+    "hash": "88251c2ca89fbccdc4af5d57d265e3dc37690c60310350c43f00c6cc91c66e51"
+  },
+  "raw/turing-test.md": {
+    "hash": "9e16b27559a5620a71369e7eac311a0773d9503de006586b8f54b369c6073dae"
+  },
+  "raw/von-neumann-architecture.html": {
+    "hash": "7b7d928b10bdabc023f276db7cc85a6843cee8e2ee2b6d4c7193fe020c7b510e",
+    "derivative": "raw/von-neumann-architecture.md"
+  }
+}

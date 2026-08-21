@@ -1,0 +1,48 @@
+# Index
+## Sources
+- [[bletchley-park]] — Where Enigma and Lorenz were broken.
+- [[church-turing-thesis]] — The equivalence of two models of computation.
+- [[cobol]] — The verbose language still running payrolls.
+- [[colossus]] — The first programmable electronic digital computer.
+- [[compiler]] — An unremarkable source.
+- [[early-machines]] — A table of early machines.
+- [[edvac-report]] — The 1945 draft that named an architecture.
+- [[eniac]] — The 1945 valve machine and the women who programmed it.
+- [[garbage-collection]] — An unremarkable source.
+- [[hopper-biography]] — A biography of Grace Hopper.
+- [[lambda-calculus]] — Church's formalism and its descendants.
+- [[notes-on-recursion]] — Notes on recursion and the Y combinator.
+- [[open-questions]] — Two unresolved questions.
+- [[reading-list]] — A short reading list.
+- [[stored-program]] — Why a machine can be reprogrammed by loading bytes.
+- [[turing-machine]] — Turing's 1936 abstract machine and the halting problem.
+- [[turing-test]] — Turing's 1950 proposal for a conversational test.
+- [[von-neumann-architecture]] — The architecture and its bottleneck.
+## Entities
+- [[Alan Turing]] — Mathematician; defined computability.
+- [[Alonzo Church]] — Logician; devised the lambda calculus.
+- [[Bletchley Park]] — British codebreaking establishment.
+- [[COBOL-2]] — Deliberately readable business language. (aliases: Common Business-Oriented Language)
+- [[Colossus-2]] — Programmable electronic codebreaking machine.
+- [[EDSAC]] — Cambridge stored-program machine, 1949.
+- [[EDVAC]] — The machine the 1945 report described.
+- [[ENIAC-2]] — Decimal valve machine programmed by rewiring. (aliases: Electronic Numerical Integrator and Computer)
+- [[Grace Hopper]] — Wrote the first compiler and shaped COBOL. (aliases: Hopper, Rear Admiral Hopper)
+- [[Jean Bartik]] — One of ENIAC's first programmers.
+- [[John von Neumann]] — Wrote the EDVAC report.
+- [[Manchester Baby]] — First stored-program machine to run, 1948.
+- [[Tommy Flowers]] — Designed Colossus.
+## Concepts
+- [[Church-Turing thesis]] — Effective calculability equals Turing computability. (aliases: Church-Turing)
+- [[Compiler-2]] — Turns one notation into another.
+- [[Enigma]] — The German rotor cipher machine.
+- [[Halting problem]] — No machine decides whether every machine stops.
+- [[Lambda calculus]] — Computation as function application.
+- [[Lorenz cipher]] — The German teleprinter cipher Colossus attacked.
+- [[Recursion]] — A definition that refers to itself.
+- [[Stored-program computer]] — Program and data share one memory. (aliases: stored program)
+- [[Turing machine]] — Tape, head and a table of rules. (aliases: Turing machines)
+- [[Turing test]] — A judge tries to tell human from machine.
+- [[Vacuum tube]] — The switching element before the transistor. (aliases: valve)
+- [[Von Neumann architecture]] — Processor, control, shared memory, I/O.
+- [[Von Neumann bottleneck]] — One path between processor and memory.

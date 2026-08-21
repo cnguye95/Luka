@@ -1,0 +1,10 @@
+---
+ingested: '2026-03-01'
+source-format: txt
+---
+Recursion notes
+
+A function defined in terms of itself needs a base case and a step that gets
+closer to it. Lambda calculus makes recursion possible without naming anything,
+via the Y combinator, which is either beautiful or perverse depending on the
+morning.

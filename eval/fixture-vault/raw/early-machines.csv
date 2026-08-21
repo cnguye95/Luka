@@ -1,0 +1,7 @@
+name,year,country,binary,programmable
+Z3,1941,Germany,yes,limited
+Colossus,1943,UK,yes,limited
+ENIAC,1945,USA,no,rewiring
+Manchester Baby,1948,UK,yes,stored-program
+EDSAC,1949,UK,yes,stored-program
+UNIVAC I,1951,USA,yes,stored-program
