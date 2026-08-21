@@ -23,6 +23,7 @@ import { pngBytes } from "./helpers/images";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
 import { StubProvider, fatalError, inventoryReply } from "./helpers/provider";
+import { sha256Hex } from "../src/core/hash";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 const SEEDS = Number(process.env.CHURN_SEEDS ?? 120);
@@ -128,6 +129,109 @@ function derivativesOf(fs: MemFs): string[] {
     .sort();
 }
 
+const REPAIR_MARK = "HAND REPAIRED.";
+
+/**
+ * §6.2, checkable: "a derivative persists until the original changes", and
+ * M2e's failure policy adds "or until a run says it could not keep it".
+ *
+ * Convergence alone cannot see a violation — a destroyed repair settles as
+ * happily as a preserved one — and destroying a user's work silently is the
+ * shape of the worst defect either review round found. So each repaired
+ * derivative is pinned to the source that owns it, together with whether that
+ * source was unchanged going into the compile. Only the unchanged ones are the
+ * spec's business: an edited original is entitled to a fresh extraction.
+ */
+async function repairsBefore(fs: MemFs): Promise<Map<string, string>> {
+  const pinned = new Map<string, string>();
+  const manifest = manifestOf(fs);
+  for (const path of derivativesOf(fs)) {
+    const text = fs.text(path);
+    if (!text.includes(REPAIR_MARK)) continue;
+    const origin = /^derived-from: (.*)$/m.exec(text)?.[1]?.trim();
+    if (origin === undefined) continue;
+    const entry = manifest[origin];
+    const bytes = fs.files.get(origin);
+    if (entry?.derivative === undefined || bytes === undefined) continue;
+    // Only the file the entry actually names. A stale copy elsewhere may carry
+    // the same origin and the same marker, and it is not the source's markdown
+    // — pinning it would report a loss against a file that never held one.
+    if (entry.derivative !== path) continue;
+    // Unchanged going in: the manifest's hash still describes the file. An
+    // original that changed has no claim on its old derivative.
+    if (entry.hash === (await sha256Hex(bytes))) pinned.set(origin, path);
+  }
+  return pinned;
+}
+
+/**
+ * Every repaired derivative and the origin it names, whatever the manifest
+ * thinks. Cheaper and broader than the pinned map: it does not care whether the
+ * origin is on disk, which matters because the dangerous case is precisely an
+ * origin that is *not* — a source that has been renamed away still owns its
+ * markdown, and "the path it names does not resolve" is not evidence otherwise.
+ */
+function markedDerivatives(fs: MemFs): Map<string, string> {
+  const marked = new Map<string, string>();
+  for (const path of derivativesOf(fs)) {
+    const text = fs.text(path);
+    if (!text.includes(REPAIR_MARK)) continue;
+    const origin = /^derived-from: (.*)$/m.exec(text)?.[1]?.trim();
+    if (origin !== undefined) marked.set(path, origin);
+  }
+  return marked;
+}
+
+/**
+ * Repaired markdown that was taken over by a different source without a word.
+ *
+ * Losing the marker is allowed — an edited original re-extracts, and policy B
+ * re-extracts on a complication and reports it. What is never allowed is the
+ * file being rewritten *for somebody else*: that is another source's markdown
+ * being destroyed, which is what invariant 7 exists to prevent.
+ */
+function repairsStolen(
+  fs: MemFs,
+  marked: ReadonlyMap<string, string>,
+  result: CompileResult,
+): string[] {
+  if (result.reported.length > 0) return [];
+  const manifest = manifestOf(fs);
+  const stolen: string[] = [];
+  for (const [path, origin] of marked) {
+    if (!fs.files.has(path)) continue;
+    // The owner left the vault this run, so the sweep released its markdown and
+    // the path is free for whoever wants it — that is the sweep-before-extract
+    // ordering working, not a theft.
+    if (!Object.hasOwn(manifest, origin)) continue;
+    const text = fs.text(path);
+    if (text.includes(REPAIR_MARK)) continue;
+    const now = /^derived-from: (.*)$/m.exec(text)?.[1]?.trim();
+    if (now !== undefined && now !== origin) stolen.push(`${path}: ${origin} -> ${now}`);
+  }
+  return stolen;
+}
+
+/** Which pinned repairs this compile destroyed without saying anything. */
+function repairsLost(
+  fs: MemFs,
+  pinned: ReadonlyMap<string, string>,
+  result: CompileResult,
+): string[] {
+  if (result.reported.length > 0) return [];
+  const manifest = manifestOf(fs);
+  const lost: string[] = [];
+  for (const [origin] of pinned) {
+    const entry = manifest[origin];
+    // Gone from the manifest under this path means deleted or renamed — the
+    // sweep and the carry are covered by the convergence checks instead.
+    if (entry?.derivative === undefined) continue;
+    const now = fs.files.has(entry.derivative) ? fs.text(entry.derivative) : "";
+    if (!now.includes(REPAIR_MARK)) lost.push(`${origin} -> ${entry.derivative}`);
+  }
+  return lost;
+}
+
 function manifestOf(fs: MemFs): Record<string, ManifestEntry> {
   try {
     return JSON.parse(fs.text(MANIFEST)) as Record<string, ManifestEntry>;
@@ -184,7 +288,7 @@ async function churn(fs: MemFs, pick: () => number, round: number): Promise<void
       // Meddle with a derivative: repair it, adopt it, or remove it.
       const file = derivatives[Math.floor(pick() * derivatives.length)] as string;
       const how = pick();
-      if (how < 0.4) await fs.write(file, `${fs.text(file)}\nHAND REPAIRED.\n`);
+      if (how < 0.4) await fs.write(file, `${fs.text(file)}\n${REPAIR_MARK}\n`);
       else if (how < 0.7) await fs.delete(file);
       else await fs.write(file, fs.text(file).replace(/derived-from: .*/, "derived-from: raw/x.csv"));
     } else if (roll < 0.95) {
@@ -226,8 +330,24 @@ async function sweep(everywhere: boolean): Promise<string[]> {
           failPages = pick() < 0.5 ? 0.25 : 0;
           // An unguarded write can abort the run outright. That is the crash
           // window: nothing was committed, so the next run must redo the work.
+          const pinned = await repairsBefore(fs);
+          const marked = markedDerivatives(fs);
           try {
-            await core(fs);
+            const churned = await core(fs);
+            const stolen = repairsStolen(fs, marked, churned);
+            if (stolen.length > 0) {
+              failures.push(`seed ${seed}: repair taken over silently ${JSON.stringify(stolen)}`);
+            }
+            // A repair may be lost — policy B says so — but the run has to
+            // admit it. `failed` is not enough: that names work still owed,
+            // whereas losing a repair is work already destroyed.
+            const lost = repairsLost(fs, pinned, churned);
+            if (lost.length > 0) {
+              failures.push(
+                `seed ${seed}: repair destroyed silently ${JSON.stringify(lost)} — ` +
+                  JSON.stringify({ failed: churned.failed.map((e) => e.path) }),
+              );
+            }
           } catch {
             aborted += 1;
           }
@@ -236,7 +356,28 @@ async function sweep(everywhere: boolean): Promise<string[]> {
         // Then the trouble stops. Nothing else changes the vault.
         fs.failRate = 0;
         failPages = 0;
+        const pinnedNow = await repairsBefore(fs);
+        const markedNow = markedDerivatives(fs);
         const settling = await core(fs);
+        const stolenNow = repairsStolen(fs, markedNow, settling);
+        if (stolenNow.length > 0) {
+          failures.push(`seed ${seed}: settling compile took over ${JSON.stringify(stolenNow)}`);
+        }
+        const lostNow = repairsLost(fs, pinnedNow, settling);
+        if (lostNow.length > 0) {
+          failures.push(`seed ${seed}: settling compile destroyed ${JSON.stringify(lostNow)}`);
+          if (process.env.CHURN_DEBUG) {
+            console.log("RESULT", JSON.stringify({
+              added: settling.added, modified: settling.modified, renamed: settling.renamed,
+              deleted: settling.deleted, unchanged: settling.unchanged,
+              failed: settling.failed, reported: settling.reported,
+            }, null, 1));
+            console.log("MANIFEST", fs.text(MANIFEST));
+            for (const f of fs.paths().filter((x) => x.startsWith("raw/"))) {
+              console.log(">>", f, JSON.stringify(fs.text(f).slice(0, 110)));
+            }
+          }
+        }
         const after = [snapshot(fs, settling)];
         const results: CompileResult[] = [settling];
         for (let round = 0; round < 2; round += 1) {

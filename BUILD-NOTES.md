@@ -457,4 +457,13 @@ Scoped to the first round's fix diff, because in this project a fix has been the
 
 `tests/churn.test.ts`. Randomised vault churn with injected IO failures and page-generation failures, checking that the vault settles once the trouble stops and reports the same thing about itself every compile afterwards. It found five defects across the two review rounds, three of which no hand-written test in this repo would have caught, and it is the only check that exercises several renames interacting in one run.
 
+**What mutation testing showed about it.** Re-introducing each of the two regressions the second round removed, and re-running 1,500 seeds: the sweep passed both times. It checked *convergence*, and a destroyed hand repair converges perfectly — it is a stable state. The instrument was blind to the exact class of defect that round had just found, while citing it as evidence. Two checks were added as a result, both derived from §6.2 rather than from the bugs:
+
+- A repaired derivative whose original was **unchanged** going into the compile must still carry the repair afterwards, unless the run reported something. That is §6.2's "a derivative persists until the original changes", made checkable.
+- Repaired markdown must never be found afterwards **naming a different origin** with nothing reported — that is another source's markdown being taken over, which invariant 7 forbids outright.
+
+Both were shaken out against 1,500 seeds in each mode before being trusted: the first false-positived on stale copies sharing an origin (fixed by following the *recorded* derivative rather than any file carrying the marker), the second on a source deleted and its stem legitimately reused in the same run (excused by name).
+
+Known limit, stated rather than papered over: the generator still does not reach the precise shape of the reverted widening's worst case — a fallback rename whose re-extraction also fails, plus an unrelated source landing on the vacated stem in the same run. Both regressions are covered by tests written directly against them; the sweep covers the neighbourhood, not that triple.
+
 It is committed rather than kept as a scratch file for a §0 reason: the review rounds cited seed counts as evidence, and evidence nobody can re-run is not evidence. Default 120 seeds, a few seconds; `CHURN_SEEDS=1500` is what the rounds ran, and `CHURN_FIRST` pins a single seed for diagnosis. Every seed is deterministic — the generator and the fault injector share one seeded PRNG, so a failing seed reproduces exactly.
