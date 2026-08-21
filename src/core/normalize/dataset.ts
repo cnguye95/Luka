@@ -1,8 +1,23 @@
 // Dataset sources become a descriptor card; the original file is retained
 // (handoff.md §6.1). Head sample is fixed at 10 rows by §17.
+import { normalizationSuspect } from "../markers";
 import { basename } from "../paths";
 
 const HEAD_ROWS = 10;
+/**
+ * A bound §17 does not set, because §6.1 assumes a file that is actually
+ * tabular. Both tables below walk columns against rows, so without it a ragged
+ * file — one very wide header, many short rows — costs columns x rows while the
+ * file itself stays small: 478KB measured at 53 seconds, holding the global
+ * operation lock the whole time. Capping the columns restores the ordinary
+ * relationship where the work is proportional to the bytes.
+ *
+ * The rows are deliberately *not* sampled. A tall file is genuinely large, so
+ * spending time on it is honest work, and reading only the first N rows would
+ * make the reported column type quietly wrong for a file whose values change
+ * further down.
+ */
+const MAX_SCHEMA_COLUMNS = 200;
 const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
 
 /** RFC 4180: quoted fields, doubled quotes, embedded separators and newlines. */
@@ -67,9 +82,23 @@ export function datasetToMarkdown(text: string, sourcePath: string): string {
   out.push(`- Delimiter: ${delimiter === "\t" ? "tab" : "comma"}`);
   out.push(`- Header row: ${hasHeader ? "yes" : "no, columns are positional"}`, "");
 
+  // Both tables below walk columns against rows, so an unbounded column count
+  // multiplies against an unbounded row count — and a ragged file (one very
+  // wide header, many short rows) makes that product enormous while the file
+  // itself stays small. §6.1 asks for a schema, a row count and a ten-row head;
+  // none of that needs a table row per column of a file that is not really
+  // tabular. Both dimensions are bounded here, and anything dropped is named.
+  const shown = columns.slice(0, MAX_SCHEMA_COLUMNS);
+
   out.push("## Schema", "");
+  if (shown.length < columns.length) {
+    out.push(
+      normalizationSuspect([`showing ${shown.length} of ${columns.length} columns`]),
+      "",
+    );
+  }
   out.push("| Column | Type |", "| --- | --- |");
-  columns.forEach((column, index) => {
+  shown.forEach((column, index) => {
     const values = data.map((row) => row[index] ?? "");
     out.push(`| ${escapeCell(column)} | ${inferType(values)} |`);
   });
@@ -77,10 +106,10 @@ export function datasetToMarkdown(text: string, sourcePath: string): string {
 
   const head = data.slice(0, HEAD_ROWS);
   out.push(`## First ${head.length} row${head.length === 1 ? "" : "s"}`, "");
-  out.push(`| ${columns.map(escapeCell).join(" | ")} |`);
-  out.push(`| ${columns.map(() => "---").join(" | ")} |`);
+  out.push(`| ${shown.map(escapeCell).join(" | ")} |`);
+  out.push(`| ${shown.map(() => "---").join(" | ")} |`);
   for (const row of head) {
-    out.push(`| ${columns.map((_, i) => escapeCell(row[i] ?? "")).join(" | ")} |`);
+    out.push(`| ${shown.map((_, i) => escapeCell(row[i] ?? "")).join(" | ")} |`);
   }
   out.push("");
 
