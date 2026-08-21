@@ -968,3 +968,31 @@ failing still reported success and the `&&` chain ran on to `git commit`. Every
 gate run in this milestone had the same hole; the earlier steps were green, so
 it never showed. Gates now run under `set -o pipefail`, and the step-7 commit
 was amended rather than followed by a fix-up.
+
+### The follow-up round (§8.2)
+
+In `runAsk`, and deliberately self-contained: §15's cut-order names this the
+third thing to go under schedule pressure, so removing it is deleting one block
+rather than unpicking a seam.
+
+- **Lexical in both modes**, per §8.2 — the expansion scores the model's
+  `missing_information` strings over wiki pages with the same scorer Mode A
+  uses. No second seed call, no second PPR.
+- **A second synthesis only runs if something new was appended.** Nothing new
+  means the round would ask the same question of the same context and spend
+  invariant 12's third call on it. Two ways that happens: the missing strings
+  match nothing, or they match pages that turn out to have no text to read.
+- **Pages already assembled are excluded from the candidates.** Without that, a
+  missing string naming something already in context appends it a second time —
+  one page listed twice in `## Sources consulted`, and a model call spent
+  re-reading what the model has already seen.
+- **`followUpEnabled` takes §17's default for any non-boolean.** A string or a
+  number in `data.json` is not a decision either way, so it falls back rather
+  than taking JavaScript's idea of whether it is truthy.
+
+Six mutations turn the tests red. Three of them were green at first, and each
+exposed a path nothing exercised: the "nothing new" guard was never reached
+because the missing string matched no page at all; the already-assembled filter
+was never tested with a keyword that actually matches an assembled page
+(`ranking` shares no substring with `PageRank`); and the toggle had no
+normalization test. All three tests were rewritten rather than accepted.

@@ -167,6 +167,13 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
     // at 1 it never teleports and at 0 it never walks — so a hand-edited value
     // falls back rather than being clamped to a boundary that means neither.
     pprAlpha: fraction(settings.pprAlpha, DEFAULT_SETTINGS.pprAlpha),
+    // §8.2's follow-up toggle. A non-boolean in `data.json` is not a decision
+    // either way, so it takes §17's default rather than JavaScript's idea of
+    // whether the value is truthy.
+    followUpEnabled:
+      typeof settings.followUpEnabled === "boolean"
+        ? settings.followUpEnabled
+        : DEFAULT_SETTINGS.followUpEnabled,
     // §7.3's predicate and §7.4's caps. A node count or ratio below zero makes
     // the predicate meaningless rather than merely strict, and a cap below one
     // asks the model for nothing at all.

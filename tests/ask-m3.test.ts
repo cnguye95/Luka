@@ -259,3 +259,151 @@ describe("determinism", () => {
     expect(two.fs.text(second.path)).toBe(one.fs.text(first.path));
   });
 });
+
+describe("§8.2's follow-up round", () => {
+  /** A vault with a second page the first answer will say it is missing. */
+  async function twoPages(): Promise<MemFs> {
+    const fs = new MemFs({
+      "raw/one.md": "PageRank matters for ranking.\n",
+      "raw/two.md": "Convergence takes many iterations.\n",
+    });
+    const provider = new StubProvider((request) => {
+      if (request.task === "page-generation") return "Prose.";
+      if (request.user.includes("Convergence")) {
+        return inventoryReply("A note on convergence.", [
+          { title: "Convergence", kind: "concept", summary: "It settles." },
+        ]);
+      }
+      return inventoryReply("A note about ranking.", [
+        { title: "PageRank", kind: "concept", summary: "A walk." },
+      ]);
+    });
+    await core(fs, provider).compile();
+    return fs;
+  }
+
+  /** Seeds PageRank only; the first answer reports convergence missing. */
+  const expanding = (missingFirst: string[]) =>
+    new StubProvider((request, index) => {
+      if (request.task === "seed-selection") {
+        return { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+      }
+      if (request.task === "synthesis") {
+        return index === 0
+          ? answerWith("Ranking uses [[PageRank]].", missingFirst)
+          : answerWith("Ranking uses [[PageRank]] and [[Convergence]].");
+      }
+      return "";
+    });
+
+  it("appends the missing pages and synthesizes once more", async () => {
+    const fs = await twoPages();
+    const provider = expanding(["convergence"]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(result.round2).toBe(true);
+    expect(note).toContain("- round2: yes");
+    // The union: the page the seed call chose, and the one the follow-up found.
+    expect(note).toContain("[[PageRank]]");
+    expect(note).toContain("[[Convergence]]");
+    expect(note).toContain("- [[Convergence]]");
+  });
+
+  it("stays inside invariant 12's three calls, and never seeds twice", async () => {
+    const fs = await twoPages();
+    const provider = expanding(["convergence"]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    const stats = provider.stats();
+    // §8.2: "No second seed call, no second PPR."
+    expect(stats.byTask["seed-selection"]).toBe(1);
+    expect(stats.byTask.synthesis).toBe(2);
+    expect(result.modelCalls).toBe(3);
+    expect(result.modelCalls).toBeLessThanOrEqual(3);
+  });
+
+  it("runs at most one round, however much the second answer still misses", async () => {
+    const fs = await twoPages();
+    // Both replies report something missing; only one expansion may run.
+    const provider = new StubProvider((request) =>
+      request.task === "seed-selection"
+        ? { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] }
+        : answerWith("Partial answer about [[PageRank]].", ["convergence"]),
+    );
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(provider.stats().byTask.synthesis).toBe(2);
+    expect(result.modelCalls).toBe(3);
+  });
+
+  it("does not run when the first answer is complete", async () => {
+    const fs = await twoPages();
+    const provider = expanding([]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(result.round2).toBe(false);
+    expect(provider.stats().byTask.synthesis).toBe(1);
+    expect(fs.text(result.path)).toContain("- round2: no");
+  });
+
+  it("does not run when the setting is off", async () => {
+    const fs = await twoPages();
+    const provider = expanding(["convergence"]);
+
+    const result = await core(fs, provider, {
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    }).ask("How does ranking work?");
+
+    expect(result.round2).toBe(false);
+    expect(provider.stats().byTask.synthesis).toBe(1);
+  });
+
+  it("does not spend a call when the missing string matches nothing", async () => {
+    const fs = await twoPages();
+    const provider = expanding(["photosynthesis in deep sea vents"]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(result.round2).toBe(false);
+    expect(provider.stats().byTask.synthesis).toBe(1);
+  });
+
+  it("does not spend a call when the pages it found have nothing to read", async () => {
+    // A page can score on its frontmatter and still contribute no text. It
+    // ranks, so there are candidates, and then assembly finds nothing to
+    // append — a second synthesis here would ask the same question of the same
+    // context and spend invariant 12's third call on it.
+    const fs = await twoPages();
+    const page = fs.text("wiki/concepts/Convergence.md");
+    const frontmatter = page.slice(0, page.indexOf("---", 4) + 4);
+    await fs.write("wiki/concepts/Convergence.md", frontmatter);
+    // "settles" appears only in this page's summary, so it is the only
+    // candidate — the source pages mention convergence, but not this word.
+    const provider = expanding(["settles"]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(result.round2).toBe(false);
+    expect(provider.stats().byTask.synthesis).toBe(1);
+  });
+
+  it("does not append a page the first round already had", async () => {
+    // The missing string names something already in context. Appending it
+    // again would list one page twice in `## Sources consulted` and spend a
+    // model call re-reading what the model has already seen.
+    const fs = await twoPages();
+    // An exact title match on a page the first round already assembled.
+    const provider = expanding(["PageRank"]);
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    const listed = [...note.matchAll(/^- \[\[PageRank\]\]$/gm)];
+    expect(listed).toHaveLength(1);
+  });
+});

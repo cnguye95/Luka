@@ -197,3 +197,16 @@ describe("§7.2's numbers survive a hand-edited data.json", () => {
     ).toBe(DEFAULT_SETTINGS.pprMaxIterations);
   });
 });
+
+describe("§8.2's follow-up toggle survives a hand-edited data.json", () => {
+  it("takes §17's default for anything that is not a boolean", () => {
+    // A string or a number is not a decision either way, so it falls back
+    // rather than taking JavaScript's idea of whether it is truthy.
+    for (const value of ["false" as unknown as boolean, 0 as unknown as boolean, null as unknown as boolean]) {
+      expect(normalizeSettings({ ...DEFAULT_SETTINGS, followUpEnabled: value }).followUpEnabled).toBe(
+        DEFAULT_SETTINGS.followUpEnabled,
+      );
+    }
+    expect(normalizeSettings({ ...DEFAULT_SETTINGS, followUpEnabled: false }).followUpEnabled).toBe(false);
+  });
+});

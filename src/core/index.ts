@@ -322,7 +322,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
       ? rankModeB(graph, seedPaths, deps.settings)
       : await rankModeA(deps.fs, pages, seedPaths, chosen.keywords);
 
-  const assembly = await assemble(
+  let assembly = await assemble(
     deps.fs,
     ranked,
     deps.settings.contextBudgetTokens,
@@ -332,7 +332,42 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   // §7.4 step 5: "Zero seeds and zero lexical candidates → skip retrieval;
   // synthesis runs from model knowledge and the answer is labeled ungrounded."
   const grounded = assembly.nodes.length > 0;
-  const reply = await synthesize(provider, question, assembly.nodes);
+  let reply = await synthesize(provider, question, assembly.nodes);
+
+  // §8.2's follow-up round: "identical in both modes: lexical-score the
+  // missing-information strings (as keywords) over wiki pages, take the
+  // highest scorers not already assembled, append them under the remaining
+  // context budget, and synthesize again with the union. No second seed call,
+  // no second PPR. Hard cap: one follow-up round."
+  let round2 = false;
+  if (reply.missing.length > 0 && deps.settings.followUpEnabled) {
+    const already = new Set(assembly.nodes.map((node) => node.path));
+    // Wiki pages only, whatever the mode ranked — §8.2 says so, and it is why
+    // this uses the lexical scorer rather than re-running the walk.
+    const candidates = await rankModeA(
+      deps.fs,
+      pages.filter((page) => !already.has(page.path)),
+      [],
+      reply.missing,
+    );
+    const remaining = deps.settings.contextBudgetTokens - assembly.usedTokens;
+    const room = deps.settings.assemblyCap - assembly.nodes.length;
+
+    if (candidates.length > 0 && remaining > 0 && room > 0) {
+      const extra = await assemble(deps.fs, candidates, remaining, room);
+      // A second synthesis is only worth a model call if it has something new
+      // to read. Nothing appended means the round would ask the same question
+      // of the same context and spend invariant 12's third call on it.
+      if (extra.nodes.length > 0) {
+        assembly = {
+          nodes: [...assembly.nodes, ...extra.nodes],
+          usedTokens: assembly.usedTokens + extra.usedTokens,
+        };
+        reply = await synthesize(provider, question, assembly.nodes);
+        round2 = true;
+      }
+    }
+  }
 
   const asked = (deps.now ?? (() => new Date()))();
   const note = renderAnswerNote({
@@ -345,7 +380,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     trace: {
       mode,
       seeds: seedPaths,
-      round2: false,
+      round2,
       top: assembly.nodes.map((node) => ({
         label: node.kind === "raw" ? node.path : node.title,
         score: ranked.find((candidate) => candidate.path === node.path)?.score ?? 0,
@@ -361,7 +396,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     path,
     mode,
     grounded,
-    round2: false,
+    round2,
     modelCalls: provider.stats().requests - before,
   };
 }
