@@ -800,3 +800,28 @@ Mutation-validated before it was trusted, each named in the file header:
 row-normalized instead of column-normalized adjacency, α exchanged with 1−α, a
 degree-0 node retaining its own mass, and the L1 threshold loosened by 10⁴. All
 four turn it red.
+
+### The lexical scorer (§7.4 step 3)
+
+`src/core/retrieve/lexical.ts`. Weights 10/8/4/2/1 are module constants, §17
+marking them fixed.
+
+- **The signature takes keywords and nothing else.** §8.2's follow-up round
+  scores the model's `missing_information` strings with this same function, and
+  there is no question to score against there — a scorer that needed one would
+  have to be two scorers.
+- **A keyword takes its best tier and only that one.** Adding the tiers a match
+  satisfies would let an exact title also collect substring, summary and body
+  points for being its own substring, which ranks pages by verbosity rather than
+  by match quality.
+- **A blank keyword scores nothing.** The empty string is a substring of every
+  string; left in, it hands every page the body tier and flattens the ranking.
+- **Substring matching runs both directions** — the keyword inside the title and
+  the title inside the keyword. §7.4 says "title/alias substring" without naming
+  which contains which, and both readings are the same fuzzy-match intent.
+- Comparison goes through `handleOf`, so case and Unicode form fold exactly as
+  they do everywhere else in §4's namespace.
+
+Six mutations turn the tests red: removing the title-exact, alias-exact or
+summary tier; admitting blank keywords; making substring one-directional; and
+taking the maximum across keywords rather than the sum.
