@@ -143,9 +143,17 @@ async function hasDerivative(
   // A passthrough source is its own readable markdown and owes no derivative.
   if (derivativePathFor(source.path, source.format) === null) return true;
   if (entry.derivative === undefined) return false;
-  // Also settles the case of a directory built over the derivative: a folder
-  // names no origin, so it is not this source's markdown either.
-  return (await derivativeOrigin(fs, entry.derivative)) === source.path;
+  try {
+    // Also settles the case of a directory built over the derivative: a folder
+    // names no origin, so it is not this source's markdown either.
+    return (await derivativeOrigin(fs, entry.derivative)) === source.path;
+  } catch {
+    // The file could not be read at all. That answers neither "still ours" nor
+    // "not ours", and the two costs are wildly different: treating it as absent
+    // re-extracts over whatever is there — silently, since nothing failed — on
+    // an IO blip. The entry stands until something actually contradicts it.
+    return true;
+  }
 }
 
 /**

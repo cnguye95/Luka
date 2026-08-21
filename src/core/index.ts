@@ -444,8 +444,10 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // either. Leaving the carry out is how a renamed source became unreadable to
   // Call B while its citation block already named the new path.
   //
-  // `normalized` is applied second so a fallback's fresh extraction wins over
-  // the carry outcome it replaced.
+  // The two loops write disjoint keys — a rename is carried or falls back, and
+  // only a fallback reaches the worklist — so the order settles nothing today.
+  // It is written this way so that if the two ever do overlap, the fresher
+  // answer is the one that survives.
   const readable = new Map<string, string>();
   for (const outcome of carried.outcomes) {
     if (outcome.kind !== "carried") continue;
@@ -698,22 +700,16 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     const rename = outcome.rename;
     const to = rename.source.path;
 
-    // Blocked means the markdown is fine but a page this source owes is not, so
-    // the source has not completed and invariant 3 keeps it out of the manifest
-    // — on every path, with no special case. The old entry stays, which presents
-    // the same rename again and is what brings the page back. Nothing is swept
-    // either: the run has not finished with this source.
-    const blocked = blockedBy.get(to);
-    if (blocked !== undefined) {
-      // A carried rename never reached the worklist, so the loop below that
-      // reports blocked sources will not see it. Without this it would be
-      // withheld from the manifest correctly and silently, which is the one
-      // combination that leaves a user with no idea why nothing settles.
-      if (!settled.has(to)) failed.push({ path: to, reason: blocked.join("; ") });
-      continue;
-    }
-
     if (outcome.kind === "carried") {
+      // Deliberately not checking `blockedBy`. A page can fail while naming a
+      // carried rename among its citers, but §6.2 skips regeneration for a
+      // rename: this source contributed no inventory this run, so re-running it
+      // could not regenerate anything — the page comes back through whichever
+      // source actually queued it, which is un-manifested in the usual way.
+      // Withholding the entry here instead threw away a carry that had already
+      // moved the file, leaving the old entry naming a vacated path so the
+      // retry could not recognise its own work and re-extracted over §6.2's
+      // sanctioned repair.
       delete next[rename.from];
       next[to] = entryFor(rename.source.hash, outcome.derivative);
       // Forward completion: markdown the carry left behind at the old location,
@@ -733,16 +729,18 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       continue;
     }
 
-    // A fallback re-extracted instead of carrying. It is only settled if that
-    // extraction ran to completion; otherwise the old entry stays exactly where
-    // it is and the same rename is presented again next compile.
+    // A fallback re-extracted instead of carrying, and unlike a carry it *did*
+    // reach the worklist — so a page it owes failing means invariant 3 keeps it
+    // out of the manifest, exactly as for any other source in `ready`. Nothing
+    // is swept either: the run has not finished with it. Its `failed` entry
+    // comes from the `ready` loop below, so nothing is added here.
     //
-    // Not settled: the re-extraction failed too. The source is already in
-    // `failed` with the reason it failed and the promise of a retry, and M2d's
-    // rule holds — one problem, one notice. Saying separately that the carry
-    // fell back would describe a detour that led nowhere.
+    // Not settled at all means the re-extraction failed too, and that failure
+    // is already reported with the promise of a retry — M2d's rule holds, one
+    // problem, one notice. Saying separately that the carry fell back would
+    // describe a detour that led nowhere.
     const done = settled.get(to);
-    if (done === undefined) continue;
+    if (done === undefined || blockedBy.has(to)) continue;
 
     delete next[rename.from];
     const leftover = await removeSupersededDerivative(
@@ -939,14 +937,28 @@ async function readableFromManifest(
     if (format === null || !isPassthrough(format)) return null;
     // A file, checked — not assumed. Reading a path that has gone would throw
     // an error no caller classifies as an unreadable citer, and that blocks
-    // every *other* citer of the page rather than costing this one.
-    return (await fs.stat(path))?.kind === "file" ? path : null;
+    // every *other* citer of the page rather than costing this one. A `stat`
+    // that throws is answered the same way, for the same reason.
+    try {
+      return (await fs.stat(path))?.kind === "file" ? path : null;
+    } catch {
+      return null;
+    }
   }
 
   // Invariant II: `derived-from` is read as a guard before serving a file as a
   // source's content, never to locate one. Whatever sits at that path, it is
   // not this source's normalized body unless it still says so.
-  return (await derivativeOrigin(fs, entry.derivative)) === path ? entry.derivative : null;
+  //
+  // A read that fails is answered the same way as one that says "not ours": as
+  // "no readable markdown", which costs this page one run. Letting it escape
+  // would reach the caller as an unclassified error, which blocks every *other*
+  // citer of the page instead.
+  try {
+    return (await derivativeOrigin(fs, entry.derivative)) === path ? entry.derivative : null;
+  } catch {
+    return null;
+  }
 }
 
 /** `null` when the file does not exist, so a comparison can stand in for it. */

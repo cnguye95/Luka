@@ -856,25 +856,43 @@ describe("source discovery", () => {
     expect(second).toMatchObject({ renamed: 2, failed: [], reported: [] });
   });
 
-  it("re-uses a derivative whose own source has left the vault (invariant 7)", async () => {
-    // §2 invariant 7: "Derivative files Luka wrote are Luka's to rewrite." This
-    // file is one, and the source it names is nowhere — so it is not another
-    // source's markdown, it is abandoned. Refusing it would block that stem for
-    // every future source, permanently.
-    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+  it("never overwrites markdown that names an origin, whoever that origin is", async () => {
+    // The invariant-7 write guard admits exactly one thing: markdown naming an
+    // origin this source is allowed to supersede. "Naming an origin that does
+    // not resolve" is not the same claim — a renamed source's old path does not
+    // resolve either, and its markdown belongs to a source that is very much
+    // alive.
+    const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs).instance.compile();
-    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
 
-    // The source vanishes without compile ever seeing it go, so nothing sweeps
-    // its markdown: the manifest goes too.
-    await fs.delete("raw/a.html");
-    await fs.write(MANIFEST, JSON.stringify({}));
-
+    // The source moves onto a stem whose derivative location is taken, so the
+    // carry falls back and its markdown stays put, still naming the old path.
+    // An unrelated new source then lands on the stem the old path just freed.
+    await fs.write("raw/sub/a.md", "My own note.\n");
+    await fs.move("raw/a.html", "raw/sub/a.html");
     await fs.write("raw/a.csv", "x,y\n1,2\n");
+
     const second = await core(fs).instance.compile();
 
-    expect(second).toMatchObject({ added: 1, failed: [] });
-    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.csv");
+    // raw/a.md is the markdown of raw/sub/a.html, which is in the vault.
+    expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
+    expect(second.failed.map((failure) => failure.path)).toContain("raw/a.csv");
+  });
+
+  it("never overwrites a user's file that merely carries a derived-from key", async () => {
+    // §2 invariant 7's first clause — "Nothing else in a user-placed file is
+    // ever modified" — cannot rest on the assumption that only Luka writes that
+    // key. A copied or hand-edited file carries it too, and its origin may name
+    // nothing at all.
+    const fs = new MemFs({
+      "raw/a.md": "---\nderived-from: raw/gone.html\n---\nMY OWN NOTES.\n",
+      "raw/a.csv": "x,y\n1,2\n",
+    });
+    const result = await core(fs).instance.compile();
+
+    expect(fs.text("raw/a.md")).toContain("MY OWN NOTES.");
+    expect(result.failed.map((failure) => failure.path)).toEqual(["raw/a.csv"]);
   });
 
   it("still refuses a derivative whose source is merely unreadable this run", async () => {
@@ -888,6 +906,31 @@ describe("source discovery", () => {
 
     expect(second.failed.map((failure) => failure.path)).toEqual(["raw/a.csv"]);
     expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
+  });
+
+  it("does not reclassify a source because one read of its markdown failed", async () => {
+    // §6.2's missing-derivative test reads the file to ask whether it is still
+    // this source's. A read that fails answers neither yes nor no — treating it
+    // as "not ours" re-extracts over the file, silently, on an IO blip.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
+
+    let seen = 0;
+    const guarded = Object.create(fs) as MemFs;
+    guarded.read = async (path: string): Promise<Uint8Array> => {
+      if (path === "raw/a.md") {
+        seen += 1;
+        // The first read is discovery collecting sources; the second is the
+        // missing-derivative guard, which is the one under test.
+        if (seen === 2) throw new Error("EIO");
+      }
+      return MemFs.prototype.read.call(fs, path);
+    };
+
+    const second = await core(guarded).instance.compile();
+    expect(second).toMatchObject({ unchanged: 1, modified: 0, modelCalls: 0 });
+    expect(fs.text("raw/a.md")).toContain("HAND REPAIRED.");
   });
 
   it("reports rather than aborts when the commit-time cleanup cannot look", async () => {

@@ -718,10 +718,12 @@ describe("a carried rename is still a citer", () => {
 });
 
 describe("a re-extracted rename still owes its pages", () => {
-  it("does not manifest a carried rename whose page could not be written", async () => {
-    // Invariant 3, uniformly: the markdown is fine, but a page this source owes
-    // is not, so the source has not completed. Leaving its old entry in place
-    // presents the same rename again, which is what brings the page back.
+  it("keeps a carried rename whose page could not be written", async () => {
+    // A carried rename owes no page. §6.2 skips regeneration for it, so it
+    // contributed no inventory this run and re-running it could not regenerate
+    // anything — blocking it would only throw away a carry that succeeded and
+    // re-extract over the repair next compile. The page comes back through the
+    // source that actually queued it, which is un-manifested as usual.
     const fs = new MemFs({
       "raw/one.html": "<p>Ranking here.</p>\n",
       "raw/two.md": "Ranking too.\n",
@@ -738,15 +740,47 @@ describe("a re-extracted rename still owes its pages", () => {
       request.task === "page-generation" ? fatalError("generation is down") : replyFor(request),
     );
     const second = await core(fs, failing).compile();
-    expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/one.html");
-    // Not manifested at either path: the old entry still stands, so §6.2 sees
-    // the same rename next compile.
-    expect(Object.keys(manifestOf(fs))).toContain("raw/one.html");
-    expect(Object.keys(manifestOf(fs))).not.toContain("raw/sub/one.html");
+    // The source that queued the page is the one that has to come back for it.
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/two.md"]);
+    // The rename is recorded, so its markdown is not carried a second time.
+    expect(manifestOf(fs)["raw/sub/one.html"]?.derivative).toBe("raw/sub/one.md");
+    expect(Object.keys(manifestOf(fs))).not.toContain("raw/one.html");
 
     const third = await core(fs, new StubProvider(replyFor)).compile();
-    expect(third).toMatchObject({ renamed: 1, failed: [] });
-    expect(Object.keys(manifestOf(fs))).toContain("raw/sub/one.html");
+    expect(third).toMatchObject({ renamed: 0, modified: 1, failed: [] });
+    expect(third.pagesWritten).toBeGreaterThan(0);
+
+    const fourth = await core(fs, new StubProvider(replyFor)).compile();
+    expect(fourth).toMatchObject({ noop: true });
+  });
+
+  it("keeps the repair of a carried rename whose page failed", async () => {
+    // The regression this rule replaced: withholding the entry left it naming a
+    // path the carry had already vacated, so the retry could not recognise its
+    // own work and re-extracted over §6.2's sanctioned repair.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking too.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+    await fs.write("raw/one.md", `${fs.text("raw/one.md")}\nHAND REPAIRED.\n`);
+
+    await fs.move("raw/one.html", "raw/sub/one.html");
+    await fs.write(
+      "raw/two.md",
+      "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking, edited.\n",
+    );
+
+    const failing = new StubProvider((request) =>
+      request.task === "page-generation" ? fatalError("generation is down") : replyFor(request),
+    );
+    await core(fs, failing).compile();
+    expect(fs.text("raw/sub/one.md")).toContain("HAND REPAIRED.");
+
+    // The retry finishes the page without touching the markdown again.
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third.failed).toEqual([]);
+    expect(fs.text("raw/sub/one.md")).toContain("HAND REPAIRED.");
 
     const fourth = await core(fs, new StubProvider(replyFor)).compile();
     expect(fourth).toMatchObject({ noop: true });

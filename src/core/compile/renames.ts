@@ -17,10 +17,16 @@
 //        — never a withdrawal, a restore, or a rollback.
 //
 //  (II)  OWNERSHIP IS RECORDED, NEVER INFERRED. The manifest entry names the
-//        derivative. `derived-from` is read only as a guard — immediately
-//        before a destructive write, or before serving a file as a source's
-//        content — never to locate a file. No `<stem>.md` is ever derived from
-//        a source path to decide whose a file is.
+//        derivative. `derived-from` is read only as a guard — before a
+//        destructive write, before serving a file as a source's content, or to
+//        ask whether the file an entry names is still that source's — never to
+//        locate a file.
+//        One exception, deliberate and narrow: when the entry's file is gone
+//        and a rename has to decide whether markdown at the destination is the
+//        same file the user moved, `carryOne` computes `<stem>.md` and reads
+//        the origin there. Nothing else may. It is the price of letting a user
+//        move a source and its markdown together, it is logged, and it can only
+//        ever adopt a file naming the source's own old path.
 //
 //  (III) NO DESTRUCTIVE OPERATION IS EVER A FAILURE-RECOVERY STEP. Deletes and
 //        overwrites happen only to complete an outcome that succeeded, always
@@ -37,17 +43,24 @@
 //        manifest was never written. This is why the carry repoints before it
 //        moves, and why the guard accepts either end of a rename at the
 //        location the entry records: both failure windows re-run to a carry.
-//        The one window that does not is a crash after the move and before the
-//        commit — the file is then at the destination naming the new path,
-//        which is indistinguishable from an earlier occupant's markdown, so the
-//        retry re-extracts. That costs a model call and a hand repair, never
-//        the source. It is the one place this list is a "so far as it can" and
-//        not an absolute, and it is logged as such.
+//        The one window that does not is between the move and the commit: the
+//        file is then at the destination naming the new path, which is
+//        indistinguishable from an earlier occupant's markdown, so the retry
+//        re-extracts. That costs a model call and a hand repair, never the
+//        source. It is the one place this list is a "so far as it can" and not
+//        an absolute, and it is logged as such.
+//        A crash is not the only way in. Anything that ends a run after the
+//        carry without committing reaches it, so nothing in a *completed* run
+//        may withhold a carried rename's entry — an earlier fix did exactly
+//        that for a blocked page and turned this window into a routine
+//        outcome. Whatever the carry completed, the commit records.
 //
 //  (V)   CLASSIFICATION HAPPENS ONCE. The four rules and rename identity are
 //        decided at discovery, against the vault as this run found it. Carry
-//        outcomes are decided here, in one deterministic pass ordered by the
-//        new path, before any extraction begins.
+//        outcomes are decided here, in one deterministic pass before any
+//        extraction begins — dependency first, so a rename vacating a location
+//        is decided before the one that wants it, with the new path's order as
+//        the tiebreak. Each rename is decided exactly once either way.
 //
 //  (VI)  READABLE MARKDOWN IS LOOKED UP, NEVER RECONSTRUCTED. A source's body
 //        comes from this run's outcomes, or else from the file its entry names.
@@ -139,8 +152,8 @@ export async function carryRenames(
     if (target !== null) {
       // Free the destination first. Two renames each wanting the other's
       // location leave `pending` set, so the recursion stops and both are
-      // decided against the vault as it stands — deterministically, one of them
-      // falling back.
+      // decided against the vault as it stands — which for a straight swap
+      // means both fall back and re-extract. Deterministic, and it converges.
       const blocker = occupies.get(target);
       if (blocker !== undefined && blocker.source.path !== to) await carry(blocker, pending);
     }
