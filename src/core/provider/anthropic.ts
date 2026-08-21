@@ -27,10 +27,12 @@ export function createAnthropicProvider(http: HttpAdapter, settings: LukaSetting
       });
 
       if (response.status < 200 || response.status >= 300) {
-        throw new ProviderError(errorMessage(response.status, response.bytes), {
+        const detail = errorDetail(response.status, response.bytes);
+        throw new ProviderError(detail.message, {
           status: response.status,
           retryable: response.status === 429 || response.status >= 500,
           retryAfterMs: parseRetryAfter(response.headers["retry-after"]),
+          ...(detail.vendor === undefined ? {} : { vendorMessage: detail.vendor }),
         });
       }
 
@@ -91,16 +93,23 @@ function extractText(bytes: Uint8Array): string {
  */
 const MAX_VENDOR_MESSAGE = 500;
 
-function errorMessage(status: number, bytes: Uint8Array): string {
+/**
+ * The clipped message a Notice may show, and the vendor's own text beside it.
+ * They are separate because §11's temperature re-run decides on the vendor's
+ * wording: a vendor that enumerates unsupported parameters at length would
+ * otherwise push the word past the clip and fail every compile.
+ */
+function errorDetail(status: number, bytes: Uint8Array): { message: string; vendor?: string } {
   try {
     const parsed = JSON.parse(decodeUtf8(bytes)) as { error?: { message?: unknown } };
     if (typeof parsed.error?.message === "string" && parsed.error.message !== "") {
-      return `HTTP ${status}: ${clip(parsed.error.message)}`;
+      const vendor = parsed.error.message;
+      return { message: `HTTP ${status}: ${clip(vendor)}`, vendor };
     }
   } catch {
     // Not a JSON error body; the status alone will have to do.
   }
-  return `HTTP ${status}`;
+  return { message: `HTTP ${status}` };
 }
 
 /** One line, bounded, with the truncation visible rather than silent. */

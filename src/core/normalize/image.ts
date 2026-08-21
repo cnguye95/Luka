@@ -95,11 +95,18 @@ export async function localizeInlineImages(
       hadRemoteImage = true;
       if (decision.keep) {
         localized += 1;
-        // A replacement *function*, never a replacement string: `assetPath`
-        // ends in an extension lifted out of the URL, so `$&`, `` $` `` and
-        // `$'` in it would expand against the match and leave the prose
-        // pointing somewhere the bytes are not.
-        return full.replace(url, () => decision.assetPath);
+        // Spliced at the offset of the link target, never by `String.replace`.
+        // A string pattern takes the first occurrence in the whole match,
+        // which is the alt text whenever the alt repeats the URL — that
+        // rewrites prose the user owns and leaves the link remote, and since
+        // the passthrough hash is taken after the write the file then reads as
+        // unchanged for ever. A replacement string would additionally expand
+        // `$&`, `` $` `` and `$'` out of the extension lifted from the URL.
+        // `![` + alt + `]` is the shortest possible prefix, so the search
+        // starts past it and cannot land inside the alt.
+        const at = full.indexOf(url, alt.length + 3);
+        if (at === -1) return full;
+        return full.slice(0, at) + decision.assetPath + full.slice(at + url.length);
       }
       pending.push(imageNotFetched(imageName(url, alt), decision.reason));
       return full;

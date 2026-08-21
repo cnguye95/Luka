@@ -211,18 +211,25 @@ function delayBeforeAttempt(attempt: number, lastError: unknown, random: () => n
 }
 
 function isTemperatureRejection(error: unknown): boolean {
+  // The vendor's own text, not the clipped copy `message` carries for notices.
   return (
-    error instanceof ProviderError && error.status === 400 && /temperature/i.test(error.message)
+    error instanceof ProviderError &&
+    error.status === 400 &&
+    /temperature/i.test(error.vendorMessage ?? error.message)
   );
 }
 
 function withTask(error: ProviderError, task: ProviderTask): ProviderError {
   if (error.task !== undefined) return error;
+  // Every field is carried, `vendorMessage` included: this rebuild sits
+  // between the transport and the temperature re-run, so anything dropped here
+  // is a decision the wrapper stops being able to make.
   return new ProviderError(`${task}: ${error.message}`, {
     task,
     retryable: error.retryable,
     status: error.status,
     retryAfterMs: error.retryAfterMs,
+    vendorMessage: error.vendorMessage,
   });
 }
 

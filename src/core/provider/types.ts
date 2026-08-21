@@ -58,6 +58,13 @@ export class ProviderError extends Error {
   readonly retryable: boolean;
   /** Parsed from a Retry-After header, when the vendor sent one. */
   readonly retryAfterMs?: number;
+  /**
+   * The vendor's message as it arrived, unclipped. `message` carries a clipped
+   * copy of it because that one reaches a Notice; anything that *decides* on
+   * the text reads this instead, so a bound written for display cannot change
+   * behaviour.
+   */
+  readonly vendorMessage?: string;
 
   constructor(
     message: string,
@@ -66,6 +73,7 @@ export class ProviderError extends Error {
       task?: ProviderTask;
       status?: number;
       retryAfterMs?: number;
+      vendorMessage?: string;
     },
   ) {
     super(message);
@@ -74,6 +82,7 @@ export class ProviderError extends Error {
     if (options.task !== undefined) this.task = options.task;
     if (options.status !== undefined) this.status = options.status;
     if (options.retryAfterMs !== undefined) this.retryAfterMs = options.retryAfterMs;
+    if (options.vendorMessage !== undefined) this.vendorMessage = options.vendorMessage;
   }
 }
 
