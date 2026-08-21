@@ -32,6 +32,7 @@ import { buildTitleIndex } from "./compile/links";
 import { mergeInventories, type SourceInventoryEntry } from "./compile/dedup";
 import { INDEX_PATH, renderIndex } from "./compile/indexdoc";
 import {
+  handleOf,
   loadPageTable,
   pagePathForKind,
   sanitizeTitle,
@@ -405,7 +406,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     const inventory = inventories.get(entry.source.path) ?? { sourceSummary: "", items: [] };
     const existing = pages.find((page) => page.source === entry.source.path);
     const title = existing?.title ?? uniqueTitle(sanitizeTitle(stem(entry.source.path)), claimed);
-    claimed.add(title.toLowerCase());
+    claimed.add(handleOf(title));
 
     toWrite.push({
       path: existing?.path ?? pagePathForKind(title, "source"),

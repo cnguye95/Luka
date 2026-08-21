@@ -26,8 +26,29 @@ const KINDS: readonly PageKind[] = ["source", "entity", "concept"];
 // and a filename carrying it is rejected outright rather than merely ugly.
 // eslint-disable-next-line no-control-regex
 const FORBIDDEN = /[[\]#^|\\/:?*"<>\u0000-\u001f]/g;
-/** Comfortably inside the 255-byte component limit, with room for `-2.md`. */
-const MAX_TITLE_LENGTH = 120;
+/**
+ * §4's filename lives in one filesystem component, which ext4 and APFS bound
+ * at 255 *bytes* — not code units. Room here for `.md`, for a `-10` suffix,
+ * and slack for hosts that are stricter.
+ */
+const MAX_TITLE_BYTES = 200;
+
+/**
+ * The one spelling rule for §4's namespace.
+ *
+ * §4 gives titles and aliases one namespace, so every table keyed by a name —
+ * the page table, the link index, the merge's owner map — has to agree on when
+ * two strings are the same name. Built separately they drift, and a name free
+ * in one table and taken in another is a page written over another page.
+ *
+ * NFC because a vault on APFS hands back NFD for a name Luka wrote as NFC and
+ * the two are one file. `toLowerCase` rather than `toLocaleLowerCase` so the
+ * answer does not depend on the host's locale. Normalized last, because
+ * lowercasing can itself denormalize.
+ */
+export function handleOf(value: string): string {
+  return value.trim().toLowerCase().normalize("NFC");
+}
 
 export async function loadPageTable(fs: FsAdapter): Promise<PageMeta[]> {
   const pages: PageMeta[] = [];
@@ -100,6 +121,11 @@ function toStringArray(value: unknown): string[] {
 /**
  * §4: strip `[]#^|\/:`, and strip leading `_` and `.` so no generated page can
  * collide with the infrastructure prefix.
+ *
+ * Length is deliberately not bounded here. §6.5 matches each inventory item
+ * against the page table through this function, so a bound makes it a lossy
+ * key: two concepts that share a long opening become one page. The filename
+ * bound belongs to `uniqueTitle`, which is what actually names a file.
  */
 export function sanitizeTitle(title: string): string {
   const cleaned = title
@@ -110,30 +136,60 @@ export function sanitizeTitle(title: string): string {
     .replace(FORBIDDEN, "")
     .replace(/\s+/g, " ")
     .replace(/^[_.\s]+/, "")
-    .trim();
-  if (cleaned === "") return "Untitled";
-  // Trailing dots and spaces are also refused by Windows, and trimming the
-  // length can expose one.
-  const bounded = cleaned.slice(0, MAX_TITLE_LENGTH).replace(/[.\s]+$/, "");
+    .trim()
+    // Trailing dots and spaces are also refused by Windows.
+    .replace(/[.\s]+$/, "");
+  return cleaned === "" ? "Untitled" : cleaned;
+}
+
+/**
+ * Cut to a UTF-8 byte budget without splitting a code point.
+ *
+ * Counting code units against a byte limit lets a CJK title through at three
+ * bytes each and still overflow the host. Cutting between the halves of a
+ * surrogate pair is worse: the lone half encodes as U+FFFD, so the name on
+ * disk and the title in memory stop being the same string and every table
+ * keyed by it splits.
+ */
+function boundTitle(title: string, budget: number): string {
+  let used = 0;
+  let cut = 0;
+  for (const point of title) {
+    const code = point.codePointAt(0) as number;
+    const size = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+    if (used + size > budget) break;
+    used += size;
+    cut += point.length;
+  }
+  if (cut === title.length) return title;
+  // The cut can expose a trailing dot or space, which Windows refuses.
+  const bounded = title.slice(0, cut).replace(/[.\s]+$/, "");
   return bounded === "" ? "Untitled" : bounded;
 }
 
 /**
- * §4: unique across `wiki/`. Compared case-insensitively because the vault may
- * sit on a case-insensitive filesystem, where two titles differing only in case
- * would be one file. Collisions take the §8.4 suffix idiom: `-2`, `-3`, …
+ * §4: unique across `wiki/`, and short enough for the host to accept.
+ *
+ * This is the function that turns a title into a filename, so it owns both
+ * rules. Compared by handle, because the vault may sit on a case-insensitive
+ * or normalization-insensitive filesystem where two spellings are one file.
+ * Collisions take the §8.4 suffix idiom: `-2`, `-3`, … — and the suffix is
+ * counted inside the bound, not appended past it.
  */
 export function uniqueTitle(title: string, taken: ReadonlySet<string>): string {
-  if (!taken.has(title.toLowerCase())) return title;
+  const bounded = boundTitle(title, MAX_TITLE_BYTES);
+  if (!taken.has(handleOf(bounded))) return bounded;
   for (let suffix = 2; ; suffix++) {
-    const candidate = `${title}-${suffix}`;
-    if (!taken.has(candidate.toLowerCase())) return candidate;
+    // `-<n>` is ASCII, so its byte length is its length.
+    const tag = `-${suffix}`;
+    const candidate = boundTitle(title, MAX_TITLE_BYTES - tag.length) + tag;
+    if (!taken.has(handleOf(candidate))) return candidate;
   }
 }
 
 /** The set `uniqueTitle` expects, built from an existing table. */
 export function takenTitles(pages: readonly PageMeta[]): Set<string> {
-  return new Set(pages.map((page) => page.title.toLowerCase()));
+  return new Set(pages.map((page) => handleOf(page.title)));
 }
 
 /** Vault path for a page of a given kind, per §4's folder layout. */

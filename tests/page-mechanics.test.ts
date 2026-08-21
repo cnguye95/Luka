@@ -92,8 +92,8 @@ describe("a title the filesystem will refuse never reaches the write", () => {
     }
   });
 
-  it("bounds the length so the filename fits", () => {
-    expect(sanitizeTitle("x".repeat(400)).length).toBeLessThanOrEqual(200);
+  it("leaves length alone, because §6.5 matches through this function", () => {
+    expect(sanitizeTitle("x".repeat(400))).toBe("x".repeat(400));
   });
 
   it("folds a title to one Unicode form, so two spellings are one page", () => {
@@ -199,12 +199,14 @@ describe("a handle has one canonical form", () => {
   });
 
   it("does not hand a second page an alias another page holds in another form", () => {
+    // The item matches "Coffee House" by title, then offers as an alias the
+    // other spelling of a name the Café page already holds.
     const work = mergeInventories(
-      [page(NFC)],
+      [page(NFC), page("Coffee House")],
       [{ sourcePath: "raw/a.md", items: [item("Coffee House", [NFD])] }],
     );
 
-    expect(work.newPages.find((p) => p.title === "Coffee House")?.aliases).toEqual([]);
+    expect(work.regenerate.find((r) => r.page.title === "Coffee House")?.newAliases).toEqual([]);
   });
 
   it("counts a title as taken whichever form it is spelled in", () => {
