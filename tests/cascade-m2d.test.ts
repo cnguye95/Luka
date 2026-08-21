@@ -512,12 +512,12 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     expect(manifestOf(fs)).toEqual({});
   });
 
-  it("reports, once, a leftover copy it could not remove after a carry", async () => {
-    // The source and its derivative both moved into a subfolder, leaving a copy
-    // of the derivative at the old location. The rename itself completed, so
-    // its entry records the new derivative — there is no second pointer to keep
-    // the leftover reachable, and inventing one would be exactly the extra
-    // failure state this design removes. The user is told instead.
+  it("re-extracts rather than guessing between two candidate files", async () => {
+    // The user copied the derivative into the new folder and left the original
+    // where it was, so two files now name this source. The entry names one of
+    // them; the copy is at the location the new path expects. Nothing can
+    // establish which is current, so nothing is adopted — the source re-extracts
+    // and says so, and the file the entry named is cleaned up behind it.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
 
@@ -527,16 +527,13 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     const guarded = refusingToDelete(fs, "raw/a.md");
     const second = await core(guarded, new StubProvider(replyFor)).compile();
 
-    // A clean rename — the derivative travelled, at no model call — but the
-    // stale copy stays.
-    expect(second).toMatchObject({ renamed: 1, modified: 0, modelCalls: 0, failed: [] });
-    // Nothing is owed, so nothing is `failed`: the compile is done with this
-    // source. The leftover is reported.
-    expect(second.reported.map((entry) => entry.path)).toEqual(["raw/sub/a.html"]);
-    expect(second.reported[0]?.reason).toContain("raw/a.md");
+    expect(second).toMatchObject({ renamed: 1, modified: 0, failed: [] });
+    // Two notices, two facts: what it had to redo, and what it could not tidy.
+    const reasons = second.reported.map((entry) => entry.reason).join(" | ");
+    expect(second.reported.every((entry) => entry.path === "raw/sub/a.html")).toBe(true);
+    expect(reasons).toContain("re-extracted");
+    expect(reasons).toContain("raw/a.md");
     expect(fs.text("raw/sub/a.md")).toContain("derived-from: raw/sub/a.html");
-    // The old key is gone: the rename completed, and re-presenting a completed
-    // rename to keep chasing a file is the compensation this replaces.
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/sub/a.html"]);
 
     // And the vault settles rather than re-reporting every compile.
@@ -668,7 +665,93 @@ describe("a source that cannot be read costs a page one run, not its content", (
   });
 });
 
+describe("a carried rename is still a citer", () => {
+  it("serves its body to a page regenerating in the same run", async () => {
+    // The carry deliberately skips normalization, so this source produces no
+    // outcome this run; and its new path is an addition, so the manifest as
+    // found does not name it either. It is still a citer, and §6.5 wants the
+    // bodies of *all* citing sources — the markdown is sitting at the path the
+    // carry just moved it to.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking too.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+    expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/one.html", "raw/two.md"]);
+
+    // One source carries (a clean folder move); the other is edited, which is
+    // what requeues the page they share.
+    await fs.move("raw/one.html", "raw/sub/one.html");
+    await fs.write(
+      "raw/two.md",
+      "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking, edited.\n",
+    );
+
+    const second = await core(fs, new StubProvider(replyFor)).compile();
+
+    expect(second).toMatchObject({ renamed: 1, modified: 1, failed: [] });
+    // The page regenerated from both citers, under their current paths.
+    expect(fs.text("wiki/concepts/Ranking.md")).toContain("raw/sub/one.html");
+    expect(fs.text("wiki/concepts/Ranking.md")).not.toContain("raw/one.html");
+    expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/sub/one.html", "raw/two.md"]);
+  });
+
+  it("serves its body when the carry did not move the file either", async () => {
+    // Extension-only: the derivative never moves, so nothing about the carry is
+    // visible on disk — and the lookup must still find it.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking too.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    await fs.move("raw/one.html", "raw/one.htm");
+    await fs.write(
+      "raw/two.md",
+      "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking, edited.\n",
+    );
+
+    const second = await core(fs, new StubProvider(replyFor)).compile();
+    expect(second).toMatchObject({ renamed: 1, failed: [] });
+    expect(fs.text("wiki/concepts/Ranking.md")).toContain("raw/one.htm");
+  });
+});
+
 describe("a re-extracted rename still owes its pages", () => {
+  it("does not manifest a carried rename whose page could not be written", async () => {
+    // Invariant 3, uniformly: the markdown is fine, but a page this source owes
+    // is not, so the source has not completed. Leaving its old entry in place
+    // presents the same rename again, which is what brings the page back.
+    const fs = new MemFs({
+      "raw/one.html": "<p>Ranking here.</p>\n",
+      "raw/two.md": "Ranking too.\n",
+    });
+    await core(fs, new StubProvider(replyFor)).compile();
+
+    await fs.move("raw/one.html", "raw/sub/one.html");
+    await fs.write(
+      "raw/two.md",
+      "---\ningested: '2026-08-20'\nsource-format: md\n---\nRanking, edited.\n",
+    );
+
+    const failing = new StubProvider((request) =>
+      request.task === "page-generation" ? fatalError("generation is down") : replyFor(request),
+    );
+    const second = await core(fs, failing).compile();
+    expect(second.failed.map((failure) => failure.path)).toContain("raw/sub/one.html");
+    // Not manifested at either path: the old entry still stands, so §6.2 sees
+    // the same rename next compile.
+    expect(Object.keys(manifestOf(fs))).toContain("raw/one.html");
+    expect(Object.keys(manifestOf(fs))).not.toContain("raw/sub/one.html");
+
+    const third = await core(fs, new StubProvider(replyFor)).compile();
+    expect(third).toMatchObject({ renamed: 1, failed: [] });
+    expect(Object.keys(manifestOf(fs))).toContain("raw/sub/one.html");
+
+    const fourth = await core(fs, new StubProvider(replyFor)).compile();
+    expect(fourth).toMatchObject({ noop: true });
+  });
+
   it("comes back for a page whose generation failed", async () => {
     // The regression the single commit point closes. The rename could not carry,
     // so the source re-extracted and its markdown is fine — but a page it owed
@@ -692,11 +775,14 @@ describe("a re-extracted rename still owes its pages", () => {
     expect(second.failed.map((failure) => failure.path)).toContain("raw/moved.html");
     // The markdown did land — this is not a normalization failure.
     expect(fs.text("raw/moved.md")).toContain("Ranking here");
-    expect(manifestOf(fs)["raw/moved.html"]).toEqual({ hash: expect.any(String) });
+    // Invariant 3: not manifested at either path, so the old entry presents the
+    // same rename again and the page comes back with it.
+    expect(Object.keys(manifestOf(fs))).toContain("raw/one.html");
+    expect(Object.keys(manifestOf(fs))).not.toContain("raw/moved.html");
 
-    // So the next compile reads it as modified and finishes the job.
+    // So the next compile takes it up again and finishes the job.
     const third = await core(fs, new StubProvider(replyFor)).compile();
-    expect(third).toMatchObject({ modified: 1, failed: [] });
+    expect(third).toMatchObject({ renamed: 1, failed: [] });
     expect(third.pagesWritten).toBeGreaterThan(0);
     expect(manifestOf(fs)["raw/moved.html"]?.derivative).toBe("raw/moved.md");
 
@@ -705,13 +791,12 @@ describe("a re-extracted rename still owes its pages", () => {
   });
 });
 
-describe("a failed derivative carry-over recovers", () => {
-  it("rolls back and re-presents the rename so the next compile finishes it", async () => {
-    // The move lands but the repoint write fails, so the move is undone and the
-    // vault is left exactly as it was found. A file that moved without being
-    // repointed would be unreachable — the sweep looks for it at the old
-    // location — and deleting it as a "recovery" would destroy the repair the
-    // retry exists to preserve.
+describe("a failed derivative carry-over leaves the manifest alone", () => {
+  it("re-presents the rename from an entry it never rewrote", async () => {
+    // Nothing is undone, because nothing was done that needs undoing: the carry
+    // writes at the location the entry already records, so a failure leaves the
+    // file exactly where the manifest says it is. The manifest is not written at
+    // all, which is the whole of the recovery.
     const fs = new MemFs({ "raw/a.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);

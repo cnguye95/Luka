@@ -23,13 +23,26 @@
 //        a source path to decide whose a file is.
 //
 //  (III) NO DESTRUCTIVE OPERATION IS EVER A FAILURE-RECOVERY STEP. Deletes and
-//        overwrites are forward completion of successful outcomes only, always
-//        behind the guard. Nothing is removed to get out of a bad state.
+//        overwrites happen only to complete an outcome that succeeded, always
+//        behind the guard. Nothing is removed to get *out* of a bad state.
+//        Note what this does not say: a failure may still lead to a successful
+//        outcome that then removes something — a carry that cannot complete
+//        falls back to re-extraction, and the re-extraction's own success is
+//        what sweeps the file it replaced. The rule is about what authorises
+//        the delete, not about what preceded it.
 //
-//  (IV)  EVERY PHASE BEFORE THE MANIFEST WRITE IS IDEMPOTENT. A crashed or
-//        failed run re-runs to the same state. This is why the carry repoints
-//        before it moves, and why the guard accepts either end of a rename at
-//        the location the entry records.
+//  (IV)  EVERY PHASE BEFORE THE MANIFEST WRITE IS IDEMPOTENT — up to the
+//        location of the derivative. A crashed or failed run re-runs to the
+//        same *manifest* state, which is the state that matters, because the
+//        manifest was never written. This is why the carry repoints before it
+//        moves, and why the guard accepts either end of a rename at the
+//        location the entry records: both failure windows re-run to a carry.
+//        The one window that does not is a crash after the move and before the
+//        commit — the file is then at the destination naming the new path,
+//        which is indistinguishable from an earlier occupant's markdown, so the
+//        retry re-extracts. That costs a model call and a hand repair, never
+//        the source. It is the one place this list is a "so far as it can" and
+//        not an absolute, and it is logged as such.
 //
 //  (V)   CLASSIFICATION HAPPENS ONCE. The four rules and rename identity are
 //        decided at discovery, against the vault as this run found it. Carry
@@ -37,11 +50,16 @@
 //        new path, before any extraction begins.
 //
 //  (VI)  READABLE MARKDOWN IS LOOKED UP, NEVER RECONSTRUCTED. A source's body
-//        comes from this run's normalization outcomes, or else from the file
-//        its entry names. "This run's outcomes" is every source whose
-//        normalization completed — a later failure of that source's own
-//        inventory or pages does not un-write what it produced. A recorded
-//        pointer counts only when a file stands at it.
+//        comes from this run's outcomes, or else from the file its entry names.
+//        "This run's outcomes" is BOTH kinds: every source whose normalization
+//        completed — a later failure of that source's own inventory or pages
+//        does not un-write what it produced — and every rename whose carry
+//        completed, which produces markdown at a known path without normalizing
+//        at all. Leaving the second kind out is how a renamed source became
+//        unreadable to Call B while its own citation block already named it.
+//        And a recorded pointer counts only while the file standing at it still
+//        names this source: the entry says which file, never that it is still
+//        ours, because a user can overwrite one in place.
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // The failure policy is deliberately blunt (policy B): the happy paths carry a
@@ -96,69 +114,129 @@ export async function carryRenames(
   manifest: IngestManifest,
   renames: readonly Rename[],
 ): Promise<CarryResult> {
-  const outcomes: CarryOutcome[] = [];
+  const ordered = [...renames].sort((a, b) => comparePaths(a.source.path, b.source.path));
+
+  // Which rename's markdown currently sits at each location. A rename that is
+  // *vacating* the place another one wants has to go first: until it moves, the
+  // other sees the destination occupied and falls back — spending a model call
+  // and losing a repair on an ordering that has nothing to do with either of
+  // them (V: one pass, and its outcome must not depend on unrelated names).
+  const occupies = new Map<string, Rename>();
+  for (const rename of ordered) {
+    const recorded = manifest[rename.from]?.derivative;
+    if (recorded !== undefined && !occupies.has(recorded)) occupies.set(recorded, rename);
+  }
+
+  const results = new Map<string, CarryOutcome>();
   let wrote = false;
 
-  // Ordered by the new path so two renames wanting one derivative location
-  // resolve the same way on every host. The first takes it; the second finds it
-  // held by a file naming a source that is not its own `from`, and falls back.
-  for (const rename of [...renames].sort((a, b) => comparePaths(a.source.path, b.source.path))) {
+  const carry = async (rename: Rename, pending: Set<string>): Promise<void> => {
     const to = rename.source.path;
-    const recorded = manifest[rename.from]?.derivative;
-    const target = derivativePathFor(to, rename.source.format);
+    if (results.has(to) || pending.has(to)) return;
+    pending.add(to);
 
-    // A passthrough source is its own readable markdown: there is no derivative
-    // to carry and none to record.
-    if (target === null) {
-      outcomes.push({ rename, kind: "carried", derivative: undefined });
-      continue;
+    const target = derivativePathFor(to, rename.source.format);
+    if (target !== null) {
+      // Free the destination first. Two renames each wanting the other's
+      // location leave `pending` set, so the recursion stops and both are
+      // decided against the vault as it stands — deterministically, one of them
+      // falling back.
+      const blocker = occupies.get(target);
+      if (blocker !== undefined && blocker.source.path !== to) await carry(blocker, pending);
     }
 
-    try {
-      // Already where the new path wants it — an extension-only rename never
-      // moves its file, and neither does a run that got this far before.
-      if (await isOurs(fs, target, rename, recorded)) {
-        if (await repointDerivative(fs, target, to)) wrote = true;
-        outcomes.push({ rename, kind: "carried", derivative: target });
-        continue;
-      }
+    const outcome = await carryOne(fs, manifest, rename, target);
+    if (outcome.wrote) wrote = true;
+    results.set(to, outcome.outcome);
+  };
 
-      // Sitting where the entry records it, with the destination free: name it
-      // for the new path, then move it there.
-      if (
-        recorded !== undefined &&
-        recorded !== target &&
-        !(await fs.exists(target)) &&
-        (await isOurs(fs, recorded, rename, recorded))
+  for (const rename of ordered) await carry(rename, new Set());
+
+  return {
+    outcomes: ordered.map((rename) => results.get(rename.source.path) as CarryOutcome),
+    wrote,
+  };
+}
+
+/**
+ * One rename's outcome, decided against the vault as it stands.
+ *
+ * The entry's own file takes precedence over anything else on disk. That is the
+ * whole point of recording ownership: markdown found by computing `<stem>.md`
+ * is a guess, and a guess must never outrank the pointer — the entry says which
+ * file is this source's, and a second file naming the same origin is a copy
+ * whose age nothing can establish.
+ */
+async function carryOne(
+  fs: FsAdapter,
+  manifest: IngestManifest,
+  rename: Rename,
+  target: string | null,
+): Promise<{ outcome: CarryOutcome; wrote: boolean }> {
+  const to = rename.source.path;
+  const recorded = manifest[rename.from]?.derivative;
+  let wrote = false;
+
+  // A passthrough source is its own readable markdown: nothing to carry, and
+  // nothing to record.
+  if (target === null) {
+    return { outcome: { rename, kind: "carried", derivative: undefined }, wrote };
+  }
+
+  try {
+    // With no pointer there is nothing to carry. Computing `<stem>.md` and
+    // adopting whatever answers to it is the inference invariant II removes —
+    // the fallback re-extracts instead, which needs no guess.
+    if (recorded !== undefined) {
+      if (await isOurs(fs, recorded, rename, recorded)) {
+        // Already where the new path wants it: an extension-only rename never
+        // moves its file, and neither does a run that got this far before.
+        if (recorded === target) {
+          if (await repointDerivative(fs, target, to)) wrote = true;
+          return { outcome: { rename, kind: "carried", derivative: target }, wrote };
+        }
+        if (!(await fs.exists(target))) {
+          if (await repointDerivative(fs, recorded, to)) wrote = true;
+          await fs.move(recorded, target);
+          return { outcome: { rename, kind: "carried", derivative: target }, wrote: true };
+        }
+        // The destination holds something the entry does not name. Between two
+        // candidate files there is nothing to choose on, so nothing is chosen.
+      } else if (
+        !(await fs.exists(recorded)) &&
+        (await isOurs(fs, target, rename, recorded))
       ) {
-        if (await repointDerivative(fs, recorded, to)) wrote = true;
-        await fs.move(recorded, target);
-        wrote = true;
-        outcomes.push({ rename, kind: "carried", derivative: target });
-        continue;
+        // The entry's file is gone and markdown naming this source's old path
+        // stands where the new path expects it: the user moved the source and
+        // its markdown together, which is the one case worth reading from disk.
+        if (await repointDerivative(fs, target, to)) wrote = true;
+        return { outcome: { rename, kind: "carried", derivative: target }, wrote };
       }
-    } catch (error) {
-      outcomes.push({
+    }
+  } catch (error) {
+    return {
+      outcome: {
         rename,
         kind: "fallback",
         reason: `could not carry the markdown of ${rename.from} to ${to} — ${describe(
           error,
         )}; re-extracted instead`,
-      });
-      continue;
-    }
+      },
+      wrote,
+    };
+  }
 
-    outcomes.push({
+  return {
+    outcome: {
       rename,
       kind: "fallback",
       reason:
         recorded === undefined
           ? `no markdown was recorded for ${rename.from}, so ${to} was re-extracted`
           : `${recorded} could not be carried to ${target} for ${to}, so it was re-extracted`,
-    });
-  }
-
-  return { outcomes, wrote };
+    },
+    wrote,
+  };
 }
 
 /**
@@ -199,31 +277,33 @@ export async function removeSupersededDerivative(
   rename: Rename,
   recorded: string | undefined,
   settled: string | undefined,
+  claimed: ReadonlySet<string>,
 ): Promise<{ deleted: boolean; report: Report | null }> {
   if (recorded === undefined || recorded === settled) return { deleted: false, report: null };
-  if (!(await fs.exists(recorded))) return { deleted: false, report: null };
+  // Another outcome in this run records that very path as its own markdown, so
+  // it is not a leftover — saying anything about it would be a notice with
+  // nothing behind it.
+  if (claimed.has(recorded)) return { deleted: false, report: null };
 
-  if (!(await isOurs(fs, recorded, rename, recorded))) {
-    return {
-      deleted: false,
-      report: {
-        path: rename.source.path,
-        reason: `left ${recorded} alone — it is no longer markdown Luka wrote for ${rename.from}`,
-      },
-    };
-  }
+  const failure = (reason: string): { deleted: boolean; report: Report | null } => ({
+    deleted: false,
+    report: { path: rename.source.path, reason },
+  });
 
   try {
+    if (!(await fs.exists(recorded))) return { deleted: false, report: null };
+    if (!(await isOurs(fs, recorded, rename, recorded))) {
+      return failure(
+        `left ${recorded} alone — it is no longer markdown Luka wrote for ${rename.from}`,
+      );
+    }
     await fs.delete(recorded);
     return { deleted: true, report: null };
   } catch (error) {
-    return {
-      deleted: false,
-      report: {
-        path: rename.source.path,
-        reason: `could not remove ${recorded}, left over from ${rename.from} — ${describe(error)}`,
-      },
-    };
+    // This runs at the commit point, after the model calls are spent and the
+    // pages are written. Letting it throw would abandon all of that and re-spend
+    // it next run, so an unreadable vault costs one notice instead.
+    return failure(`could not remove ${recorded}, left over from ${rename.from} — ${describe(error)}`);
   }
 }
 
@@ -257,19 +337,20 @@ export async function sweepDeparted(
     // A passthrough source left no markdown behind, and neither did an entry
     // written before ownership was recorded.
     if (derivative === undefined) continue;
-    // Already gone — the user removed it with the source, most likely. Nothing
-    // owed, and nothing worth saying.
-    if (!(await fs.exists(derivative))) continue;
-
-    if ((await derivativeOrigin(fs, derivative)) !== path) {
-      result.reported.push({
-        path,
-        reason: `left ${derivative} alone — it is no longer markdown Luka wrote for ${path}`,
-      });
-      continue;
-    }
 
     try {
+      // Already gone — the user removed it with the source, most likely.
+      // Nothing owed, and nothing worth saying.
+      if (!(await fs.exists(derivative))) continue;
+
+      if ((await derivativeOrigin(fs, derivative)) !== path) {
+        result.reported.push({
+          path,
+          reason: `left ${derivative} alone — it is no longer markdown Luka wrote for ${path}`,
+        });
+        continue;
+      }
+
       await fs.delete(derivative);
       result.deleted += 1;
     } catch (error) {

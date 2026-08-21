@@ -262,6 +262,12 @@ async function claimDerivative(
   if (!(await deps.fs.exists(target))) return;
   const derivedFrom = await derivativeOrigin(deps.fs, target);
   if (derivedFrom !== null && accepted.includes(derivedFrom)) return;
+  // §2 invariant 7: "Derivative files Luka wrote are Luka's to rewrite." This is
+  // one — it names an origin, and only Luka writes that key — and the origin is
+  // nowhere in the vault, so it is nobody's markdown now. Refusing it would hold
+  // this stem against every future source for good, because a file carrying
+  // `derived-from` is never a source and so nothing else ever looks at it.
+  if (derivedFrom !== null && !(await deps.fs.exists(derivedFrom))) return;
   throw new Error(
     `derivative path ${target} is already taken by ${
       derivedFrom === null ? "a user-placed file" : `a derivative of ${derivedFrom}`

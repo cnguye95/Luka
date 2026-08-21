@@ -792,6 +792,123 @@ describe("source discovery", () => {
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/photo.png"]);
   });
 
+  it("carries both renames when one vacates the location the other wants", async () => {
+    // `other.html` is moving onto the stem `hold.csv` is moving off. Whether the
+    // vacating rename is considered first must not decide whether the other one
+    // carries — the two are ordered by the new path, which has nothing to do
+    // with the dependency between them.
+    const fs = new MemFs({ "raw/hold.csv": "a,b\n1,2\n", "raw/other.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/other.md", `${fs.text("raw/other.md")}\nHAND REPAIRED.\n`);
+
+    // The loser sorts first by new path, so it inspects `raw/hold.md` before
+    // the rename that frees it has run.
+    await fs.move("raw/other.html", "raw/hold.html");
+    await fs.move("raw/hold.csv", "raw/zz.csv");
+
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ renamed: 2, modelCalls: 0, failed: [] });
+    // §6.2's repair path survives: neither rename re-extracted.
+    expect(fs.text("raw/hold.md")).toContain("HAND REPAIRED.");
+    expect(fs.text("raw/hold.md")).toContain("derived-from: raw/hold.html");
+    expect(fs.text("raw/zz.md")).toContain("derived-from: raw/zz.csv");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 2, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("does not let an unrecorded copy at the destination outrank the recorded file", async () => {
+    // The entry names `raw/a.md`, which the user has repaired. A stale file
+    // naming the same origin also sits at the destination stem. Silently
+    // adopting the stale one and deleting the repaired one is the ownership
+    // mistake recorded pointers exist to prevent.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
+    await fs.write("raw/b.md", "---\nderived-from: raw/a.html\n---\nSTALE COPY.\n");
+
+    await fs.move("raw/a.html", "raw/b.html");
+    const second = await core(fs).instance.compile();
+
+    // Whatever it does, it must not end up recording the stale file as this
+    // source's markdown while saying nothing about it.
+    expect(fs.text("raw/b.md")).not.toContain("STALE COPY.");
+    expect(second.reported.length + second.failed.length).toBeGreaterThan(0);
+    expect(manifestOf(fs)["raw/b.html"]?.derivative).toBe("raw/b.md");
+
+    fs.resetCounters();
+    expect(await core(fs).instance.compile()).toMatchObject({ unchanged: 1, noop: true });
+    expect(fs.writes).toBe(0);
+  });
+
+  it("says nothing about a location another outcome legitimately re-used", async () => {
+    // Two clean renames where one lands on the stem the other left. Nothing was
+    // left over and nothing needs attention, so nothing should be reported.
+    const fs = new MemFs({ "raw/hold.csv": "a,b\n1,2\n", "raw/other.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+
+    await fs.move("raw/hold.csv", "raw/aa.csv");
+    await fs.move("raw/other.html", "raw/hold.html");
+
+    const second = await core(fs).instance.compile();
+    expect(second).toMatchObject({ renamed: 2, failed: [], reported: [] });
+  });
+
+  it("re-uses a derivative whose own source has left the vault (invariant 7)", async () => {
+    // §2 invariant 7: "Derivative files Luka wrote are Luka's to rewrite." This
+    // file is one, and the source it names is nowhere — so it is not another
+    // source's markdown, it is abandoned. Refusing it would block that stem for
+    // every future source, permanently.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
+
+    // The source vanishes without compile ever seeing it go, so nothing sweeps
+    // its markdown: the manifest goes too.
+    await fs.delete("raw/a.html");
+    await fs.write(MANIFEST, JSON.stringify({}));
+
+    await fs.write("raw/a.csv", "x,y\n1,2\n");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ added: 1, failed: [] });
+    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.csv");
+  });
+
+  it("still refuses a derivative whose source is merely unreadable this run", async () => {
+    // The owner is skipped, not gone — §6.1 has it "surface again each compile",
+    // so its markdown is still spoken for.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+
+    await fs.write("raw/a.csv", "x,y\n1,2\n");
+    const second = await core(fs).instance.compile();
+
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/a.csv"]);
+    expect(fs.text("raw/a.md")).toContain("derived-from: raw/a.html");
+  });
+
+  it("reports rather than aborts when the commit-time cleanup cannot look", async () => {
+    // The commit point does IO. A failure there must cost one report, not the
+    // whole run — the model calls have already been spent and the pages written.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    await fs.write("raw/sub/a.md", fs.text("raw/a.md"));
+    await fs.move("raw/a.html", "raw/sub/a.html");
+
+    const guarded = Object.create(fs) as MemFs;
+    guarded.exists = async (path: string): Promise<boolean> => {
+      if (path === "raw/a.md") throw new Error("EIO");
+      return MemFs.prototype.exists.call(fs, path);
+    };
+
+    const second = await core(guarded).instance.compile();
+    expect(second.renamed).toBe(1);
+    expect(second.reported.map((entry) => entry.path)).toContain("raw/sub/a.html");
+  });
+
   it("leaves a derivative the user has taken over, and still completes", async () => {
     // The sweep's one guard. The file at the recorded path no longer names this
     // source, so it is not Luka's to delete — and the entry goes anyway, since
@@ -813,6 +930,28 @@ describe("source discovery", () => {
     // Finished, not deferred: the notice is not repeated.
     const third = await core(fs).instance.compile();
     expect(third).toMatchObject({ deleted: 0, failed: [], reported: [] });
+  });
+
+  it("reprocesses when the user has taken the recorded derivative over", async () => {
+    // The entry still names the file, and a file is still there — but it is the
+    // user's now. Reading "a file stands at the recorded path" as "the markdown
+    // is present" would leave the source manifested as fully ingested with
+    // nothing readable behind it, quietly, for good.
+    const fs = new MemFs({ "raw/page.html": "<h1>Hi</h1>\n" });
+    await core(fs).instance.compile();
+    expect(manifestOf(fs)["raw/page.html"]?.derivative).toBe("raw/page.md");
+
+    await fs.write("raw/page.md", "My own note now.\n");
+    const second = await core(fs).instance.compile();
+
+    expect(second).toMatchObject({ modified: 1, unchanged: 0 });
+    // And it stays audible: the re-extraction is refused by the invariant-7
+    // guard, every compile, rather than the problem going silent.
+    expect(second.failed.map((failure) => failure.path)).toEqual(["raw/page.html"]);
+    expect(fs.text("raw/page.md")).toContain("My own note now.");
+
+    const third = await core(fs).instance.compile();
+    expect(third.failed.map((failure) => failure.path)).toEqual(["raw/page.html"]);
   });
 
   it("reprocesses when a folder has taken the derivative's place", async () => {

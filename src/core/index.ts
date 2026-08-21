@@ -437,13 +437,25 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // have to be re-inventoried to retry it.
   const blockedBy = new Map<string, string[]>();
 
-  // Keyed off `normalized`, not `ready`: normalization is what creates a
-  // source's readable markdown, and a later failure of that source's *own*
-  // Call A does not un-write the derivative it produced. Narrowing this to the
-  // sources that also inventoried cleanly would refuse a body that is sitting
-  // on disk — and the citer set §6.5 hands Call B is about who cites the page,
-  // not about whose inventory succeeded.
-  const readable = new Map(normalized.map((entry) => [entry.source.path, entry.readablePath]));
+  // Everything this run knows the readable markdown of (VI). Two sources, not
+  // one: normalization writes it, and a *carry* relocates it without
+  // normalizing — a carried rename produces no normalize outcome by design, and
+  // its new path is an addition, so the manifest as found cannot name it
+  // either. Leaving the carry out is how a renamed source became unreadable to
+  // Call B while its citation block already named the new path.
+  //
+  // `normalized` is applied second so a fallback's fresh extraction wins over
+  // the carry outcome it replaced.
+  const readable = new Map<string, string>();
+  for (const outcome of carried.outcomes) {
+    if (outcome.kind !== "carried") continue;
+    const source = outcome.rename.source;
+    readable.set(
+      source.path,
+      readablePathFor(source.path, source.format, outcome.derivative ?? null),
+    );
+  }
+  for (const entry of normalized) readable.set(entry.source.path, entry.readablePath);
   const bodies = new Map<string, string>();
   const bodyOfSource = async (path: string): Promise<string> => {
     const cached = bodies.get(path);
@@ -662,6 +674,17 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
   // withdraw, restore, or roll back.
   const next: IngestManifest = { ...manifest };
   const settled = new Map(ready.map((entry) => [entry.source.path, entry]));
+  // Locations this run records as some source's markdown. A file standing at
+  // one of them is not a leftover, whoever put it there.
+  const claimedDerivatives = new Set<string>();
+  for (const outcome of carried.outcomes) {
+    if (outcome.kind === "carried" && outcome.derivative !== undefined) {
+      claimedDerivatives.add(outcome.derivative);
+    }
+  }
+  for (const entry of ready) {
+    if (entry.derivativePath !== null) claimedDerivatives.add(entry.derivativePath);
+  }
 
   // A departure is only recorded once its cascade completed. Leaving the path
   // in makes §6.2 see it leave again next compile, which re-runs the cascade
@@ -675,6 +698,21 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     const rename = outcome.rename;
     const to = rename.source.path;
 
+    // Blocked means the markdown is fine but a page this source owes is not, so
+    // the source has not completed and invariant 3 keeps it out of the manifest
+    // — on every path, with no special case. The old entry stays, which presents
+    // the same rename again and is what brings the page back. Nothing is swept
+    // either: the run has not finished with this source.
+    const blocked = blockedBy.get(to);
+    if (blocked !== undefined) {
+      // A carried rename never reached the worklist, so the loop below that
+      // reports blocked sources will not see it. Without this it would be
+      // withheld from the manifest correctly and silently, which is the one
+      // combination that leaves a user with no idea why nothing settles.
+      if (!settled.has(to)) failed.push({ path: to, reason: blocked.join("; ") });
+      continue;
+    }
+
     if (outcome.kind === "carried") {
       delete next[rename.from];
       next[to] = entryFor(rename.source.hash, outcome.derivative);
@@ -685,6 +723,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
         rename,
         manifest[rename.from]?.derivative,
         outcome.derivative,
+        claimedDerivatives,
       );
       if (leftover.deleted) {
         derivativesDeleted += 1;
@@ -697,6 +736,7 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     // A fallback re-extracted instead of carrying. It is only settled if that
     // extraction ran to completion; otherwise the old entry stays exactly where
     // it is and the same rename is presented again next compile.
+    //
     // Not settled: the re-extraction failed too. The source is already in
     // `failed` with the reason it failed and the promise of a retry, and M2d's
     // rule holds — one problem, one notice. Saying separately that the carry
@@ -705,17 +745,12 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
     if (done === undefined) continue;
 
     delete next[rename.from];
-    // Blocked means the markdown is written but a page it owes is not. Recording
-    // the hash without a pointer is what makes the next compile read the source
-    // as modified and retry that page — recording the pointer would have it read
-    // as fully ingested with the page still owed, forever.
-    if (blockedBy.has(to)) next[to] = entryFor(done.hash, undefined);
-
     const leftover = await removeSupersededDerivative(
       deps.fs,
       rename,
       manifest[rename.from]?.derivative,
       done.derivativePath ?? undefined,
+      claimedDerivatives,
     );
     if (leftover.deleted) {
       derivativesDeleted += 1;
@@ -901,7 +936,11 @@ async function readableFromManifest(
     // so its derivative has not been located — and handing back the source
     // itself would put a PDF's raw bytes in a Call B prompt under its label.
     const format = formatForPath(path);
-    return format !== null && isPassthrough(format) ? path : null;
+    if (format === null || !isPassthrough(format)) return null;
+    // A file, checked — not assumed. Reading a path that has gone would throw
+    // an error no caller classifies as an unreadable citer, and that blocks
+    // every *other* citer of the page rather than costing this one.
+    return (await fs.stat(path))?.kind === "file" ? path : null;
   }
 
   // Invariant II: `derived-from` is read as a guard before serving a file as a

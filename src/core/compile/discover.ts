@@ -5,7 +5,7 @@
 // descended into. Identity is SHA-256 of content; timestamps are never used.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8, sha256Hex } from "../hash";
-import { derivativePathFor, formatForPath } from "../normalize/index";
+import { derivativeOrigin, derivativePathFor, formatForPath } from "../normalize/index";
 import { ASSETS_FOLDER } from "../normalize/image";
 import { isRepoDirectory, repoContentHash, selectRepoFiles } from "../normalize/repo";
 import { basename, comparePaths, dirname, extname, isUnder } from "../paths";
@@ -115,10 +115,21 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 }
 
 /**
- * §6.2's missing-derivative test — a lookup, not an inference. The entry names
- * the file Luka wrote, so no candidate path is guessed from the stem and no
- * frontmatter is parsed: the ownership question that made both necessary was
- * answered when the derivative was written.
+ * §6.2's missing-derivative test. The entry says which file, so no candidate is
+ * guessed from the stem — that guess is what invariant II removes, and with it
+ * the whole class of defects where a neighbour sharing a stem was mistaken for
+ * a source's markdown.
+ *
+ * What the entry cannot say is whether that file is *still* this source's. A
+ * user can overwrite a derivative in place, and then a file stands at the
+ * recorded path that is not markdown Luka wrote — so the pointer is checked
+ * against the file, exactly as it is before any destructive write or before
+ * serving the file as a source's body. Locating is what the entry is for;
+ * `derived-from` remains a guard and nothing else.
+ *
+ * The cost is one read and one YAML parse per unchanged converting source per
+ * compile, which M2d weighed and accepted for the same reason: reads are not
+ * writes, and an unchanged vault still performs literally zero writes.
  *
  * A converting source carrying no pointer at all is an entry written before
  * ownership was recorded. Its derivative cannot be located, so the
@@ -132,10 +143,9 @@ async function hasDerivative(
   // A passthrough source is its own readable markdown and owes no derivative.
   if (derivativePathFor(source.path, source.format) === null) return true;
   if (entry.derivative === undefined) return false;
-  // A *file*, not merely a path that resolves: a directory standing where the
-  // derivative was would otherwise read as one, leaving the source manifested
-  // with nothing readable behind it.
-  return (await fs.stat(entry.derivative))?.kind === "file";
+  // Also settles the case of a directory built over the derivative: a folder
+  // names no origin, so it is not this source's markdown either.
+  return (await derivativeOrigin(fs, entry.derivative)) === source.path;
 }
 
 /**
