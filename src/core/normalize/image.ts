@@ -17,8 +17,16 @@ const MIN_DIMENSION = 100;
 const FETCH_CONCURRENCY = 4;
 const DECORATIVE = /logo|avatar|icon|sprite|badge|pixel/i;
 
-/** Inline markdown images: `![alt](url)`, with an optional quoted title. */
-const IMAGE_MARKDOWN = /!\[([^\]]*)\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
+/**
+ * Inline markdown images: `![alt](url)`, with an optional quoted title.
+ *
+ * Alt text stops at a line break. CommonMark would allow one there, but the
+ * rewrite below works a line at a time, so an image split across two lines is
+ * one this pass cannot put back together — and matching it here would fetch
+ * bytes into the vault that no link ever names. Both halves of the pass read
+ * this one pattern, so they agree about what an image is by construction.
+ */
+const IMAGE_MARKDOWN = /!\[([^\]\n]*)\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
 
 export interface LocalizeDeps {
   fs: FsAdapter;
@@ -49,7 +57,14 @@ export async function localizeInlineImages(
   }
   if (urls.size === 0) return { text, localized: 0, marked: 0 };
 
-  const prose = text.replace(IMAGE_MARKDOWN, " ").toLowerCase();
+  // Image markdown is dropped so a filename cannot vouch for itself, and so
+  // are HTML comments: a marker from a previous run names the very file it
+  // rejected, and reading that back would let "unreferenced in prose" become
+  // "referenced" on the next compile purely because Luka had said so.
+  const prose = text
+    .replace(IMAGE_MARKDOWN, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .toLowerCase();
   const unique = [...urls.keys()];
   const decided = await mapWithConcurrency(unique, FETCH_CONCURRENCY, (url) =>
     decide(url, urls.get(url) ?? "", prose, deps),
@@ -75,7 +90,11 @@ export async function localizeInlineImages(
       hadRemoteImage = true;
       if (decision.keep) {
         localized += 1;
-        return full.replace(url, decision.assetPath);
+        // A replacement *function*, never a replacement string: `assetPath`
+        // ends in an extension lifted out of the URL, so `$&`, `` $` `` and
+        // `$'` in it would expand against the match and leave the prose
+        // pointing somewhere the bytes are not.
+        return full.replace(url, () => decision.assetPath);
       }
       pending.push(imageNotFetched(imageName(url, alt), decision.reason));
       return full;
