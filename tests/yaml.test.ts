@@ -192,8 +192,11 @@ describe("the frontmatter fence closes only at a line start", () => {
     const text = "---\nderived-from: raw/notes.pdf---\nMy own notes, not Luka's.\n";
     const parsed = parseFrontmatter(text);
 
-    // The fence is never closed, so there is no frontmatter to read.
-    expect(parsed.present).toBe(false);
+    // The fence is never closed, so there is no frontmatter to *read* — which
+    // is the guard. `present` answers a different question, "does this
+    // document open a block", and it is true here precisely so nothing
+    // prepends a second one.
+    expect(parsed.mergeable).toBe(false);
     expect(parsed.data["derived-from"]).toBeUndefined();
   });
 
@@ -246,5 +249,35 @@ describe("serializeFrontmatter keeps keys that collide with Object.prototype", (
     const out = serializeFrontmatter({ ["__proto__"]: "x", kind: "source" });
     expect(out).toContain("kind: source");
     expect(({} as Record<string, unknown>)["kind"]).toBeUndefined();
+  });
+});
+
+describe("a document that opens a fence is never given a second one", () => {
+  // Anchoring the closing fence to a line start was right, but it turned three
+  // shapes from "left untouched" into "a second block prepended in front of
+  // the first". They are exactly the hand-edits §6.2 invites: a closing fence
+  // written with four dashes, one indented by a space, and one never written.
+  const shapes: Record<string, string> = {
+    "four-dash close": "---\nderived-from: raw/a.pdf\n----\nbody\n",
+    "indented close": "---\nderived-from: raw/a.pdf\n ---\nbody\n",
+    "no close at all": "---\nderived-from: raw/a.pdf\nbody\n",
+  };
+
+  for (const [name, text] of Object.entries(shapes)) {
+    it(`leaves a ${name} alone`, () => {
+      expect(ensureFrontmatter(text, { ingested: "2026-08-21", "source-format": "md" })).toBe(text);
+    });
+
+    it(`reports a ${name} as present but not mergeable`, () => {
+      const parsed = parseFrontmatter(text);
+
+      expect([parsed.present, parsed.mergeable]).toEqual([true, false]);
+    });
+  }
+
+  it("still annotates a document with no fence at all", () => {
+    expect(ensureFrontmatter("body\n", { "source-format": "md" })).toBe(
+      "---\nsource-format: md\n---\nbody\n",
+    );
   });
 });

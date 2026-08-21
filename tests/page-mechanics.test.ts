@@ -131,7 +131,12 @@ describe("the index write cannot discard the run", () => {
     // already on disk.
     const result = await core.compile();
 
-    expect(result.failed.map((f) => f.path)).toContain("wiki/_index.md");
+    // `reported`, not `failed`: the index is re-derived from the page table
+    // every compile, so nothing is owed and nothing is retried — which is
+    // exactly what separates the two buckets. Filed under `failed` the user is
+    // told a file was "skipped" that is neither a source nor a page.
+    expect(result.reported.map((f) => f.path)).toContain("wiki/_index.md");
+    expect(result.failed).toEqual([]);
     // The manifest still commits, so the next run does not re-spend the calls.
     expect(fs.files.has(MANIFEST)).toBe(true);
 

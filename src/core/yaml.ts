@@ -15,6 +15,7 @@ import { dump, load } from "js-yaml";
 
 export interface ParsedFrontmatter {
   /** Whether the document opened with a `---` fence at all. */
+  /** The document opens a `---` fence — not that this reader could parse it. */
   present: boolean;
   /**
    * Whether the block is a YAML mapping Luka may add keys to. False for a
@@ -42,6 +43,19 @@ export interface ParsedFrontmatter {
  */
 const FENCE = /^(---[ \t]*\r?\n)((?:[\s\S]*?\r?\n)?)(---[ \t]*(?:\r?\n|$))/;
 
+/**
+ * A document that opens a fence has frontmatter, whether or not this reader
+ * can find where it ends.
+ *
+ * Anchoring the close to a line start is right, but on its own it turns every
+ * shape it now refuses — `----`, an indented `---`, a fence never closed —
+ * from "left untouched" into "a second block prepended in front of the first".
+ * Those are the hand-edits §6.2 invites, and prepending to one is a write to a
+ * file the user owns that no rule sanctions. Unparseable frontmatter is still
+ * frontmatter: the document is left exactly as it stands.
+ */
+const OPENING_FENCE = /^---[ \t]*\r?\n/;
+
 /** The order §4 lists these keys in; anything else is appended alphabetically. */
 const KEY_ORDER = [
   "kind",
@@ -61,7 +75,9 @@ const KEY_ORDER = [
 
 export function parseFrontmatter(text: string): ParsedFrontmatter {
   const match = FENCE.exec(text);
-  if (!match) return { present: false, mergeable: false, data: {}, body: text };
+  if (!match) {
+    return { present: OPENING_FENCE.test(text), mergeable: false, data: {}, body: text };
+  }
 
   const inner = match[2] ?? "";
   const body = text.slice(match[0].length);
@@ -170,6 +186,7 @@ function escapeForRegExp(value: string): string {
 export function ensureFrontmatter(text: string, data: Record<string, unknown>): string {
   const match = FENCE.exec(text);
   if (!match) {
+    if (OPENING_FENCE.test(text)) return text;
     const block = renderKeys(data);
     return block === "" ? text : `---\n${block}---\n${text}`;
   }

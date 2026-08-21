@@ -702,8 +702,11 @@ async function runCompile(deps: CoreDeps, options: CompileOptions): Promise<Comp
       }
     } catch (error) {
       // §6.5 re-derives the index from the page table every compile, so the
-      // next run rebuilds it from scratch; nothing has to be remembered.
-      failed.push({ path: INDEX_PATH, reason: `could not write the index — ${describe(error)}` });
+      // next run rebuilds it from scratch; nothing has to be remembered. That
+      // is the definition of `reported` rather than `failed` — and it matters
+      // to what the user is told, because `failed` is rendered as "skipped
+      // <path>", and the index is neither a source nor a page.
+      reported.push({ path: INDEX_PATH, reason: `could not write the index — ${describe(error)}` });
     }
   }
 
