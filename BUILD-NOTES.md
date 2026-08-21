@@ -552,3 +552,133 @@ Recorded rather than fixed, deliberately: following renames by content hash insi
 What actually remains is an inconsistency, not a defect: everywhere else in this subsystem a file superseded or left alone gets a named `reported` entry, and this one destructive path gives a count instead. **Left as it is, deliberately.** The deletion is correct and expected — the user changed the source's type, and the descriptor card genuinely stopped being anyone's markdown — and M2d chose a count here on purpose. Naming every correct deletion is how a notice channel becomes noise, and §0 prefers the smaller thing until the larger one earns itself. The fix, if it ever does, is one `reported` entry in the passthrough branch of the carry.
 
 Predates M2f and is provably unchanged by it: both code paths are byte-identical to `d73f8b4`, and a 1,500-seed stress finds the same 18 instances on both trees, differing only in which file holds the repair.
+
+## The M1 / M2a–M2c review campaign
+
+M2d–M2f came through a heavy adversarial campaign — disjoint-scope reviewers, a mutation-validated randomized instrument, failing-test-first, and a stop-rule — which caught a defect that had survived every prior review, including silent data loss. The four older milestones had their original tests and audits and nothing like that. This campaign closed the gap so M3 starts on a floor that has been stressed rather than assumed.
+
+The organising lesson from M2d–f held again, and is worth restating because this campaign is evidence for it: **a clean review round means that round's methods found nothing, not that the code is clean.** Every round here found something, including the rounds reviewing the previous round's fixes.
+
+### The instruments
+
+Three, each committed on its own and each mutation-validated before it was trusted. Defaults keep every one under about ten seconds so they stay in the suite; env knobs raise them for review rounds.
+
+- **`tests/fuzz-compile.test.ts`** — whole-pipeline hostile bytes. `FUZZ_SEEDS` (default 150). Oracles: no `raw/` content makes `compile()` reject; runs 2 and 3 are `noop` with zero model calls and a byte-identical vault; every non-derivative placed file is byte-identical after, BOM preserved and invalid UTF-8 untouched; the loaded manifest and every `parseFrontmatter` result has `Object.prototype`; no `-->` breakout in any derivative or marker.
+- **`tests/fuzz-localize.test.ts`** — localizer and marker injection. `FUZZ_LOCALIZE_SEEDS` (default 200). Oracles: the localized link names exactly the file written; no marker escapes its comment; re-localizing its own output is a no-op.
+- **`tests/provider-matrix.test.ts`** — a scripted fault matrix, deliberately *not* a fuzzer. The wrapper's state space is small and its failures are typed conditions needing exact count and delay assertions, so it is enumerated rather than sampled.
+
+**The instrument lesson, recorded because it nearly cost the campaign its evidence.** Wave 1 found the provider matrix was self-referential: it derived its expectations from the code it was testing, so setting `maxRetries: 0` passed the entire matrix. An instrument that cannot fail is not evidence. Every assertion added after that was mutation-checked — red against the unfixed code, green after — and the ones that could not be made red are named as such in the code rather than left to read as coverage.
+
+### Decisions taken by the user, not by §0
+
+- **Live-API tests stay skipped.** The four tests needing `ANTHROPIC_API_KEY` remain skipped; the stub-versus-real reply gap is a named, untested assumption carried into M3.
+- **The plugin layer gets a reading review and a manual checklist**, not an automated suite. One exception emerged: `fs-obsidian.ts` only `import type`s from `obsidian`, so its adapter is stubbable, and it now has tests. The other six files remain checklist-only.
+- **The §6.5-versus-§11 conflict stands as §6.5 reads it.** A source whose Call A failed still grounds Call B for pages citing it, and those page calls repeat every compile.
+- **Orphan-stem stays documented only** — no guarded sweep, no widening of `claimDerivative`. An earlier widening destroyed user data and was reverted.
+- **Unguarded IO at the top of the pipeline is deferred to its own milestone.** The index write was carved out and fixed here because its severity was materially worse.
+- **Two design re-opens were approved** when the stop-rule fired: the title/alias namespace, and the length rule inside it. The readable/live seam was deferred instead, because re-opening it would have rewritten part of M2d–f and made the intactness check vacuous.
+
+### The stop-rule, and what it actually cost
+
+The rule is: two consecutive rounds whose fixes the next round faults means re-opening the design rather than continuing to patch. It fired, and honouring it was the most valuable thing in the campaign.
+
+Round 1's fixes were faulted by round 2. Round 2's were faulted by round 3. The re-open that followed was faulted by round 4, and that fix was faulted again by round 5. Five rounds on one subject, and the last round's findings were two one-line divergences and a comment that was untrue. What made it converge was not more care; it was noticing that the subject had two rules, and that every fix had been unifying one of them while fragmenting the other.
+
+§4 gives titles and aliases one namespace, and a page's title *is* its filename — so the namespace has two properties that both decide identity: **how two names compare**, and **how long a name may be**. The history:
+
+- Six tables keyed the namespace and only `sanitizeTitle` folded Unicode form, so an NFD title on disk did not match the NFC title a model returned and the second page overwrote the first. That is the data loss the NFC fold had been added to prevent, still open because the fold was applied to the producer of names and not to the namespace they were checked against.
+- Closing that with `handleOf` left the length rule where it was: inside `sanitizeTitle`, which §6.5 matches through — so the matching key was lossy and two concepts sharing a long opening merged into one page.
+- Moving the bound to `uniqueTitle` closed that and split the stored key from the lookup key: a long title never re-matched the page it had just created, so a new page appeared every compile, for ever, each with its own Call B. Measured thresholds: 201 ASCII characters, 67 CJK, 51 emoji.
+- Tagging the cut with a digest of the whole title closed that, and left two sites on half a rule: the tag hashed the unfolded string while `handleOf` folds case, and §4's uniqueness suffix produced a stored name (`X-2`) that no lookup key could reconstruct.
+
+The end state is two named rules, each applied at every site: **`handleOf`** answers how names compare, **`titleStem`** answers how long a name may be, and the lookup inverts the uniqueness suffix, because appending one is part of how a page was named.
+
+The suffix case deserves its own line, because it needs no long title and predates the campaign. §4 requires titles unique across all of `wiki/`, but §6.5 matches only against non-source pages — deliberately, since a source page has no Call B and matching one would strand the citer. So a concept whose name a source page already holds is named `X-2`, and nothing a model returns ever spells `X-2`. A vault with `raw/PageRank.md` whose inventory names the concept `PageRank` produced `PageRank-2`, `-3`, `-4`, `-5` over four compiles, each page keeping a citer so §6.6 never doomed it.
+
+### Fixes — M1 and the shared utilities
+
+- **The frontmatter fence closes only at a line start.** The highest-severity find of the campaign. A `---` accepted mid-line meant `derived-from: raw/notes.pdf---` parsed as a value, so `derivativeOrigin` reported ownership a document did not carry and a user's own file was accepted as Luka's and overwritten. The whole rename subsystem stands on that guard.
+- **A document that opens a fence is never given a second one.** Anchoring the close was right in the direction it was aimed — the new pattern is a strict subset of the old, so no document can still claim ownership it lacks — but every shape it began refusing flipped from "left untouched" to "a second block prepended in front of the first": a close written `----`, one indented by a space, one never written. Those are the hand-edits §6.2 invites. Unparseable frontmatter is still frontmatter. This also closed the separately-found case of an unterminated fence gaining a block.
+- **`loadManifest` cannot be reparented.** A manifest containing a `__proto__` key with an object value reparented the loaded object. It never polluted global `Object.prototype` and self-healed on the next save, but the fix lands in shared `manifest.ts`, which is what forced the M2d–f intactness re-run.
+- **Localizing an image rewrites the link, not the prose.** `full.replace(url, …)` with a *string* pattern takes the first occurrence in the whole match, which is the alt text whenever the alt repeats the URL — a fourth in-place write to prose the user owns, counted as a success so it earned no marker, and because a passthrough's hash is taken after the write the file read as unchanged for ever, making the remote link permanent and orphaning the asset. Now spliced at the offset of the link target. The replacement side had been fixed one round earlier, for `$&` expansion out of the extension; the pattern side stayed open because the comment reasoned only about the half that was closed.
+- **The dataset descriptor is bounded.** A 478KB ragged CSV cost 53 seconds holding the global operation lock, because the render is O(columns × rows) independent of cell count.
+- **Repo identity is length-framed.** Two different repositories hashed identically, which is a missed modification under §6.2.
+- **Repo reads no longer amplify.** Every whitelisted file was read before the size caps applied.
+
+### Fixes — the provider layer
+
+- **A bound written for a notice is not a behavioural input.** Clipping the vendor error message to 500 characters bounded a `Notice` and silently changed behaviour, because §11's temperature re-run decides by regexing that same message. A vendor enumerating unsupported parameters at length pushed the word past the clip, so a model that refuses `temperature` failed every compile instead of degrading — the outcome the entry for that fix said could not happen. `message` stays clipped for display; `vendorMessage` carries the vendor's own text for anything that decides on it.
+- **A truncated reply is not a complete one.** `stop_reason: "max_tokens"` was never inspected. A JSON task burned the repair retry and then failed saying the reply was not valid JSON — true, but not the reason. A prose task was worse: the fragment went into `wiki/` under a citation block claiming the full citer set.
+- **`Retry-After: 0` falls back to the ladder.** Zero is a value, so it beat the backoff ladder and took the jitter with it, spending the whole retry budget in microseconds against a server that had just said it was rate-limited. Filtered at the parse boundary, not in the wrapper: honouring means using the value, not max()-ing it against the ladder, since a vendor that says 100ms knows something the ladder does not.
+- **Bracketed alt text is admitted.** Valid CommonMark link text may contain balanced brackets; excluding `]` to keep alt text on one line had excluded it.
+- **Settings are read at call time.** Centralising §17's numeric validation turned two live settings references into snapshots taken at `onload`, which broke invariant 9: a freshly typed API key never arrived, while the settings tab and `data.json` both reported success. Found independently by two reviewers. Settings are read live again and made safe per *run*, which is also the right scope — one consistent state for a compile, not a state frozen at plugin load. The per-run copy has to be deep for `models`, or a keystroke in the model field reaches the vendor mid-run.
+
+### Fixes — page mechanics
+
+- **The title namespace has one spelling rule and one length rule**, as above.
+- **An alias belongs to one page.** Resolution and ownership are now two projections of one walk; kept apart they had already drifted, one keyed in path order and one in title order.
+- **The index write cannot discard the run.** It happens after the model calls are spent and the pages are on disk but before the manifest commit, so an unguarded throw took the whole run with it, and a persistently unwritable index made that a loop with no way out. Filed under `reported` rather than `failed`, because nothing is owed — the index is re-derived every compile — and because `failed` is rendered to the user as "skipped `<path>`", which `wiki/_index.md` is not.
+- **A page names every source the model did not receive in full.** §7.4 truncates the first source rather than dropping it, so it stayed in the packed set while the model saw only part of it — and at a budget too small to hold the marker, none of it. Naming only what was dropped implies the rest arrived whole; with a single citer the page said nothing at all. A source that fitted but has no body gets its own marker, because §4 fixes the budget marker's wording and an empty file under a 40,000-token budget was neither truncated nor over budget.
+
+### Fixes — the plugin surface
+
+- **Deleting goes through Obsidian's trash.** Every delete used `adapter.remove()`, a permanent unlink, while `trashSystem` and `trashLocal` sat unused on the same adapter. What goes through it is cascade-doomed pages — §5's modal calls them pages that *may* be deleted, so the user approves a superset and cannot know which went — and derivatives under `raw/`, including one a user hand-repaired, which §6.2 names as the sanctioned repair path. Not §16's forbidden backup rotation: the platform's own default recovery path, which Luka was opting out of.
+- **`mkdir` survives its own race.** Check-then-act with an await between, driven at §6.3's fixed concurrency of four, so on the first compile of a document with two or more kept remote images three calls lose the race and the throw failed the whole source — where §6.3 asks only that the link be left and marked. It also asks `stat` rather than `exists`, because a *file* standing where a folder belongs is "exists".
+- **Listing uses core's ordering.** `localeCompare` in the shipped adapter is why three consumers defensively re-sort, and a fourth would not have known to.
+- **`FsAdapter.delete` states its contract**: the path ends up free, a host trash is used where there is one, and deleting a missing path may reject — the three implementations disagree, and the two core is tested against are the forgiving ones.
+
+### §15 acceptance: what the criteria did not measure
+
+Nine of twelve M1/M2 criteria were genuinely constrained. Three were not, and each is the shape worth having — a test that passes because it never asked:
+
+- *"modified source reprocesses, and only the pages citing it"* measured the first half and nothing of the second. A regression requeueing all seven entity pages is six extra Call B invocations against invariant 12, and every assertion passed, because the settle-compile at the end regenerates nothing either way.
+- `raw/orphan.md`, §6.1's vision-pass derivative, was never asserted to exist. It appeared only as a *value* in the manifest-ownership map, which asserts what the entry says rather than that a file stands there.
+- Frontmatter was asserted completely for one file. `derived-from` is the invariant-II ownership guard — a derivative without it is disowned and re-extracts every compile — and three derivatives had no frontmatter assertion at all.
+
+### §0 decisions taken in code and never recorded
+
+Found by a claims-versus-code audit and recorded now rather than changed, except where noted above.
+
+- `MAX_TITLE_BYTES` is 200 **UTF-8 bytes**, not code units, because 255 is a byte limit and 120 code units of CJK is 363 of them. The cut lands on a code-point boundary, because a split surrogate pair encodes as U+FFFD and the name on disk would stop being the title in memory.
+- `MAX_COMPILE_CONCURRENCY` is 16. §11 budgets concurrency at 2; a raised value is the user's call, an unbounded one is not, because every extra worker is another request holding the operation lock.
+- `MAX_RETRY_BUDGET` is 10 and `MAX_VENDOR_MESSAGE` is 500.
+- `MAX_SCHEMA_COLUMNS` is 200, with the measurement above behind it.
+- A §17 number that is not finite falls back to §17's default; one with a range is clamped into it. The fallback is the default and not the range floor, because `"compileConcurrency": "4"` — a quoted number, the likeliest hand-edit of all — is not finite, and falling back to the floor would silently answer 1.
+- `sanitizeTitle` deliberately exceeds §4: it strips `?*"<>` and C0 controls beyond §4's set, NFC-normalizes, collapses whitespace and trims trailing dots and spaces. Every one is a filesystem refusal §4 does not name, and a title that reaches the write unusable does not cost one page — every source citing it is blocked, so nothing in the run is manifested, and inventory at temperature 0 returns the same title next compile.
+- `yaml.ts` appends unknown frontmatter keys alphabetically. §4 fixes the order of the keys it names and is silent on others; alphabetical is what makes annotation byte-stable across runs, which §6.2's hash-after-annotation rule depends on.
+- Repo file bytes are decoded with a non-fatal UTF-8 decoder and no round-trip guard, so a Latin-1 source renders with replacement characters. The passthrough path takes the opposite decision for the same hazard and logs it. Recorded, not changed: the mangled derivative is what Call A's prompt is built from, and the repair belongs with the ingest-side round-trip work.
+- Dataset column count comes from row 0 only; wider data rows are truncated with no marker, while the 200-column cap in the same module does emit one. Same question, two answers.
+- `buildTitleTable` resolves competing *titles* last-wins and competing *aliases* first-wins. Deterministic either way, and previously undocumented in the table that decides every wikilink.
+- The Anthropic response concatenates multiple text blocks with no separator, drops non-text blocks, and yields `""` for a reply with no text block. Pinned by tests, so deliberate; now written down.
+
+### Known limitations, accepted (this campaign)
+
+- **Image localization rewrites links inside code fences and HTML comments** in a user's own file.
+- **Reference-style `![x][r]` and raw `<img>` are neither fetched nor marked.** The stated rationale covers HTML sources only, not passthrough markdown.
+- **A non-round-tripping file is ingested with no marker**, and image localization is skipped on it. Its mojibake is then served to Call B as that source's body.
+- **`comparePaths` is UTF-16 code-unit order**, where the docs say code point.
+- **`renderCallBPrompt`'s omitted-for-budget line is appended outside the prompt budget** — a 3.5× overshoot measured at a small budget.
+- **Fence-blindness in the citation and link post-passes** — bounded and cosmetic.
+- **One unreadable file under `wiki/` aborts the compile** with a raw error. Same family as the deferred IO work.
+- **A deletion frees a derivative stem before normalization; a rename frees it at the commit point.** A source wanting a stem a rename is vacating waits one extra compile. Reported both times, converges; the churn sweep runs one extra clean compile with this documented in-code.
+- **`matchNew`'s `titleStem` candidate cannot currently fire** — `newIndex` already keys the raw title's handle — and is kept for symmetry with `matchExisting`, with a comment saying so. A lookup that differs from its sibling is how this namespace fragmented twice.
+- **A source page and a concept of the same name still take two pages**, `X` and `X-2`. That is §4's uniqueness rule working; what was fixed is only that `X-2` is found again instead of spawning `X-3`.
+- **A concept whose name is a prefix of a real `Name-<digits>` concept can be merged into it**, when a source page holds the prefix. A vault with `raw/GPT.md` and a concept `GPT-4` merges a later concept `GPT` into `GPT-4` rather than creating a page for it, and there is no frontmatter breadcrumb, because the ownership guard correctly refuses to hand `GPT` out as an alias. This is the cost of §4 storing a title only as a filename: nothing on disk records *why* a title carries `-N`, so a genuine `-4` and a uniqueness `-2` are indistinguishable. Resolving it needs a frontmatter key, which is added scope under §0. The alternative shipped previously was worse — a separate page under a wrong name, proliferating one per compile.
+- **The stem's tag folds case; the kept prefix does not.** Two long titles differing only by `İ`/`i̇` or `ẞ`/`ß` have handles §4 calls equal but UTF-8 prefixes of different lengths, so they still take two stems. Every other case pair folds. Strictly better than before, where every case pair of a long title split, and narrow enough to leave.
+- **Neither `sanitizeTitle` nor `handleOf` strips a lone surrogate**, so a title carrying one does not survive a disk round trip. Pre-existing and independent of the length rule; it needs a model to emit an unpaired surrogate inside a JSON string.
+
+### Refuted, with one rationale corrected
+
+- **The js-yaml alias bomb is not reachable.** In 5.3.0 `__proto__` becomes an own key and the prototype stays intact; deep nesting throws a catchable exception `parseFrontmatter` already swallows. Kept as a regression-guard oracle, not fixed.
+- **`parseRetryAfter` being seconds-only is safe, but the reason written down was wrong.** The 30-second cap only bounds a value that is *honored*; an HTTP-date parses to `undefined` and falls to the ladder, which retries at 750ms — *sooner* than the vendor asked, not later. The conclusion stands; the justification did not, and this is the same shape as two other entries the audit found: a defensible choice resting on a premise that does not hold.
+
+### Deferred to their own milestones
+
+- **Unguarded IO at the top of the pipeline** — `collectSources`, `repointRenames` and `saveManifest` throw past the per-source catch. The index write was carved out and fixed here.
+- **The readable/live seam.** `readable`, `bodyOfSource`, `isLive`, `readableFromManifest`, `readablePathFor`, `readablePathOf` and `cascadeScope.live` answer overlapping versions of two questions — is this source live, and where is its markdown — and no two agree at the edges. `hasDerivative` catches an IO error on `derivativeOrigin` optimistically while `readableFromManifest` catches the *same call on the same file* pessimistically. Each carries a well-argued comment defending its local choice and none acknowledges the other, which is exactly why they drifted. Measured: one compile can report a source unreadable and serve its content to the model in the same run, and a run can classify one source three ways.
+
+  Two findings belong to that milestone rather than here. The `UnreadableCiter` branch blocks no citers, so co-citing sources are manifested even though the page their inventory queued was never written; its logged rationale assumes a *permanent* unreadability, but the same branch is reached by a transient one — a locked file, a sync conflict, an un-hydrated cloud placeholder — and there a user's edit is lost permanently and the next compile reports `noop`. The obvious repair is to use `discovery.unreadable` to separate the two cases, and that does not work as built: a derivative under `raw/` is read up to four times per compile, and which read a transient failure lands on decides whether the source is reported unreadable, silently served anyway, or fails the page. Deferred because it spans the M2d–f rename subsystem and the IO work above, and re-opening it inside this campaign would have made the intactness check vacuous.
+
+### M2d–f intactness
+
+Re-verified after every fix landed, because the fixes touched `yaml.ts`, `manifest.ts` and the modules feeding the rename subsystem. All seven M2e invariants hold, and the named mutation checks reproduce at their recorded weights: removing the float branch fails **exactly seven** tests, removing `chooseTarget`'s recorded-path fallback **exactly one**. `CHURN_SEEDS=1500` green in both fault modes; the demo corpus green on a real filesystem with real pdf.js; `FUZZ_SEEDS=800` and `FUZZ_LOCALIZE_SEEDS=800` green. Not one file of `renames.ts`, `discover.ts`, `normalize/index.ts`, `manifest.ts`, `paths.ts` or `hash.ts` changed across the fix range.
