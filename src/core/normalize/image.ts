@@ -25,8 +25,13 @@ const DECORATIVE = /logo|avatar|icon|sprite|badge|pixel/i;
  * one this pass cannot put back together — and matching it here would fetch
  * bytes into the vault that no link ever names. Both halves of the pass read
  * this one pattern, so they agree about what an image is by construction.
+ *
+ * Balanced brackets inside the alt text are allowed, because CommonMark allows
+ * them and they say nothing about where the line ends. One level covers what a
+ * person writes by hand; deeper nesting simply does not match, which leaves the
+ * reference alone rather than mangling it.
  */
-const IMAGE_MARKDOWN = /!\[([^\]\n]*)\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
+const IMAGE_MARKDOWN = /!\[((?:[^[\]\n]|\[[^[\]\n]*\])*)\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
 
 export interface LocalizeDeps {
   fs: FsAdapter;

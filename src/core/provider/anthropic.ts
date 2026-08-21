@@ -83,16 +83,30 @@ function extractText(bytes: Uint8Array): string {
   return text;
 }
 
+/**
+ * How much of a vendor's error text is worth carrying. The string travels into
+ * a `CompileFailure.reason` and from there into a `Notice`, one per failed
+ * source, and nothing downstream shortens it — a megabyte error body became a
+ * megabyte notice. Enough to diagnose, not enough to be a payload.
+ */
+const MAX_VENDOR_MESSAGE = 500;
+
 function errorMessage(status: number, bytes: Uint8Array): string {
   try {
     const parsed = JSON.parse(decodeUtf8(bytes)) as { error?: { message?: unknown } };
     if (typeof parsed.error?.message === "string" && parsed.error.message !== "") {
-      return `HTTP ${status}: ${parsed.error.message}`;
+      return `HTTP ${status}: ${clip(parsed.error.message)}`;
     }
   } catch {
     // Not a JSON error body; the status alone will have to do.
   }
   return `HTTP ${status}`;
+}
+
+/** One line, bounded, with the truncation visible rather than silent. */
+function clip(message: string): string {
+  const flat = message.replace(/\s+/g, " ").trim();
+  return flat.length <= MAX_VENDOR_MESSAGE ? flat : `${flat.slice(0, MAX_VENDOR_MESSAGE)}…`;
 }
 
 /** Seconds form only; anything else falls back to the wrapper's backoff. */

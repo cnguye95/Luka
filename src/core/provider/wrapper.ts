@@ -22,6 +22,8 @@ import {
 
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_CAP_MS = 30_000;
+/** A ceiling on a hand-edited retry count, so one call cannot hold the lock all day. */
+const MAX_RETRY_BUDGET = 10;
 
 export interface CreateProviderOptions {
   http: HttpAdapter;
@@ -66,6 +68,17 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     }
   }
 
+  /**
+   * §17 sets this to 2, but `data.json` is a file a user can edit and
+   * `loadSettings` validates nothing. A negative value made the loop below run
+   * zero times — the provider then failed every call without ever reaching the
+   * transport, reporting "giving up after 0 attempts". The ceiling keeps a
+   * mistyped large value from holding the operation lock for hours.
+   */
+  const retryBudget = Number.isFinite(settings.maxRetries)
+    ? Math.min(Math.max(Math.floor(settings.maxRetries), 0), MAX_RETRY_BUDGET)
+    : 0;
+
   async function attemptLoop(
     task: ProviderTask,
     model: string,
@@ -77,7 +90,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
   ): Promise<string> {
     let lastError: unknown;
 
-    for (let attempt = 0; attempt <= settings.maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= retryBudget; attempt++) {
       if (attempt > 0) {
         await sleep(delayBeforeAttempt(attempt, lastError, random));
       }
@@ -103,7 +116,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
       }
     }
 
-    const attempts = settings.maxRetries + 1;
+    const attempts = retryBudget + 1;
     throw new ProviderError(
       `${task}: giving up after ${attempts} attempt${attempts === 1 ? "" : "s"} — ${describe(lastError)}`,
       {
