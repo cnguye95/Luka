@@ -16,7 +16,9 @@
     "check:boundary": "node scripts/check-boundary.mjs",
     "lint": "eslint src scripts tests eval",
     "install:vault": "node scripts/install-vault.mjs",
-    "eval:fixture": "esbuild eval/build-fixture.ts --bundle --packages=external --platform=node --format=esm --outfile=.eval-cache/build-fixture.mjs && node .eval-cache/build-fixture.mjs"
+    "eval:fixture": "esbuild eval/build-fixture.ts --bundle --packages=external --platform=node --format=esm --outfile=.eval-cache/build-fixture.mjs && node .eval-cache/build-fixture.mjs",
+    "eval": "esbuild eval/run.ts --bundle --packages=external --platform=node --format=esm --outfile=.eval-cache/run.mjs && node .eval-cache/run.mjs",
+    "eval:live": "esbuild eval/run.ts --bundle --packages=external --platform=node --format=esm --outfile=.eval-cache/run.mjs && node .eval-cache/run.mjs -- --live"
   },
   "dependencies": {
     "d3-force": "^3.0.0",

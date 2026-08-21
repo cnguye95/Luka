@@ -2,10 +2,10 @@
 kind: source
 source: '[[raw/garbage-collection.md]]'
 aliases: []
-summary: An unremarkable source.
+summary: McCarthy's bargain for Lisp.
 updated: '2026-03-01'
 ---
-An unremarkable source.
+McCarthy's bargain for Lisp.
 
 <!-- citations:start -->
 ## Sources

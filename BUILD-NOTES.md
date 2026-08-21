@@ -1105,3 +1105,41 @@ pipeline over them with a scripted provider and a frozen clock
 One thing the bundling taught: `import.meta.dirname` is the *output* directory,
 because the script is bundled into `.eval-cache/` before it runs. Paths anchor
 to `process.cwd()`, which npm scripts set to the package root.
+
+### The eval harness (§13)
+
+`eval/run.ts`, `eval/metrics.ts`, `eval/queries.yaml`, and a fifth CI step.
+
+- **It ranks through the product's own `rankModeA`/`rankModeB`.** An eval that
+  reimplements what it measures reports on the copy — the same trap the provider
+  matrix fell into when it derived its expectations from the code under test.
+- **CI seeding is `forceIncludeSeeds`, verbatim.** §13 asks for "exact
+  title/alias match only (no model)", which is the rule §7.4 step 2 already
+  applies to every query, so CI measures the product's own seeding minus the
+  model rather than a harness-shaped imitation of it.
+- **Both modes run every time**, not just the one the fixture's density selects.
+  A change that only harms the small-vault path would otherwise hide behind the
+  graph one.
+- **`eval/metrics.ts` is not in §3's tree.** It exists for the reason
+  `pagetable.ts` did: the arithmetic several places depend on gets one home
+  where it can be checked against hand-computed numbers, rather than living
+  inside a script that has to be executed to be tested.
+- **A query expecting nothing scores recall 1**, because there was nothing to
+  miss — the alternative lets a malformed entry drag the mean down as though
+  ranking had failed. **MRR is uncapped** while the recalls stop at 10, because
+  a hit at rank 40 must stay distinguishable from no hit at all: that is what
+  separates a regression that demoted a page from one that dropped it.
+- **The floor comparison carries 1e-9 of slack.** A floor is a number written
+  down from a previous run of the same code, and failing CI on the last bit of a
+  float is noise.
+- Floors are the first measured means less 0.05. Verified that an inflated floor
+  really does exit nonzero, rather than trusting that it would.
+
+**The fixture was silently three pages short.** Two inventory phrases in the
+builder had stopped matching because the source text wrapped across a line
+(`allocate\nwithout having`), so those sources were inventoried as
+"unremarkable" with no items, and the garbage-collection cluster never existed.
+Nothing failed: the build succeeded, the eval ran, and two queries simply scored
+zero — which a floor set from that run would have enshrined as normal. The
+builder now fails loudly when any source matches no phrase, and the corrected
+fixture has 47 pages rather than 44.

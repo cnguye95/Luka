@@ -141,7 +141,7 @@ const INVENTORIES: { match: string; summary: string; items: Item[] }[] = [
     items: [BLETCHLEY, { title: "Enigma", kind: "concept", summary: "The German rotor cipher machine." }, COLOSSUS],
   },
   {
-    match: "turns one notation into another",
+    match: "A-0 in 1952",
     summary: "Hopper's A-0 and the contested idea behind it.",
     items: [COMPILER, HOPPER],
   },
@@ -154,7 +154,7 @@ const INVENTORIES: { match: string; summary: string; items: Item[] }[] = [
     ],
   },
   {
-    match: "allocate without having",
+    match: "introduced it for Lisp",
     summary: "McCarthy's bargain for Lisp.",
     items: [
       { title: "Garbage collection", kind: "concept", summary: "Reclaiming memory a program has finished with." },
@@ -240,6 +240,9 @@ const LINKS: Record<string, string[]> = {
   "Manchester Baby": ["Stored-program computer", "EDSAC"],
 };
 
+/** Sources whose inventory phrase matched nothing; a build with any fails. */
+const unmatched: string[] = [];
+
 function replyFor(request: CompletionRequest): unknown {
   if (request.task === "page-generation") {
     const title = /Title: (.+)/.exec(request.user)?.[1]?.trim() ?? "Untitled";
@@ -250,7 +253,15 @@ function replyFor(request: CompletionRequest): unknown {
   if (request.task === "vision") return "An unrelated image.";
 
   const found = INVENTORIES.find((entry) => request.user.includes(entry.match));
-  if (found === undefined) return inventoryReply("An unremarkable source.", []);
+  if (found === undefined) {
+    // Loudly, not quietly. A phrase that stopped matching — because the source
+    // was reworded, or because it wraps across a line the way `allocate
+    // without having` did — would otherwise yield a source with no items, and
+    // the fixture would shrink by a few pages without anyone noticing until a
+    // floor absorbed it.
+    unmatched.push(request.user.split("\n")[0] ?? "(empty)");
+    return inventoryReply("An unremarkable source.", []);
+  }
   return inventoryReply(
     found.summary,
     found.items.map((item) => ({
@@ -284,6 +295,11 @@ async function main(): Promise<void> {
   const result = await core.compile();
   if (result.failed.length > 0) {
     console.error("fixture build failed:", result.failed);
+    process.exit(1);
+  }
+  if (unmatched.length > 0) {
+    console.error("fixture build failed: no inventory phrase matched these sources:");
+    for (const line of unmatched) console.error(`  ${line}`);
     process.exit(1);
   }
 

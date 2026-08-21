@@ -1,0 +1,109 @@
+# Eval queries for the committed fixture vault (handoff.md §13).
+#
+# Each entry is a question and the page paths it should surface. The mix is
+# deliberate: some name a page outright, some name only an alias, and some
+# expect a neighbour of what they name — which is where graph ranking and
+# keyword ranking genuinely disagree, and therefore where the numbers below
+# carry information.
+#
+# `Compiler-2.md` is not a typo. `raw/compiler.md` is a source, so its source
+# page holds the title "compiler", and §4's uniqueness rule gives the concept
+# the next free name. A real vault does this.
+#
+# Floors are the first measured means, less 0.05. The metrics are deterministic,
+# so the margin absorbs a deliberate edit to the fixture rather than run-to-run
+# noise — and a regression that costs more than 5 points fails CI.
+
+floors:
+  # Measured 0.9375 / 1.0000 / 0.7109
+  A:
+    recallAt5: 0.8875
+    recallAt10: 0.9500
+    mrr: 0.6609
+  # Measured 0.7604 / 1.0000 / 0.7277
+  B:
+    recallAt5: 0.7104
+    recallAt10: 0.9500
+    mrr: 0.6777
+
+queries:
+  # Names a page outright.
+  - query: what is a Turing machine
+    expect:
+      - wiki/concepts/Turing machine.md
+
+  # The near-miss pair: this must not surface the machine page first.
+  - query: what is the Turing test
+    expect:
+      - wiki/concepts/Turing test.md
+
+  - query: who was Grace Hopper
+    expect:
+      - wiki/entities/Grace Hopper.md
+
+  # Alias only — "Hopper" is an alias, never a title.
+  - query: what did Hopper build
+    expect:
+      - wiki/entities/Grace Hopper.md
+
+  # Alias only — the expansion, not the acronym.
+  - query: Electronic Numerical Integrator and Computer
+    expect:
+      - wiki/entities/ENIAC.md
+
+  - query: what is lambda calculus
+    expect:
+      - wiki/concepts/Lambda calculus.md
+
+  - query: what is the Church-Turing thesis
+    expect:
+      - wiki/concepts/Church-Turing thesis.md
+
+  - query: what is a stored-program computer
+    expect:
+      - wiki/concepts/Stored-program computer.md
+
+  # One hop: the thesis names both people.
+  - query: who formulated the Church-Turing thesis
+    expect:
+      - wiki/entities/Alan Turing.md
+      - wiki/entities/Alonzo Church.md
+
+  # One hop: Colossus was built at Bletchley.
+  - query: where was Colossus built
+    expect:
+      - wiki/entities/Bletchley Park.md
+
+  # One hop: the EDVAC report is von Neumann's.
+  - query: who wrote the EDVAC report
+    expect:
+      - wiki/entities/John von Neumann.md
+
+  # One hop: ENIAC was programmed by rewiring, by Bartik among others.
+  - query: who programmed ENIAC
+    expect:
+      - wiki/entities/Jean Bartik.md
+
+  # Two hops: garbage collection was built for Lisp, by McCarthy.
+  - query: why does Lisp collect garbage
+    expect:
+      - wiki/concepts/Garbage collection.md
+      - wiki/entities/John McCarthy.md
+
+  # Two hops: the bottleneck belongs to the architecture.
+  - query: what is the von Neumann bottleneck
+    expect:
+      - wiki/concepts/Von Neumann bottleneck.md
+      - wiki/concepts/Von Neumann architecture.md
+
+  # The suffixed page, reached by the concept's own name.
+  - query: what does a compiler do
+    expect:
+      - wiki/concepts/Compiler-2.md
+
+  # Multi-expect across a cluster.
+  - query: codebreaking at Bletchley Park
+    expect:
+      - wiki/entities/Bletchley Park.md
+      - wiki/entities/Colossus.md
+      - wiki/concepts/Enigma.md

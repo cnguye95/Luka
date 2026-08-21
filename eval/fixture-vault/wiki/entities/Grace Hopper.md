@@ -11,6 +11,7 @@ Grace Hopper is one of the threads this vault follows. It connects to [[compiler
 <!-- citations:start -->
 ## Sources
 - [[raw/cobol-committee.md]]
+- [[raw/compiler.md]]
 - [[raw/hopper-biography.html]]
 - [[raw/reading-list.txt]]
 <!-- citations:end -->

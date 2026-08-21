@@ -4,11 +4,11 @@
 - [[church-turing-thesis]] — The equivalence of two models of computation.
 - [[cobol-committee]] — The verbose language still running payrolls.
 - [[colossus-at-bletchley]] — The first programmable electronic digital computer.
-- [[compiler]] — An unremarkable source.
+- [[compiler]] — Hopper's A-0 and the contested idea behind it.
 - [[early-machines]] — A table of early machines.
 - [[edvac-report]] — The 1945 draft that named an architecture.
 - [[eniac-programmers]] — The 1945 valve machine and the women who programmed it.
-- [[garbage-collection]] — An unremarkable source.
+- [[garbage-collection]] — McCarthy's bargain for Lisp.
 - [[hopper-biography]] — A biography of Grace Hopper.
 - [[lambda-calculus]] — Church's formalism and its descendants.
 - [[notes-on-recursion]] — Notes on recursion and the Y combinator.
@@ -29,13 +29,16 @@
 - [[ENIAC]] — Decimal valve machine programmed by rewiring. (aliases: Electronic Numerical Integrator and Computer)
 - [[Grace Hopper]] — Wrote the first compiler and shaped COBOL. (aliases: Hopper, Rear Admiral Hopper)
 - [[Jean Bartik]] — One of ENIAC's first programmers.
+- [[John McCarthy]] — Introduced garbage collection for Lisp.
 - [[John von Neumann]] — Wrote the EDVAC report.
+- [[Lisp]] — The language garbage collection was built for.
 - [[Manchester Baby]] — First stored-program machine to run, 1948.
 - [[Tommy Flowers]] — Designed Colossus.
 ## Concepts
 - [[Church-Turing thesis]] — Effective calculability equals Turing computability. (aliases: Church-Turing)
 - [[Compiler-2]] — Turns one notation into another.
 - [[Enigma]] — The German rotor cipher machine.
+- [[Garbage collection]] — Reclaiming memory a program has finished with.
 - [[Halting problem]] — No machine decides whether every machine stops.
 - [[Lambda calculus]] — Computation as function application.
 - [[Lorenz cipher]] — The German teleprinter cipher Colossus attacked.

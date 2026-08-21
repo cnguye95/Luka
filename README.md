@@ -88,6 +88,26 @@ npm run lint
    *Community plugins*. The vault is gitignored.
 4. Copy `demo/raw/` into the vault as `raw/` to have something to compile.
 
+## Eval
+
+`npm run eval` scores the committed fixture vault in `eval/` against the
+questions in `eval/queries.yaml`, reporting recall@5, recall@10 and MRR for both
+retrieval modes and exiting nonzero if any mean falls below the floor recorded
+in that file. It runs in CI.
+
+**These numbers measure ranking, not the LLM phases.** CI mode calls no model at
+all: it seeds by exact title and alias match, the way §7.4's force-include rule
+does, and scores what the ranker returns. Nothing here says whether the seed
+call chooses well, whether synthesis writes a good answer, or whether an answer
+is grounded — only whether the pages a question should surface come back near
+the top. `npm run eval:live` runs the same measurement with the real seed call
+(needs `ANTHROPIC_API_KEY`); it is never run in CI.
+
+`npm run eval:fixture` rebuilds the fixture vault from its hand-written sources
+in `eval/fixture-vault/raw/`. It calls no model either — the replies are
+scripted — and the rebuild is byte-identical, so regenerating the vault does not
+move the floors.
+
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand.
