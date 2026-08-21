@@ -64,6 +64,14 @@ export async function loadManifest(fs: FsAdapter, path: string): Promise<IngestM
 
   const out: IngestManifest = {};
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    // `out[key] = …` with a key of `__proto__` reparents `out` instead of
+    // adding to it: the entry vanishes from `Object.keys` and the object starts
+    // inheriting whatever the file supplied. Every key here is meant to be a
+    // vault path, and no vault path is `__proto__`, so it is dropped like any
+    // other unreadable entry — at the boundary, because the same assignment
+    // shape appears in `saveManifest` and at five sites building the next
+    // manifest, and none of them can be handed a key that never gets in.
+    if (key === "__proto__") continue;
     const entry = toEntry(value);
     if (entry !== null) out[key] = entry;
   }
