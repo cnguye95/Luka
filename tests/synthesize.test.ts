@@ -1,0 +1,233 @@
+// §8.2's synthesis and §8.3's answer note. §14's minimum set names "synthesis
+// JSON-block strip"; the rest here is invariant 5 — code writes the
+// frontmatter, the callout, the sources block and the trace, and the model
+// writes prose only.
+import { describe, expect, it } from "vitest";
+import {
+  answerNotePath,
+  renderAnswerNote,
+  slugOf,
+  stripMissingBlock,
+  synthesize,
+  validateAnswerLinks,
+} from "../src/core/answer/synthesize";
+import type { AssembledNode } from "../src/core/retrieve/assemble";
+import type { Trace } from "../src/core/answer/trace";
+import { StubProvider } from "./helpers/provider";
+
+const node = (title: string, over: Partial<AssembledNode> = {}): AssembledNode => ({
+  path: `wiki/concepts/${title}.md`,
+  title,
+  kind: "concept",
+  text: `About ${title}.`,
+  truncated: false,
+  ...over,
+});
+
+const TRACE: Trace = { mode: "B", seeds: ["Alpha"], round2: false, top: [] };
+
+describe("§8.2's trailing JSON block is stripped (§14)", () => {
+  it("removes the block and reads its list", () => {
+    const reply = 'The answer.\n\n```json\n{"missing_information": ["dates"]}\n```';
+
+    expect(stripMissingBlock(reply)).toEqual({ body: "The answer.", missing: ["dates"] });
+  });
+
+  it("reads an empty list as nothing missing", () => {
+    const reply = 'The answer.\n\n```json\n{"missing_information": []}\n```';
+
+    expect(stripMissingBlock(reply)).toEqual({ body: "The answer.", missing: [] });
+  });
+
+  it("accepts a fence with no language tag", () => {
+    const reply = 'The answer.\n\n```\n{"missing_information": ["x"]}\n```';
+
+    expect(stripMissingBlock(reply).missing).toEqual(["x"]);
+  });
+
+  it("keeps a fenced example that is not at the end", () => {
+    // A code block in the middle of an answer is prose the user asked for.
+    const reply = 'Use this:\n\n```js\nconst a = 1;\n```\n\nDone.\n\n```json\n{"missing_information": []}\n```';
+
+    const parsed = stripMissingBlock(reply);
+
+    expect(parsed.body).toContain("const a = 1;");
+    expect(parsed.body).toContain("Done.");
+    expect(parsed.body).not.toContain("missing_information");
+  });
+
+  it("survives a block that is missing, unparseable, or the wrong shape", () => {
+    // The answer is sound either way; failing the query over a malformed footer
+    // would throw away three model calls' worth of work.
+    expect(stripMissingBlock("Just prose.")).toEqual({ body: "Just prose.", missing: [] });
+    expect(stripMissingBlock("A.\n\n```json\nnot json\n```").missing).toEqual([]);
+    expect(stripMissingBlock('A.\n\n```json\n{"missing_information": "dates"}\n```').missing).toEqual([]);
+    expect(stripMissingBlock('A.\n\n```json\n[1,2]\n```').missing).toEqual([]);
+  });
+
+  it("drops non-string and blank entries from the list", () => {
+    const reply = 'A.\n\n```json\n{"missing_information": ["dates", 7, null, "  ", "names"]}\n```';
+
+    expect(stripMissingBlock(reply).missing).toEqual(["dates", "names"]);
+  });
+
+  it("still strips an unparseable block from the body", () => {
+    expect(stripMissingBlock("A.\n\n```json\nnot json\n```").body).toBe("A.");
+  });
+});
+
+describe("the synthesis call (§8.2, §11)", () => {
+  it("labels each page with its title, kind and path", async () => {
+    const provider = new StubProvider(() => "Prose.");
+    await synthesize(provider, "How does ranking work?", [node("PageRank"), node("Retrieval")]);
+
+    const call = provider.callsFor("synthesis")[0];
+    expect(call?.user).toContain("Question: How does ranking work?");
+    expect(call?.user).toContain("--- page: PageRank (concept, wiki/concepts/PageRank.md) ---");
+    expect(call?.user).toContain("About Retrieval.");
+  });
+
+  it("runs as prose, not JSON mode, and leaves temperature unset", async () => {
+    // §8.2's reply is markdown that ends with a fenced block. Asking the
+    // wrapper to parse the whole thing as JSON would reject every valid answer.
+    const provider = new StubProvider(() => "Prose.");
+    await synthesize(provider, "q", [node("A")]);
+
+    expect(provider.callsFor("synthesis")[0]?.temperature).toBeUndefined();
+  });
+
+  it("tells the model when nothing was retrieved", async () => {
+    const provider = new StubProvider(() => "Prose.");
+    await synthesize(provider, "q", []);
+
+    expect(provider.callsFor("synthesis")[0]?.user).toContain("No wiki pages were retrieved");
+  });
+});
+
+describe("§8.3's link validation", () => {
+  const retrieved = [node("PageRank"), node("paper.md", { kind: "raw", path: "raw/paper.md" })];
+
+  it("keeps a link to a page that was retrieved", () => {
+    expect(validateAnswerLinks("See [[PageRank]].", retrieved)).toBe("See [[PageRank]].");
+  });
+
+  it("keeps a link to a retrieved raw source by path", () => {
+    expect(validateAnswerLinks("See [[raw/paper.md]].", retrieved)).toBe("See [[raw/paper.md]].");
+  });
+
+  it("unlinks a link outside the set and marks it", () => {
+    const validated = validateAnswerLinks("See [[Photosynthesis]].", retrieved);
+
+    expect(validated).toContain("See Photosynthesis");
+    expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis -->");
+    expect(validated).not.toContain("[[Photosynthesis]]");
+  });
+
+  it("keeps the display text when unlinking a piped link", () => {
+    // The sentence has to still read afterwards.
+    const validated = validateAnswerLinks("See [[Photosynthesis|the process]].", retrieved);
+
+    expect(validated).toContain("See the process ");
+    expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis -->");
+  });
+
+  it("matches a retrieved page case-insensitively", () => {
+    expect(validateAnswerLinks("See [[pagerank]].", retrieved)).toBe("See [[pagerank]].");
+  });
+});
+
+describe("§8.3's note is written by code (invariant 5)", () => {
+  const base = {
+    question: "How does ranking work?",
+    asked: "2026-08-20T10:00:00Z",
+    mode: "B" as const,
+    grounded: true,
+    body: "Ranking uses [[PageRank]].",
+    consulted: [node("PageRank")],
+    trace: TRACE,
+  };
+
+  it("writes frontmatter in §4's key order", () => {
+    const note = renderAnswerNote(base);
+
+    expect(note.startsWith("---\nkind: answer\nquestion: ")).toBe(true);
+    expect(note).toContain("asked: '2026-08-20T10:00:00Z'");
+    expect(note).toContain("mode: B");
+    expect(note).toContain("grounded: true");
+  });
+
+  it("writes the sources block, then the trace, at the foot", () => {
+    const note = renderAnswerNote(base);
+
+    expect(note).toContain("<!-- sources:start -->\n## Sources consulted\n- [[PageRank]]");
+    expect(note.indexOf("sources:start")).toBeLessThan(note.indexOf("trace:start"));
+    expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
+  });
+
+  it("puts the ungrounded callout first, before the answer", () => {
+    const note = renderAnswerNote({ ...base, grounded: false, consulted: [] });
+    const body = note.slice(note.indexOf("---\n", 4) + 4);
+
+    expect(body.trimStart().startsWith("> [!warning] Not grounded in your wiki")).toBe(true);
+    expect(note).toContain("grounded: false");
+  });
+
+  it("omits the callout when the answer is grounded", () => {
+    expect(renderAnswerNote(base)).not.toContain("[!warning]");
+  });
+
+  it("validates the links it writes into the note", () => {
+    const note = renderAnswerNote({ ...base, body: "See [[Nowhere]]." });
+
+    expect(note).toContain("<!-- link outside retrieved set: Nowhere -->");
+  });
+
+  it("names a raw source by path and a page by title", () => {
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [node("paper.md", { kind: "raw", path: "raw/paper.md" }), node("PageRank")],
+    });
+
+    expect(note).toContain("- [[PageRank]]");
+    expect(note).toContain("- [[raw/paper.md]]");
+  });
+
+  it("lists sources in path order, whatever order they ranked in", () => {
+    const forward = renderAnswerNote({ ...base, consulted: [node("Zed"), node("Alpha")] });
+    const backward = renderAnswerNote({ ...base, consulted: [node("Alpha"), node("Zed")] });
+
+    expect(forward).toBe(backward);
+  });
+});
+
+describe("§8.3's answer path", () => {
+  const at = new Date("2026-08-20T10:07:00Z");
+
+  it("is answers/YYYY-MM-DD-HHmm <slug>.md", () => {
+    expect(answerNotePath("How does ranking work?", at)).toBe(
+      "answers/2026-08-20-1007 how-does-ranking-work.md",
+    );
+  });
+
+  it("uses UTC, so a synced vault does not name two notes the same minute", () => {
+    expect(answerNotePath("q", new Date("2026-08-20T23:30:00Z"))).toContain("2026-08-20-2330");
+  });
+
+  it("slugs to lowercase alphanumerics and dashes", () => {
+    expect(slugOf("What IS PageRank, really?!")).toBe("what-is-pagerank-really");
+  });
+
+  it("caps the slug at 60 characters without a trailing dash", () => {
+    const slug = slugOf("a ".repeat(80));
+
+    expect(slug.length).toBeLessThanOrEqual(60);
+    expect(slug.endsWith("-")).toBe(false);
+  });
+
+  it("falls back rather than producing an empty name", () => {
+    // A question in a non-Latin script slugs to nothing; the timestamp already
+    // makes the name unique, so the slug only has to be a legal component.
+    expect(slugOf("これは何ですか")).toBe("answer");
+    expect(slugOf("???")).toBe("answer");
+  });
+});

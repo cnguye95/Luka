@@ -897,3 +897,37 @@ containing only `|`. The heading requirement is not what stops a stray fence
 pairing with the real block — the "no inner fence" rule already does that — so
 it needed the case where it is the only thing that matters: a complete fake
 block, which without it is stripped as though Luka had written it.
+
+### Synthesis and the answer note (§8.2, §8.3)
+
+`src/core/answer/synthesize.ts`. Invariant 5 draws the line this module keeps:
+everything below the answer prose — frontmatter, callout, sources block, trace —
+is written by code.
+
+- **Synthesis runs in prose mode, not JSON mode.** §8.2's reply is markdown that
+  *ends with* a fenced block; asking the wrapper to parse the whole thing as
+  JSON would reject every valid answer. Temperature is left unset, as page
+  generation leaves it — §11 fixes temperature 0 for JSON tasks only.
+- **Only a fence at the very end is the footer**, and the block's content may not
+  itself contain a fence. Without that second rule a lazy match backtracks
+  across an earlier code block and swallows everything between it and the
+  footer: an answer that opens with an example loses its entire body. A test
+  caught this, not review.
+- **A missing, unparseable or wrongly-shaped block reads as an empty list**, and
+  the block still comes off. The answer is sound either way, and failing the
+  query over a malformed footer throws away model calls already paid for.
+- **An out-of-set link keeps its display text.** §8.3 says "unlinked to plain
+  text plus marker"; using the target instead of the display half would leave
+  the sentence reading differently from what the model wrote.
+- **The sources block is sorted by path**, so two answers over the same set list
+  it identically, and a raw source is named by path while a page is named by
+  title — §4's rule for which form a link takes.
+- **Timestamps are UTC**, matching `ingested`'s convention: a vault synced
+  between zones would otherwise name two notes for the same local minute.
+- **An empty slug falls back to "answer".** A question in a non-Latin script
+  slugs to nothing; the timestamp already makes the name unique, so the slug
+  only has to be a legal, non-empty component.
+
+Nine mutations turn the tests red, including the callout dropped, links left
+unvalidated in the note, the marker omitted, display text lost when unlinking,
+sources left unsorted, and local time used instead of UTC.
