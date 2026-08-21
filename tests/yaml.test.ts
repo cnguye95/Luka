@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { load } from "js-yaml";
 import {
   ensureFrontmatter,
   parseFrontmatter,
@@ -180,5 +181,70 @@ describe("frontmatter", () => {
     const out = ensureFrontmatter("Body.\n", { ingested: "2026-08-19", "source-format": "md" });
     expect(out).toBe("---\ningested: '2026-08-19'\nsource-format: md\n---\nBody.\n");
     expect(ensureFrontmatter(out, { ingested: "2026-08-19", "source-format": "md" })).toBe(out);
+  });
+});
+
+describe("the frontmatter fence closes only at a line start", () => {
+  it("does not read a mid-line --- as the closing fence", () => {
+    // `derived-from` is the ownership guard the whole rename subsystem stands
+    // on. Reporting a value the document does not actually carry is how a
+    // user's own file gets accepted as Luka's and overwritten.
+    const text = "---\nderived-from: raw/notes.pdf---\nMy own notes, not Luka's.\n";
+    const parsed = parseFrontmatter(text);
+
+    // The fence is never closed, so there is no frontmatter to read.
+    expect(parsed.present).toBe(false);
+    expect(parsed.data["derived-from"]).toBeUndefined();
+  });
+
+  it("agrees with the YAML parser about every value it reports", () => {
+    const inner = "derived-from: raw/notes.pdf---";
+    const parsed = parseFrontmatter(`---\n${inner}\n---\nbody\n`);
+    const truth = load(inner) as Record<string, unknown>;
+    expect(parsed.data["derived-from"]).toBe(truth["derived-from"]);
+  });
+
+  it("keeps a key that follows a --- line inside a block scalar", () => {
+    // §6.2 invites the user to hand-edit a derivative. An edit above the
+    // ownership key must not make Luka lose the file.
+    const text = "---\nnote: |\n  ---\nderived-from: raw/src.pdf\n---\nbody\n";
+    const parsed = parseFrontmatter(text);
+
+    expect(parsed.data["derived-from"]).toBe("raw/src.pdf");
+    expect(parsed.body).toBe("body\n");
+  });
+
+  it("still reads the ordinary shapes", () => {
+    expect(parseFrontmatter("---\na: b\n---\nbody\n")).toMatchObject({
+      present: true,
+      mergeable: true,
+      body: "body\n",
+    });
+    // An empty block is legal and must still parse.
+    expect(parseFrontmatter("---\n---\nbody\n")).toMatchObject({ present: true, body: "body\n" });
+    // CRLF throughout.
+    expect(parseFrontmatter("---\r\na: b\r\n---\r\nbody\r\n").data["a"]).toBe("b");
+    // A document with no frontmatter at all.
+    expect(parseFrontmatter("just a body\n").present).toBe(false);
+  });
+});
+
+describe("serializeFrontmatter keeps keys that collide with Object.prototype", () => {
+  it("does not drop constructor or toString", () => {
+    // Asserted by round-trip rather than by substring: js-yaml quotes values
+    // that YAML 1.1 would read as booleans, which is correct and none of this
+    // test's business.
+    const out = serializeFrontmatter({ constructor: "x", toString: "y", kind: "source" });
+    const back = parseFrontmatter(`${out}body
+`).data;
+    expect(back["constructor"]).toBe("x");
+    expect(back["toString"]).toBe("y");
+    expect(back["kind"]).toBe("source");
+  });
+
+  it("does not let a __proto__ key reparent the object it is building", () => {
+    const out = serializeFrontmatter({ ["__proto__"]: "x", kind: "source" });
+    expect(out).toContain("kind: source");
+    expect(({} as Record<string, unknown>)["kind"]).toBeUndefined();
   });
 });

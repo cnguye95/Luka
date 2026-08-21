@@ -28,8 +28,19 @@ export interface ParsedFrontmatter {
   body: string;
 }
 
-/** Groups: opening fence, inner YAML, closing fence. */
-const FENCE = /^(---[ \t]*\r?\n)([\s\S]*?)(\r?\n?---[ \t]*(?:\r?\n|$))/;
+/**
+ * Groups: opening fence, inner YAML, closing fence.
+ *
+ * The closing `---` must begin a line, which is why the inner group either is
+ * empty or ends with a newline rather than letting the fence float. A pattern
+ * that accepts `---` mid-line reports a block no other YAML reader agrees
+ * with: `derived-from: raw/a.pdf---` would be read as `raw/a.pdf`, and since
+ * this is the only reader of that key, a user's own file could be accepted as
+ * Luka's and overwritten. It also has to survive a `---` line *inside* a block
+ * scalar, which would otherwise truncate the block and lose every key below it
+ * — including the ownership key, on exactly the hand-edit §6.2 invites.
+ */
+const FENCE = /^(---[ \t]*\r?\n)((?:[\s\S]*?\r?\n)?)(---[ \t]*(?:\r?\n|$))/;
 
 /** The order §4 lists these keys in; anything else is appended alphabetically. */
 const KEY_ORDER = [
@@ -75,16 +86,21 @@ export function serializeFrontmatter(data: Record<string, unknown>): string {
 }
 
 function renderKeys(data: Record<string, unknown>): string {
-  const ordered: Record<string, unknown> = {};
+  // A Map, not an object literal: `ordered[key] !== undefined` consults
+  // Object.prototype, so keys named `constructor` or `toString` test as already
+  // present and are dropped, and assigning `__proto__` reparents the
+  // accumulator instead of adding to it. Page frontmatter is re-serialized from
+  // whatever a document carries, so those names are reachable.
+  const ordered = new Map<string, unknown>();
   for (const key of KEY_ORDER) {
-    if (data[key] !== undefined) ordered[key] = data[key];
+    if (data[key] !== undefined) ordered.set(key, data[key]);
   }
   for (const key of Object.keys(data).sort()) {
-    if (ordered[key] === undefined && data[key] !== undefined) ordered[key] = data[key];
+    if (!ordered.has(key) && data[key] !== undefined) ordered.set(key, data[key]);
   }
-  if (Object.keys(ordered).length === 0) return "";
+  if (ordered.size === 0) return "";
   // lineWidth -1 disables wrapping so long values cannot reflow between runs.
-  return dump(ordered, { lineWidth: -1, noRefs: true });
+  return dump(Object.fromEntries(ordered), { lineWidth: -1, noRefs: true });
 }
 
 /**
