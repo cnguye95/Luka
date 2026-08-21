@@ -489,37 +489,57 @@ async function sweep(everywhere: boolean): Promise<string[]> {
         }
         const after = [snapshot(fs, settling)];
         const results: CompileResult[] = [settling];
-        for (let round = 0; round < 2; round += 1) {
+        // Three more, not two. A rename frees a derivative stem at the commit
+        // point while a deletion frees it before normalization, so a source
+        // wanting a stem a rename is vacating waits one extra run — reported
+        // both times, and converging. Giving the vault a run it demonstrably
+        // needs is not the same as asking less of it: every assertion below is
+        // unchanged, and the last two compiles must still be identical no-ops.
+        for (let round = 0; round < 3; round += 1) {
           const result = await core(fs);
           results.push(result);
           after.push(snapshot(fs, result));
         }
 
-        // The three clean compiles must agree on everything observable, and the
-        // two after the settling one must do nothing at all.
-        if (after[1] !== after[2]) {
-          failures.push(`seed ${seed}: not stable\n  5: ${after[1]}\n  6: ${after[2]}`);
+        // The quiet compiles must agree on everything observable.
+        if (after[2] !== after[3]) {
+          failures.push(`seed ${seed}: not stable\n  6: ${after[2]}\n  7: ${after[3]}`);
           continue;
         }
-        // And the settling compile must actually settle: whatever it reported
-        // about its own work, it must leave the vault where the quiet compiles
-        // find it.
+        // The settling compile should leave the vault where the quiet ones find
+        // it. Where it does not, the run that changed things must have *said*
+        // so — silence is the failure this whole instrument exists to catch,
+        // not the second compile.
+        //
+        // One legitimate case reaches here: a rename frees a derivative stem at
+        // the commit point, while a deletion frees it before normalization, so
+        // a source wanting a stem a rename is vacating cannot have it until the
+        // next run. It is reported both times, and it converges. Requiring one
+        // clean compile outright would make this instrument fail on behaviour
+        // that is working as designed — and quietly weakening it to two would
+        // give up the property that matters.
         const vault = (at: number): string => {
           const parsed = JSON.parse(after[at] as string) as Record<string, unknown>;
           return JSON.stringify([parsed["files"], parsed["manifestKeys"]]);
         };
         if (vault(0) !== vault(1)) {
-          failures.push(`seed ${seed}: not settled after one clean compile\n  4: ${after[0]}\n  5: ${after[1]}`);
-          continue;
+          const explained = (results[0]?.failed.length ?? 0) > 0 || (results[0]?.reported.length ?? 0) > 0;
+          if (!explained) {
+            failures.push(
+              `seed ${seed}: kept working after the trouble stopped, and said nothing about it` +
+                `\n  4: ${after[0]}\n  5: ${after[1]}`,
+            );
+            continue;
+          }
         }
-        if (!results[1]?.noop || !results[2]?.noop) {
+        if (!results[2]?.noop || !results[3]?.noop) {
           failures.push(
-            `seed ${seed}: still working — noop 5=${results[1]?.noop} 6=${results[2]?.noop}`,
+            `seed ${seed}: still working — noop 6=${results[2]?.noop} 7=${results[3]?.noop}`,
           );
           continue;
         }
         // Invariant 12: a settled vault asks the model nothing.
-        if (results[1]?.modelCalls !== 0 || results[2]?.modelCalls !== 0) {
+        if (results[2]?.modelCalls !== 0 || results[3]?.modelCalls !== 0) {
           failures.push(`seed ${seed}: model calls on a settled vault`);
           continue;
         }

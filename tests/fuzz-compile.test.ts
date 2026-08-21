@@ -56,6 +56,13 @@ const HOSTILE_FRONTMATTER = [
   "---\njust a scalar\n---\n",
   "---\nkey: |\n  folded\n  block\n---\n",
   "---\nunterminated: 'quote\n---\n",
+  // A closing fence that is not at a line start. This made parseFrontmatter
+  // report a `derived-from` the document does not carry, which is how a user's
+  // own file was accepted as Luka's and overwritten.
+  "---\nderived-from: raw/elsewhere.pdf---\n",
+  // A `---` line inside a block scalar, which truncated the parse and lost
+  // every key below it — the ownership key included.
+  "---\nnote: |\n  ---\nderived-from: raw/elsewhere.pdf\n---\n",
   "---\nderived-from: raw/somewhere.csv\n---\n",
   "---\ningested: '2026-01-01'\nsource-format: md\n---\n",
   "",
@@ -231,7 +238,8 @@ describe("parsed objects keep their prototype", () => {
   }
 });
 
-describe("hostile bytes under raw/", () => {
+// Generous, because FUZZ_SEEDS raises the work far past vitest's default.
+describe("hostile bytes under raw/", { timeout: 600_000 }, () => {
   it(`compile survives, settles and preserves, over ${SEEDS} seeds`, async () => {
     const failures: string[] = [];
 

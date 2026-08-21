@@ -49,10 +49,16 @@ const pick = <T>(next: () => number, from: readonly T[]): T =>
  */
 const HOSTILE = ["$&", "$`", "$'", "$1", "$$", "$<n>", "-->", "--->", "--"];
 
-const IMAGE_MARKDOWN = /!\[([^\]]*)\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
-
+/**
+ * Every markdown link target in the text, found without any knowledge of what
+ * the localizer thinks alt text may contain.
+ *
+ * Deliberately not the product's own pattern: a check that reuses the regex it
+ * is checking cannot notice that regex being wrong, which is exactly how the
+ * bracketed-alt-text case slipped through.
+ */
 function linkTargets(text: string): string[] {
-  return [...text.matchAll(IMAGE_MARKDOWN)].map((match) => match[2] ?? "");
+  return [...text.matchAll(/\]\(\s*([^\s)]+)/g)].map((match) => match[1] ?? "");
 }
 
 /** Every `<!--` on a line must be closed exactly once, at its end. */
@@ -107,6 +113,21 @@ describe("a localized link and the file it names are the same path", () => {
     });
   }
 
+  it("localizes an image whose alt text carries balanced brackets", async () => {
+    const url = "https://example.invalid/figure.png";
+    const fs = new MemFs();
+    const http = new StubHttp({ [url]: imageRoute(pngBytes(200, 200)) });
+
+    const result = await localizeInlineImages(`Prose.\n![a [b] c](${url})`, {
+      fs,
+      http,
+      timeoutMs: 1000,
+    });
+
+    expect(result.localized).toBe(1);
+    expect(pathMismatches(fs, result.text)).toEqual([]);
+  });
+
   it("localizes an image whose alt text spans a line break", async () => {
     // Legal CommonMark: link text may contain a soft break. The pass must
     // either localize it or leave it alone entirely — fetching the bytes and
@@ -142,7 +163,19 @@ describe("localizer and markers under randomised input", () => {
           next() < 0.7 ? `.${pick(next, HOSTILE)}` : pick(next, ["", ".png", ".jpg", ".WEBP"]);
         const url = `https://example.invalid/a${n}/${stem}${tail}`;
         urls.push(url);
-        const alt = pick(next, ["", "a diagram", "before --> after", "$& $` $'", "logo", "]( x"]);
+        const alt = pick(next, [
+          "",
+          "a diagram",
+          "before --> after",
+          "$& $` $'",
+          "logo",
+          "]( x",
+          // Balanced brackets are legal CommonMark link text on one line, and
+          // excluding `]` to keep alt text line-bounded once excluded them too.
+          "a [b] c",
+          "[bracketed]",
+          "a [b [c] d] e",
+        ]);
         lines.push(`Prose about a${n}.`, `![${alt}](${url})`);
       }
       const source = lines.join("\n");
