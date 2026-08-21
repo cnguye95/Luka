@@ -931,3 +931,40 @@ is written by code.
 Nine mutations turn the tests red, including the callout dropped, links left
 unvalidated in the note, the marker omitted, display text lost when unlinking,
 sources left unsorted, and local time used instead of UTC.
+
+### ask() (§7.4 into §8.3)
+
+`runAsk` in `src/core/index.ts`, under `lock.run("ask", …)` — the
+`OperationName` M2 reserved and never used.
+
+- **Atomicity is structural, not defended.** Every model call happens, the whole
+  note is rendered into one string, and only then is anything written. There is
+  no partial state a failure could leave and nothing to roll back — the same
+  single-commit shape as the manifest, which is how invariant 11 is kept rather
+  than merely asserted.
+- **Two questions in one minute do not collide.** §8.3's path has minute
+  precision, so the second answer takes §8.4's suffix idiom rather than
+  overwriting the first.
+- **`grounded` is `assembly.nodes.length > 0`** — what the model was actually
+  given, not what ranking produced. A page that ranked but could not be read
+  contributes nothing and must not be claimed.
+- **The seed call runs in Mode A too**, per §7.3. Mode A saves no model call;
+  the mode governs ranking only.
+- **`modelCalls` is a `stats().requests` delta**, compile's convention, so it
+  counts transport attempts. Invariant 12's bound is on *logical* calls, and the
+  test asserts `byTask` for exactly that reason.
+
+Thirteen assertions, five mutation-checked: ask taken outside the lock, the
+collision suffix removed, `grounded` hard-coded true, force-include dropped, and
+Mode A left ranking nothing. The lock test drives both directions — an ask
+refused during a compile and a compile refused during an ask — and asserts
+`BusyError.message` verbatim, since §2 pins that string.
+
+### A process fix, recorded because it hid a broken build
+
+Step 7 was committed with a failing typecheck. The gate command piped each
+check through `| tail`, which returns *tail's* exit status, so `npm run build`
+failing still reported success and the `&&` chain ran on to `git commit`. Every
+gate run in this milestone had the same hole; the earlier steps were green, so
+it never showed. Gates now run under `set -o pipefail`, and the step-7 commit
+was amended rather than followed by a fix-up.

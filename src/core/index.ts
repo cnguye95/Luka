@@ -59,6 +59,15 @@ import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
 import { buildGraph } from "./graph/build";
 import { computePPR, type PPRResult } from "./graph/ppr";
+import { assemble } from "./retrieve/assemble";
+import {
+  forceIncludeSeeds,
+  modeOf,
+  rankModeA,
+  rankModeB,
+  selectSeeds,
+} from "./retrieve/pipeline";
+import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
 import {
   normalizeSettings,
   type GraphSnapshot,
@@ -67,6 +76,7 @@ import {
   type ManifestEntry,
   type OperationName,
   type PageMeta,
+  type RetrievalMode,
 } from "./types";
 import { parseFrontmatter, serializeFrontmatter } from "./yaml";
 
@@ -174,6 +184,12 @@ export interface Core {
    * which the plugin starts by calling this.
    */
   getGraph(): Promise<GraphSnapshot>;
+  /**
+   * §5's `ask`: §7's retrieval into §8's answer note. Holds the operation lock
+   * (invariant 2) and writes the note atomically on success only
+   * (invariant 11).
+   */
+  ask(question: string): Promise<AnswerResult>;
   /** §7.2's personalized PageRank over the current graph. */
   computePPR(
     seedPaths: readonly string[],
@@ -221,6 +237,7 @@ export function createCore(deps: CoreDeps): Core {
       if (!result.cancelled) await rebuildGraph();
       return result;
     },
+    ask: (question: string) => lock.run("ask", () => runAsk(deps, question)),
     getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);
@@ -252,6 +269,115 @@ async function runPreview(input: CoreDeps): Promise<ScopePreview> {
   const discovery = await discover(deps.fs, manifest);
   const pages = await loadPageTable(deps.fs);
   return cascadeScope(pages, await readCitations(deps.fs, pages), discovery);
+}
+
+/** §5's `ask`. §8.3 names what the caller needs back. */
+export interface AnswerResult {
+  /** Vault path of the note written. */
+  path: string;
+  mode: RetrievalMode;
+  grounded: boolean;
+  /** Whether §8.2's follow-up round ran. */
+  round2: boolean;
+  modelCalls: number;
+}
+
+/**
+ * §7.4's pipeline into §8.2's synthesis into §8.3's note.
+ *
+ * Invariant 11: "Answer notes are written atomically on success only; a failed
+ * query writes nothing." Every model call happens, the whole note is rendered
+ * into one string, and only then is anything written — so there is no partial
+ * state a failure could leave behind, and nothing to roll back. The same
+ * single-commit shape as the manifest.
+ *
+ * Invariant 12 bounds this at three calls: one seed selection, one synthesis,
+ * and at most one more for §8.2's follow-up round.
+ */
+async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> {
+  const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
+  const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
+  const before = provider.stats().requests;
+
+  const pages = await loadPageTable(deps.fs);
+  const graph = await buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath });
+
+  // §7.4 step 1: the same renderer that writes `wiki/_index.md`, so the seed
+  // call and the file the user reads can never drift apart.
+  const indexText = renderIndex(pages);
+  const chosen = await selectSeeds(provider, question, indexText, pages, {
+    seeds: deps.settings.seedsCap,
+    keywords: deps.settings.keywordsCap,
+  });
+
+  // §7.4 step 2: force-includes are additive to whatever the model chose.
+  const seedPaths = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
+    comparePaths,
+  );
+
+  // §7.3: the seed call runs in both modes; the mode governs ranking only.
+  const mode = modeOf(graph, deps.settings);
+  const ranked =
+    mode === "B"
+      ? rankModeB(graph, seedPaths, deps.settings)
+      : await rankModeA(deps.fs, pages, seedPaths, chosen.keywords);
+
+  const assembly = await assemble(
+    deps.fs,
+    ranked,
+    deps.settings.contextBudgetTokens,
+    deps.settings.assemblyCap,
+  );
+
+  // §7.4 step 5: "Zero seeds and zero lexical candidates → skip retrieval;
+  // synthesis runs from model knowledge and the answer is labeled ungrounded."
+  const grounded = assembly.nodes.length > 0;
+  const reply = await synthesize(provider, question, assembly.nodes);
+
+  const asked = (deps.now ?? (() => new Date()))();
+  const note = renderAnswerNote({
+    question,
+    asked: asked.toISOString(),
+    mode,
+    grounded,
+    body: reply.body,
+    consulted: assembly.nodes,
+    trace: {
+      mode,
+      seeds: seedPaths,
+      round2: false,
+      top: assembly.nodes.map((node) => ({
+        label: node.kind === "raw" ? node.path : node.title,
+        score: ranked.find((candidate) => candidate.path === node.path)?.score ?? 0,
+      })),
+    },
+  });
+
+  const path = await freeAnswerPath(deps.fs, answerNotePath(question, asked));
+  await deps.fs.mkdir(dirname(path));
+  await deps.fs.write(path, note);
+
+  return {
+    path,
+    mode,
+    grounded,
+    round2: false,
+    modelCalls: provider.stats().requests - before,
+  };
+}
+
+/**
+ * §8.4's suffix idiom, applied to the answer folder: two questions asked in one
+ * minute would otherwise name one file, and the second would overwrite the
+ * first.
+ */
+async function freeAnswerPath(fs: FsAdapter, wanted: string): Promise<string> {
+  if (!(await fs.exists(wanted))) return wanted;
+  const base = wanted.slice(0, -".md".length);
+  for (let suffix = 2; ; suffix++) {
+    const candidate = `${base}-${suffix}.md`;
+    if (!(await fs.exists(candidate))) return candidate;
+  }
 }
 
 /**
