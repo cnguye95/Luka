@@ -467,7 +467,7 @@ Both were shaken out against 1,500 seeds in each mode before being trusted: the 
 Known limits, stated rather than papered over. The third round re-ran the mutation test against the strengthened sweep and **neither regression is caught even now** — the earlier note claimed this only of the first. Three reasons, all real:
 
 - The generator does not reach the first regression's shape: a fallback rename whose re-extraction also fails, plus an unrelated source landing on the vacated stem in the same run.
-- The `reported.length > 0` escape is per-*run*, not per-file, so one unrelated notice disables both data-loss checks for that whole compile — and a fallback rename always reports, which is exactly the first regression's setting.
+- ~~The `reported.length > 0` escape is per-*run*, not per-file, so one unrelated notice disables both data-loss checks for that whole compile — and a fallback rename always reports, which is exactly the first regression's setting.~~ *(Fixed after M2f: a notice now excuses only the file it names or the source that owns it. Clean at 1,500 seeds in both modes with no false positives — but re-running the mutation test showed it does not change the outcome. Neither regression is caught even with the stricter escape, so the binding reason was always the third one below.)*
 - 284 of 1,500 seeds settle onto a vault that reports the same failures every compile. Some are §6.1 stem collisions that are permanent by design; the sweep cannot tell those from a genuine deadlock, which is why it did not find the name-swap one.
 
 Both regressions are covered by tests written directly against them. The sweep covers the neighbourhood.

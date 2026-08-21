@@ -165,6 +165,25 @@ async function repairsBefore(fs: MemFs): Promise<Map<string, string>> {
 }
 
 /**
+ * Did this run account for what happened to `file`, whose origin was `origin`?
+ *
+ * The escape used to be per-*run*: any notice at all excused every data-loss
+ * check for that whole compile, which is far too generous — a fallback rename
+ * always reports, so one unrelated notice blinded both checks in exactly the
+ * setting they most needed to look. A notice only excuses the file it is
+ * about, or the source that owns it.
+ */
+function accountedFor(result: CompileResult, file: string, origin: string): boolean {
+  return [...result.reported, ...result.failed].some(
+    (entry) =>
+      entry.path === origin ||
+      entry.path === file ||
+      entry.reason.includes(file) ||
+      entry.reason.includes(origin),
+  );
+}
+
+/**
  * Every repaired derivative and the origin it names, whatever the manifest
  * thinks. Cheaper and broader than the pinned map: it does not care whether the
  * origin is on disk, which matters because the dangerous case is precisely an
@@ -195,7 +214,6 @@ function repairsStolen(
   marked: ReadonlyMap<string, string>,
   result: CompileResult,
 ): string[] {
-  if (result.reported.length > 0) return [];
   const manifest = manifestOf(fs);
   const stolen: string[] = [];
   for (const [path, origin] of marked) {
@@ -207,7 +225,9 @@ function repairsStolen(
     const text = fs.text(path);
     if (text.includes(REPAIR_MARK)) continue;
     const now = /^derived-from: (.*)$/m.exec(text)?.[1]?.trim();
-    if (now !== undefined && now !== origin) stolen.push(`${path}: ${origin} -> ${now}`);
+    if (now === undefined || now === origin) continue;
+    if (accountedFor(result, path, origin)) continue;
+    stolen.push(`${path}: ${origin} -> ${now}`);
   }
   return stolen;
 }
@@ -283,16 +303,17 @@ function repairsLost(
   pinned: ReadonlyMap<string, string>,
   result: CompileResult,
 ): string[] {
-  if (result.reported.length > 0) return [];
   const manifest = manifestOf(fs);
   const lost: string[] = [];
-  for (const [origin] of pinned) {
+  for (const [origin, was] of pinned) {
     const entry = manifest[origin];
     // Gone from the manifest under this path means deleted or renamed — the
     // sweep and the carry are covered by the convergence checks instead.
     if (entry?.derivative === undefined) continue;
     const now = fs.files.has(entry.derivative) ? fs.text(entry.derivative) : "";
-    if (!now.includes(REPAIR_MARK)) lost.push(`${origin} -> ${entry.derivative}`);
+    if (now.includes(REPAIR_MARK)) continue;
+    if (accountedFor(result, was, origin)) continue;
+    lost.push(`${origin} -> ${entry.derivative}`);
   }
   return lost;
 }
