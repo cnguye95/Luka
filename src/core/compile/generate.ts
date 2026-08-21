@@ -69,20 +69,35 @@ export async function generatePageBody(
   // set, so without this the page claims a source it was never grounded in —
   // and §6.5 makes that block the persistent citer record, so the false claim
   // outlives the run and feeds §7.1's graph.
-  const omitted = omittedForBudget(input);
-  if (omitted.length === 0) return body;
-  return `${body}\n\n${truncatedForContextBudget()}\nNot given to the model for budget: ${omitted.join(", ")}`;
+  const short = budgetShortfall(input);
+  if (short.length === 0) return body;
+  return `${body}\n\n${truncatedForContextBudget(short)}`;
 }
 
-/** The citing sources the budget could not fit, in citer order. */
-function omittedForBudget(input: GeneratePageInput): string[] {
+/**
+ * The citing sources the model did not receive in full, in citer order.
+ *
+ * Both classes count. A source the budget could not fit at all is obvious; a
+ * source that was *truncated* is not, because §7.4 truncates the first item
+ * rather than dropping it, so it stays in `items` while the model saw only
+ * part of it — and at a small enough budget, none of it, since a budget too
+ * small to hold the marker yields the bare marker. Naming only what was
+ * dropped implies the rest arrived whole, which is the same false claim the
+ * marker exists to prevent.
+ */
+function budgetShortfall(input: GeneratePageInput): string[] {
   const head = renderHead(input);
   const packed = packUnderBudget(
     input.sources,
     (source) => renderSource(source),
     Math.max(0, input.contextBudgetTokens - estimateHead(head)),
   );
-  return input.sources.slice(packed.items.length).map((source) => source.path);
+  const short = input.sources.slice(packed.items.length).map((source) => source.path);
+  if (packed.truncated && packed.items.length > 0) {
+    const cut = input.sources[packed.items.length - 1];
+    if (cut !== undefined) short.unshift(cut.path);
+  }
+  return short;
 }
 
 /**

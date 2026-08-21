@@ -8,7 +8,7 @@
 // deterministically.
 import type { HttpAdapter } from "../adapters";
 import type { LukaSettings, ProviderTask } from "../types";
-import { PROVIDER_TASKS } from "../types";
+import { PROVIDER_TASKS, normalizeSettings } from "../types";
 import { createAnthropicProvider } from "./anthropic";
 import {
   MAX_TOKENS_BY_TASK,
@@ -22,8 +22,6 @@ import {
 
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_CAP_MS = 30_000;
-/** A ceiling on a hand-edited retry count, so one call cannot hold the lock all day. */
-const MAX_RETRY_BUDGET = 10;
 
 export interface CreateProviderOptions {
   http: HttpAdapter;
@@ -35,7 +33,9 @@ export interface CreateProviderOptions {
 }
 
 export function createProvider(options: CreateProviderOptions): LLMProvider {
-  const settings = options.settings;
+  // §17's numbers are made safe here as well as in `createCore`, because this
+  // is a second public entry point. `normalizeSettings` is idempotent.
+  const settings = normalizeSettings(options.settings);
   const raw = options.raw ?? createAnthropicProvider(options.http, settings);
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const random = options.random ?? Math.random;
@@ -68,16 +68,9 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     }
   }
 
-  /**
-   * §17 sets this to 2, but `data.json` is a file a user can edit and
-   * `loadSettings` validates nothing. A negative value made the loop below run
-   * zero times — the provider then failed every call without ever reaching the
-   * transport, reporting "giving up after 0 attempts". The ceiling keeps a
-   * mistyped large value from holding the operation lock for hours.
-   */
-  const retryBudget = Number.isFinite(settings.maxRetries)
-    ? Math.min(Math.max(Math.floor(settings.maxRetries), 0), MAX_RETRY_BUDGET)
-    : 0;
+  // Already floored and capped by `normalizeSettings`, which owns that rule
+  // for every §17 number rather than each consumer owning it for one.
+  const retryBudget = settings.maxRetries;
 
   async function attemptLoop(
     task: ProviderTask,

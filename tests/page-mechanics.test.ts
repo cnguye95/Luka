@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCore } from "../src/core/index";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { mergeInventories } from "../src/core/compile/dedup";
+import { generatePageBody } from "../src/core/compile/generate";
 import { buildTitleIndex, resolveLinks } from "../src/core/compile/links";
 import { sanitizeTitle, takenTitles, uniqueTitle } from "../src/core/compile/pagetable";
 import type { PageMeta } from "../src/core/types";
@@ -277,5 +278,49 @@ describe("the length bound is a filename rule, not a matching rule", () => {
 
     expect(title).toMatch(/-2$/);
     expect(new TextEncoder().encode(`${title}.md`).length).toBeLessThanOrEqual(255);
+  });
+});
+
+describe("a page names every source the model did not fully receive", () => {
+  const source = (path: string, body: string) => ({ path, body });
+  const input = (contextBudgetTokens: number) => ({
+    title: "PageRank",
+    kind: "concept" as const,
+    aliases: [],
+    sources: [source("raw/one.md", "ONE ".repeat(60)), source("raw/two.md", "TWO ".repeat(60))],
+    contextBudgetTokens,
+  });
+
+  it("names a source that was truncated, not only ones that were dropped", async () => {
+    // §7.4 truncates the first item rather than dropping it, so it stays in
+    // the packed set while the model saw only part of it. A page that names
+    // only the dropped ones implies the first arrived whole.
+    const body = await generatePageBody(
+      { complete: async () => "PROSE", stats: () => ({ requests: 0, byTask: {} }) } as never,
+      input(20),
+    );
+
+    expect(body).toContain("raw/one.md");
+    expect(body).toContain("raw/two.md");
+  });
+
+  it("puts the names inside the comment, like every other marker", async () => {
+    const body = await generatePageBody(
+      { complete: async () => "PROSE", stats: () => ({ requests: 0, byTask: {} }) } as never,
+      input(20),
+    );
+
+    const stripped = body.replace(/<!--[\s\S]*?-->/g, "");
+    expect(stripped).not.toContain("raw/one.md");
+    expect(stripped).not.toContain("raw/two.md");
+  });
+
+  it("says nothing when every source fitted whole", async () => {
+    const body = await generatePageBody(
+      { complete: async () => "PROSE", stats: () => ({ requests: 0, byTask: {} }) } as never,
+      input(40_000),
+    );
+
+    expect(body).toBe("PROSE");
   });
 });

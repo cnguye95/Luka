@@ -57,12 +57,13 @@ import {
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
-import type {
-  IngestManifest,
-  LukaSettings,
-  ManifestEntry,
-  OperationName,
-  PageMeta,
+import {
+  normalizeSettings,
+  type IngestManifest,
+  type LukaSettings,
+  type ManifestEntry,
+  type OperationName,
+  type PageMeta,
 } from "./types";
 import { parseFrontmatter, serializeFrontmatter } from "./yaml";
 
@@ -167,13 +168,16 @@ export interface Core {
 
 export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
+  // §17's numbers are made safe once, here, so nothing downstream has to ask
+  // whether a hand-edited `data.json` can be acted on.
+  const safe: CoreDeps = { ...deps, settings: normalizeSettings(deps.settings) };
   return {
-    compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(deps, options)),
+    compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(safe, options)),
     // Deliberately outside the lock: it does no work and writes nothing, so it
     // can answer while a compile runs — the same reason §9's pane is never
     // blocked by the lock. §8.1's flow does not use it; compile's own confirm
     // callback holds the lock across preview → confirm → work.
-    previewCompile: () => runPreview(deps),
+    previewCompile: () => runPreview(safe),
     get busyWith(): OperationName | null {
       return lock.busyWith;
     },

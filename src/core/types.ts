@@ -130,5 +130,49 @@ export const DEFAULT_SETTINGS: LukaSettings = {
   compileConcurrency: 2,
 };
 
+/**
+ * §17's numeric settings, made safe to act on.
+ *
+ * `data.json` is a file a user can edit and `loadSettings` validates nothing,
+ * so every number here can arrive as a string, a NaN, a negative, or an
+ * Infinity. The rule is one rule: a value the code cannot act on falls back to
+ * §17's default, and a value with a range is clamped into it. Applied once, at
+ * the two places settings enter core, rather than at each consumer — the
+ * retry budget was clamped at its consumer and the three settings beside it
+ * were not, which is how a budget of 0 came to rewrite pages with no source in
+ * context while their citation blocks still named one.
+ *
+ * Idempotent: normalizing an already-normal settings object returns it
+ * unchanged, so the two entry points may both call it.
+ */
+export function normalizeSettings(settings: LukaSettings): LukaSettings {
+  return {
+    ...settings,
+    contextBudgetTokens: positive(settings.contextBudgetTokens, DEFAULT_SETTINGS.contextBudgetTokens),
+    requestTimeoutMs: positive(settings.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs),
+    compileConcurrency: clamp(settings.compileConcurrency, 1, MAX_COMPILE_CONCURRENCY, 1),
+    maxRetries: clamp(settings.maxRetries, 0, MAX_RETRY_BUDGET, 0),
+  };
+}
+
+/** A ceiling on a hand-edited retry count, so one call cannot hold the lock all day. */
+export const MAX_RETRY_BUDGET = 10;
+/**
+ * §11 budgets concurrency at 2. A raised value is the user's call; an
+ * unbounded one is not, because every extra worker is another request holding
+ * the operation lock.
+ */
+export const MAX_COMPILE_CONCURRENCY = 16;
+
+/** Finite and above zero, or §17's default — there is no useful smaller value. */
+function positive(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function clamp(value: number, low: number, high: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.floor(value), low), high);
+}
+
 /** handoff.md §17, marked fixed: PPR convergence threshold is not user-tunable. */
 export const PPR_EPSILON = 1e-8;
