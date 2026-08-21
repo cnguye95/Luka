@@ -682,3 +682,51 @@ Found by a claims-versus-code audit and recorded now rather than changed, except
 ### M2d–f intactness
 
 Re-verified after every fix landed, because the fixes touched `yaml.ts`, `manifest.ts` and the modules feeding the rename subsystem. All seven M2e invariants hold, and the named mutation checks reproduce at their recorded weights: removing the float branch fails **exactly seven** tests, removing `chooseTarget`'s recorded-path fallback **exactly one**. `CHURN_SEEDS=1500` green in both fault modes; the demo corpus green on a real filesystem with real pdf.js; `FUZZ_SEEDS=800` and `FUZZ_LOCALIZE_SEEDS=800` green. Not one file of `renames.ts`, `discover.ts`, `normalize/index.ts`, `manifest.ts`, `paths.ts` or `hash.ts` changed across the fix range.
+
+## M3 — Retrieval + Ask + Filing
+
+Built against `handoff.md` §7–§8 and §13, with the plan's ordered steps. Two
+decisions were taken by the user before any code: the **health check is in M3**
+— §5, §8.1 and §10 all specify it while §15 assigns it to no milestone at all,
+so it would otherwise never be built — and the **eval fixture vault is
+stub-compiled** rather than generated with a live key, so regenerating it is
+byte-deterministic and costs nothing.
+
+### The graph (§7.1)
+
+`src/core/graph/build.ts`. Nodes are the page table minus `_`-prefixed
+infrastructure (invariant 8) plus every manifest source's readable markdown —
+the first consumer of `readablePathOf`, which was put on the façade for exactly
+this and had sat unused since M2e. Edges come from `linkTargets` over the
+*whole file*: §7.1 names body, citation block and frontmatter `source:`, so
+stripping frontmatter first would drop every source page's edge to its own raw
+file. Undirected, deduplicated per pair, degree counted from the deduplicated
+set. Built in memory only — §7.1 says "no cache file", and a cache would be a
+fourth thing that can disagree with the vault.
+
+- **A raw node is its readable markdown, reachable by either name.** The node's
+  path is the readable path, but citation blocks and `source:` keys name the
+  *manifest* path — the PDF, not the markdown extracted from it. Both names
+  resolve to the one node; without that a source page has no edge to the file it
+  describes.
+- **A pending source is not a node.** `readablePathOf` answers `null` for a
+  source whose cascade is still owed, and §7.1's node set is files that exist.
+- **A heading or block reference resolves to nothing**, exactly as `resolveLinks`
+  treats one. A wiki title can never contain `#` (`sanitizeTitle` strips it), so
+  the guard is only reachable through a raw path — where it costs something: a
+  source named `C#.md` cannot be linked into. One rule for what `#` means is
+  worth more than reaching one awkwardly-named file.
+- **A self-link is not an edge**, and a node whose file cannot be read
+  contributes no edges but stays a node — the page table and the manifest have
+  both already said it is one, and dropping it here would make the node set
+  depend on a transient read.
+- **`getGraph()` is lazy, cached, and returns a promise**; concurrent callers
+  share one build. `onGraphRebuilt` returns an unsubscribe, and fires after the
+  load-time build and after every non-cancelled compile — §5's "after compile
+  and after load". A declined preview changed nothing, so it rebuilds nothing.
+
+Four mutations were run against the tests before they were trusted: dropping the
+manifest-path alias, admitting pending entries, letting heading references
+resolve, and removing pair deduplication. The heading-reference test needed
+rewriting to be falsifiable at all — the first version asserted a link the
+lookup would have missed anyway.

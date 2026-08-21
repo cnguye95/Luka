@@ -57,8 +57,10 @@ import {
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
+import { buildGraph } from "./graph/build";
 import {
   normalizeSettings,
+  type GraphSnapshot,
   type IngestManifest,
   type LukaSettings,
   type ManifestEntry,
@@ -73,6 +75,7 @@ export type { ScopePreview } from "./compile/cascade";
 export type { SkippedSource } from "./compile/discover";
 export { DEFAULT_SETTINGS } from "./types";
 export type { IngestManifest, LukaSettings, ManifestEntry, ProviderTask } from "./types";
+export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types";
 // §7.1's node set — "every manifest source's readable markdown" — is exactly
 // this value per entry. Exported here rather than from manifest.ts so callers
 // outside core keep going through the one façade.
@@ -163,17 +166,59 @@ export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
   /** §5's read-only scope preview: no lock, no model call, no write. */
   previewCompile(): Promise<ScopePreview>;
+  /**
+   * §7.1's graph, built in memory and cached until the next compile. Async
+   * because the build reads the vault, and §7.1 asks for one at plugin load —
+   * which the plugin starts by calling this.
+   */
+  getGraph(): Promise<GraphSnapshot>;
+  /**
+   * §7.1: "Built in memory at plugin load and after compile." Returns an
+   * unsubscribe, so a view that closes stops hearing about rebuilds.
+   */
+  onGraphRebuilt(callback: (graph: GraphSnapshot) => void): () => void;
   readonly busyWith: OperationName | null;
 }
 
 export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
+  // §7.1's graph lives here and nowhere on disk: "built in memory at plugin
+  // load and after compile; no cache file". `building` collapses concurrent
+  // callers onto one build rather than letting two walk the vault at once.
+  let graph: GraphSnapshot | null = null;
+  let building: Promise<GraphSnapshot> | null = null;
+  const listeners = new Set<(graph: GraphSnapshot) => void>();
+
+  function rebuildGraph(): Promise<GraphSnapshot> {
+    building ??= buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
+      .then((built) => {
+        graph = built;
+        for (const listener of listeners) listener(built);
+        return built;
+      })
+      .finally(() => {
+        building = null;
+      });
+    return building;
+  }
+
   // `deps` is passed through, not copied. The plugin mutates its settings
   // object in place and this runs once in `onload()`, so a snapshot here would
   // freeze the API key as it stood at load — invariant 9 requires it be read
   // when the call is made. Each run makes §17's numbers safe for itself.
   return {
-    compile: (options: CompileOptions = {}) => lock.run("compile", () => runCompile(deps, options)),
+    compile: async (options: CompileOptions = {}) => {
+      const result = await lock.run("compile", () => runCompile(deps, options));
+      // "and after compile" (§7.1). A declined preview changed nothing, so
+      // there is nothing to rebuild from.
+      if (!result.cancelled) await rebuildGraph();
+      return result;
+    },
+    getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+    onGraphRebuilt: (callback: (graph: GraphSnapshot) => void) => {
+      listeners.add(callback);
+      return () => listeners.delete(callback);
+    },
     // Deliberately outside the lock: it does no work and writes nothing, so it
     // can answer while a compile runs — the same reason §9's pane is never
     // blocked by the lock. §8.1's flow does not use it; compile's own confirm

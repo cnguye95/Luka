@@ -27,6 +27,11 @@ export default class LukaPlugin extends Plugin {
 
     this.addSettingTab(new LukaSettingTab(this.app, this));
     registerCommands(this);
+    // §7.1: the graph is "built in memory at plugin load and after compile".
+    // Not awaited — `onload` must not block Obsidian on a vault walk, and every
+    // reader goes through `getGraph()`, which joins this build if it is still
+    // running. A failure here is not fatal: the next `getGraph()` retries.
+    void this.core.getGraph().catch(() => {});
   }
 
   async runCompile(): Promise<void> {
