@@ -1,6 +1,6 @@
 import type { DataAdapter } from "obsidian";
 import type { DirEntry, FileStat, FsAdapter } from "../core/adapters";
-import { dirname, normalizePath } from "../core/paths";
+import { comparePaths, dirname, normalizePath } from "../core/paths";
 
 /** FsAdapter over Obsidian's vault adapter. Paths in, paths out, all vault-relative. */
 export class ObsidianFs implements FsAdapter {
@@ -24,7 +24,10 @@ export class ObsidianFs implements FsAdapter {
     return [
       ...listed.files.map((file): DirEntry => ({ path: normalizePath(file), kind: "file" })),
       ...listed.folders.map((folder): DirEntry => ({ path: normalizePath(folder), kind: "folder" })),
-    ].sort((a, b) => a.path.localeCompare(b.path));
+      // core's rule, not a second one here: `localeCompare` orders by the
+      // host's locale, so `_x.md a.md A.md` came back in an order three
+      // consumers had to defensively re-sort.
+    ].sort((a, b) => comparePaths(a.path, b.path));
   }
 
   async stat(path: string): Promise<FileStat | null> {
@@ -49,12 +52,35 @@ export class ObsidianFs implements FsAdapter {
     let current = "";
     for (const segment of target.split("/")) {
       current = current === "" ? segment : `${current}/${segment}`;
-      if (!(await this.adapter.exists(current))) await this.adapter.mkdir(current);
+      // `stat`, not `exists`: a *file* standing where a folder belongs is
+      // "exists", so mkdir was skipped and the write below failed with ENOENT
+      // instead of naming the real obstruction.
+      if ((await this.adapter.stat(current))?.type === "folder") continue;
+      try {
+        await this.adapter.mkdir(current);
+      } catch (error) {
+        // Check-then-act, and §6.3 fetches four images at once — on the first
+        // compile of a document with two kept remote images every in-flight
+        // call sees raw/assets absent. Losing that race is success; the throw
+        // used to escape to normalizeSource and fail the whole source, where
+        // §6.3 asks only that the link be left and marked.
+        if ((await this.adapter.stat(current))?.type !== "folder") throw error;
+      }
     }
   }
 
   async delete(path: string): Promise<void> {
-    await this.adapter.remove(normalizePath(path));
+    const target = normalizePath(path);
+    // Obsidian's own recovery path, never a permanent unlink. What comes
+    // through here is a cascade-doomed page — §5's modal calls them pages that
+    // *may* be deleted, so the user approves a superset and cannot know which
+    // went — and derivatives under `raw/`, including one a user hand-repaired,
+    // which §6.2 names as the sanctioned repair. `remove()` put all of that
+    // beyond recovery while `trashSystem`/`trashLocal` sat on the same adapter
+    // unused. This is not §16's forbidden backup rotation; it is the
+    // platform's own default.
+    if (await this.adapter.trashSystem(target)) return;
+    await this.adapter.trashLocal(target);
   }
 }
 
