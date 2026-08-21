@@ -172,3 +172,28 @@ describe("a run sees one settings state", () => {
     expect(snapshot.models.synthesis).not.toBe("claude-sonn");
   });
 });
+
+describe("§7.2's numbers survive a hand-edited data.json", () => {
+  it("falls back for a damping factor the iteration cannot use", () => {
+    // Outside (0,1) the update stops being a contraction: at 1 it never
+    // teleports, at 0 it never walks. Neither boundary is a usable clamp, so
+    // an unusable value takes §17's default instead.
+    for (const value of [0, 1, -0.5, 1.5, Number.NaN, "0.9" as unknown as number]) {
+      expect(normalizeSettings({ ...DEFAULT_SETTINGS, pprAlpha: value }).pprAlpha).toBe(
+        DEFAULT_SETTINGS.pprAlpha,
+      );
+    }
+    expect(normalizeSettings({ ...DEFAULT_SETTINGS, pprAlpha: 0.5 }).pprAlpha).toBe(0.5);
+  });
+
+  it("keeps the iteration count inside a range the loop can act on", () => {
+    expect(normalizeSettings({ ...DEFAULT_SETTINGS, pprMaxIterations: 0 }).pprMaxIterations).toBe(1);
+    expect(normalizeSettings({ ...DEFAULT_SETTINGS, pprMaxIterations: -5 }).pprMaxIterations).toBe(1);
+    expect(
+      normalizeSettings({ ...DEFAULT_SETTINGS, pprMaxIterations: 5_000_000 }).pprMaxIterations,
+    ).toBe(1000);
+    expect(
+      normalizeSettings({ ...DEFAULT_SETTINGS, pprMaxIterations: Number.NaN }).pprMaxIterations,
+    ).toBe(DEFAULT_SETTINGS.pprMaxIterations);
+  });
+});

@@ -11,7 +11,7 @@ import { StubProvider, inventoryReply } from "./helpers/provider";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 
-function page(title: string, kind: string, body: string, aliases: string[] = []): string {
+function page(_title: string, kind: string, body: string, aliases: string[] = []): string {
   const aliasLine = aliases.length === 0 ? "" : `aliases:\n${aliases.map((a) => `  - ${a}\n`).join("")}`;
   return `---\nkind: ${kind}\n${aliasLine}summary: ''\nupdated: '2026-08-20'\n---\n${body}\n`;
 }

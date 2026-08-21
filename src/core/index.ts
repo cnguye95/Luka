@@ -58,6 +58,7 @@ import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
 import { buildGraph } from "./graph/build";
+import { computePPR, type PPRResult } from "./graph/ppr";
 import {
   normalizeSettings,
   type GraphSnapshot,
@@ -80,6 +81,7 @@ export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types
 // this value per entry. Exported here rather than from manifest.ts so callers
 // outside core keep going through the one façade.
 export { readablePathOf } from "./manifest";
+export type { PPROptions, PPRResult } from "./graph/ppr";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
 // invariant 10 requires every provider call to pass through the wrapper, and
 // keeping the transport module-internal makes a bypass structurally awkward.
@@ -172,6 +174,11 @@ export interface Core {
    * which the plugin starts by calling this.
    */
   getGraph(): Promise<GraphSnapshot>;
+  /** §7.2's personalized PageRank over the current graph. */
+  computePPR(
+    seedPaths: readonly string[],
+    options?: { snapshots?: boolean },
+  ): Promise<PPRResult>;
   /**
    * §7.1: "Built in memory at plugin load and after compile." Returns an
    * unsubscribe, so a view that closes stops hearing about rebuilds.
@@ -215,6 +222,14 @@ export function createCore(deps: CoreDeps): Core {
       return result;
     },
     getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+    computePPR: async (seedPaths, options = {}) => {
+      const settings = normalizeSettings(deps.settings);
+      return computePPR(await (graph === null ? rebuildGraph() : Promise.resolve(graph)), seedPaths, {
+        alpha: settings.pprAlpha,
+        maxIterations: settings.pprMaxIterations,
+        ...(options.snapshots === true ? { snapshots: true } : {}),
+      });
+    },
     onGraphRebuilt: (callback: (graph: GraphSnapshot) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);

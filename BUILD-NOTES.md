@@ -730,3 +730,41 @@ manifest-path alias, admitting pending entries, letting heading references
 resolve, and removing pair deduplication. The heading-reference test needed
 rewriting to be falsifiable at all — the first version asserted a link the
 lookup would have missed anyway.
+
+### PPR (§7.2)
+
+`src/core/graph/ppr.ts`, pure and synchronous — it is arithmetic over a
+snapshot, and keeping it free of IO is what lets an instrument compare it
+against an independent solution of the same equation.
+
+- **Adjacency is built in node order and neighbour lists are sorted**, so every
+  sum runs in one fixed sequence. Floating-point addition is not associative;
+  this is what makes two runs bit-identical rather than merely close.
+- **A degree-0 node is a zero column.** Its mass is not redistributed — it
+  leaves — and the node holds only what teleport puts back. Seeded alone, an
+  isolated node scores exactly `1−α` and everything else scores zero, which is
+  §7.2's sentence made checkable.
+- **No valid seed means every score is zero and no iteration runs.** A uniform
+  vector would be the other option and it is worse: it ranks every node equally
+  and looks like a result.
+- **`SNAPSHOT_CAP` is 100, module-local**, per the standing convention for §17's
+  fixed parameters. §7.2 bounds retained vectors independently of the iteration
+  limit, so a hand-edited `pprMaxIterations` cannot grow the pane's memory.
+- **`pprAlpha` falls back rather than clamping.** Outside (0,1) the update stops
+  being a contraction — at 1 it never teleports, at 0 it never walks — so
+  neither boundary is a usable value to clamp to. `pprMaxIterations` does clamp,
+  1..1000; the ceiling only stops a mistyped value from iterating a converged
+  vector while holding the lock.
+
+The §14 fixture is solved by hand as a linear system in the test — by symmetry
+`v_b = v_c`, giving `v_a = 1380/3131` — and never by running the product. It
+agrees with the iteration to 8 decimals; the residual ~1.5e-9 is the L1
+tolerance of 1e-8, and that gap is itself the evidence the two derivations
+agree. Four mutations turn the tests red: dropping degree normalization,
+swapping α and 1−α, letting a degree-0 node retain its own mass, and loosening
+convergence by 10⁴.
+
+One test needed rewriting to be honest. The snapshot-cap case first tried to
+force more than 100 iterations with α = 0.999999 and got 62: a small dense graph
+converges in tens of steps whatever the damping, because the rate is set by the
+second eigenvalue and not by α alone. It uses a 60-node chain instead.

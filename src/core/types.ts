@@ -163,6 +163,16 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
       DEFAULT_SETTINGS.compileConcurrency,
     ),
     maxRetries: clamp(settings.maxRetries, 0, MAX_RETRY_BUDGET, DEFAULT_SETTINGS.maxRetries),
+    // §7.2's damping. Outside (0,1) the iteration stops being a contraction —
+    // at 1 it never teleports and at 0 it never walks — so a hand-edited value
+    // falls back rather than being clamped to a boundary that means neither.
+    pprAlpha: fraction(settings.pprAlpha, DEFAULT_SETTINGS.pprAlpha),
+    pprMaxIterations: clamp(
+      settings.pprMaxIterations,
+      1,
+      MAX_PPR_ITERATIONS,
+      DEFAULT_SETTINGS.pprMaxIterations,
+    ),
   };
 }
 
@@ -174,10 +184,21 @@ export const MAX_RETRY_BUDGET = 10;
  * the operation lock.
  */
 export const MAX_COMPILE_CONCURRENCY = 16;
+/**
+ * A ceiling on a hand-edited iteration count. §7.2's own limit is 100; the
+ * ceiling only stops a mistyped one from holding the operation lock while it
+ * iterates a converged vector.
+ */
+export const MAX_PPR_ITERATIONS = 1000;
 
 /** Finite and above zero, or §17's default — there is no useful smaller value. */
 function positive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** Finite and strictly between 0 and 1, or §17's default. */
+function fraction(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 && value < 1 ? value : fallback;
 }
 
 function clamp(value: number, low: number, high: number, fallback: number): number {
