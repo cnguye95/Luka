@@ -1043,3 +1043,21 @@ checklist gained nine M3 items.
   "Filed. Run Compile to integrate."
 - **A failed ask says only that it failed.** Invariant 11 means nothing was
   written, so there is no partial note to point the user at.
+
+### The settings tab (§12)
+
+`src/plugin/settings.ts` gains §12's retrieval controls: context budget, K, both
+mode thresholds, the follow-up toggle, and a collapsed advanced section with α,
+maximum iterations, and ε.
+
+- **ε is shown and disabled.** §12 lists it among the controls and §17 marks it
+  fixed; showing it because the walk's stopping rule is worth knowing, while
+  refusing to edit it, is what satisfies both readings.
+- **`details`/`summary` supplies "collapsed"** — the platform's own disclosure
+  element, needing no stylesheet, which §3's dependency list leaves us without.
+- **A number is written back only when the field parses.** That keeps a
+  half-typed value out of `data.json` mid-keystroke; it is a convenience, not
+  the guard. The guard is `normalizeSettings`, which is where the rule for a
+  hand-edited file lives.
+
+Three README checklist items cover it, per §14.

@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import { PROVIDER_TASKS } from "../core/types";
+import { DEFAULT_SETTINGS, PPR_EPSILON, PROVIDER_TASKS, type LukaSettings } from "../core/types";
 import type LukaPlugin from "./main";
 
 const TASK_LABELS: Record<string, string> = {
@@ -49,5 +49,88 @@ export class LukaSettingTab extends PluginSettingTab {
           }),
       );
     }
+
+    new Setting(containerEl).setName("Retrieval").setHeading();
+
+    this.number(containerEl, "contextBudgetTokens", {
+      name: "Context budget",
+      desc: "Tokens of source text one answer may be built from (§7.4). Roughly characters ÷ 4.",
+    });
+    this.number(containerEl, "assemblyCap", {
+      name: "Pages per answer (K)",
+      desc: "How many whole pages an answer may assemble, budget permitting.",
+    });
+    this.number(containerEl, "modeMinNodes", {
+      name: "Graph mode: minimum nodes",
+      desc: "Below this the wiki is ranked by keyword rather than by the graph (§7.3).",
+    });
+    this.number(containerEl, "modeMinLinkRatio", {
+      name: "Graph mode: minimum links per node",
+      desc: "Both this and the node count must be met before graph ranking is used.",
+    });
+
+    new Setting(containerEl)
+      .setName("Follow-up round")
+      .setDesc("Let one answer ask for more pages when the first pass says something is missing (§8.2).")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.followUpEnabled).onChange(async (value) => {
+          this.plugin.settings.followUpEnabled = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    // §12 asks for the PPR parameters "collapsed"; `details` is the platform's
+    // own disclosure and needs no stylesheet, which §3 leaves us without.
+    const advanced = containerEl.createEl("details");
+    advanced.createEl("summary", { text: "Advanced (PageRank)" });
+
+    this.number(advanced, "pprAlpha", {
+      name: "Damping (α)",
+      desc: "How far the walk wanders before restarting at the seeds. Between 0 and 1.",
+    });
+    this.number(advanced, "pprMaxIterations", {
+      name: "Maximum iterations",
+      desc: "A ceiling; the walk normally stops earlier, when it stops moving.",
+    });
+    new Setting(advanced)
+      .setName("Convergence threshold (ε)")
+      .setDesc("Fixed by §17 — shown because the walk's stopping rule is worth knowing, not because it is tunable.")
+      .addText((text) => {
+        text.setValue(String(PPR_EPSILON)).setDisabled(true);
+      });
+  }
+
+  /**
+   * One numeric setting.
+   *
+   * Written back only when the field parses as a number, so a half-typed value
+   * does not land in `data.json` mid-keystroke. Anything that still gets
+   * through is caught by `normalizeSettings`, which is where the rule for a
+   * hand-edited file lives — this is a convenience, not the guard.
+   */
+  private number(
+    parent: HTMLElement,
+    key: NumericSetting,
+    labels: { name: string; desc: string },
+  ): void {
+    new Setting(parent)
+      .setName(labels.name)
+      .setDesc(labels.desc)
+      .addText((text) =>
+        text
+          .setPlaceholder(String(DEFAULT_SETTINGS[key]))
+          .setValue(String(this.plugin.settings[key]))
+          .onChange(async (value) => {
+            const parsed = Number(value.trim());
+            if (value.trim() === "" || !Number.isFinite(parsed)) return;
+            this.plugin.settings[key] = parsed;
+            await this.plugin.saveSettings();
+          }),
+      );
   }
 }
+
+/** The settings this tab edits as numbers. */
+type NumericSetting = {
+  [K in keyof LukaSettings]: LukaSettings[K] extends number ? K : never;
+}[keyof LukaSettings];
