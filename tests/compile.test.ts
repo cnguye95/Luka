@@ -304,6 +304,39 @@ describe("the four rules (§6.2)", () => {
     expect(fs.writes).toBe(0);
   });
 
+  it("does not divert a write to its float because one read failed", async () => {
+    // `chooseTarget` continues a float when the canonical path is *refused* —
+    // a judgement about who owns a file. An IO failure is not that judgement,
+    // and treating it as one moves the write somewhere else on a blip, with
+    // nothing said. The same rule the missing-derivative test already follows.
+    const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.md": "My own note.\n" });
+    await core(fs).instance.compile();
+    await fs.move("raw/a.html", "raw/b.html");
+    await core(fs).instance.compile();
+    expect(manifestOf(fs)["raw/b.html"]?.derivative).toBe("raw/a.md");
+
+    // The stem is free now, so a healthy run would bring the float home.
+    await fs.delete("raw/b.md");
+    await fs.write("raw/b.html", "<h1>Hi again</h1>\n");
+
+    const guarded = Object.create(fs) as MemFs;
+    guarded.exists = async (path: string): Promise<boolean> => {
+      if (path === "raw/b.md") throw new Error("EIO");
+      return MemFs.prototype.exists.call(fs, path);
+    };
+
+    const third = await core(guarded).instance.compile();
+
+    // Whatever it does, it must not quietly keep writing to the float.
+    expect(third.failed.map((failure) => failure.path)).toEqual(["raw/b.html"]);
+    expect(manifestOf(fs)["raw/b.html"]?.derivative).toBe("raw/a.md");
+
+    // And a healthy compile still brings it home.
+    const fourth = await core(fs).instance.compile();
+    expect(fourth).toMatchObject({ failed: [] });
+    expect(manifestOf(fs)["raw/b.html"]?.derivative).toBe("raw/b.md");
+  });
+
   it("sweeps a floating derivative when its source is deleted", async () => {
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.md": "My own note.\n" });
     await core(fs).instance.compile();

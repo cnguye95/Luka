@@ -255,6 +255,12 @@ async function describeImage(
  *
  * An *empty* non-canonical path is never taken: fresh placement belongs to
  * §6.1, and a float is only ever the continuation of a file that already exists.
+ *
+ * Only a *refusal* redirects the write. An IO failure is not a judgement about
+ * who owns the canonical path, and acting on it as though it were would move a
+ * write somewhere else on a transient blip, silently — the same distinction
+ * §6.2's missing-derivative test draws between an unreadable document and an
+ * unreadable disk.
  */
 async function chooseTarget(
   canonical: string,
@@ -266,6 +272,7 @@ async function chooseTarget(
     await claimDerivative(canonical, accepted, deps);
     return canonical;
   } catch (refusal) {
+    if (!(refusal instanceof DerivativeTaken)) throw refusal;
     if (recorded !== undefined && recorded !== canonical) {
       const origin = await derivativeOrigin(deps.fs, recorded);
       if (origin !== null && accepted.includes(origin)) return recorded;
@@ -303,6 +310,18 @@ export async function derivativeOrigin(fs: FsAdapter, path: string): Promise<str
 }
 
 /**
+ * The canonical path is held by a file this source may not overwrite. A
+ * judgement about ownership, distinct from an IO failure — `chooseTarget` acts
+ * on the first and never on the second.
+ */
+class DerivativeTaken extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DerivativeTaken";
+  }
+}
+
+/**
  * Throws unless `target` is free for this source's derivative.
  *
  * A derivative may only ever overwrite a derivative of an origin on the
@@ -318,7 +337,7 @@ async function claimDerivative(
   if (!(await deps.fs.exists(target))) return;
   const derivedFrom = await derivativeOrigin(deps.fs, target);
   if (derivedFrom !== null && accepted.includes(derivedFrom)) return;
-  throw new Error(
+  throw new DerivativeTaken(
     `derivative path ${target} is already taken by ${
       derivedFrom === null ? "a user-placed file" : `a derivative of ${derivedFrom}`
     }`,
