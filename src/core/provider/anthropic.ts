@@ -78,6 +78,17 @@ function extractText(bytes: Uint8Array): string {
   if (!Array.isArray(content)) {
     throw new ProviderError("provider response has no content array", { retryable: false });
   }
+  // §11 caps max_tokens per task, and a reply that hit the cap is a fragment.
+  // Unchecked, a JSON task burns the repair retry and then fails saying the
+  // reply was not valid JSON, which is true but not the reason; a prose task
+  // is worse, because the fragment is written into wiki/ under a code-written
+  // citation block claiming the full citer set. Not retryable: the same call
+  // returns the same length.
+  if ((parsed as { stop_reason?: unknown }).stop_reason === "max_tokens") {
+    throw new ProviderError("provider reply hit max_tokens and is incomplete", {
+      retryable: false,
+    });
+  }
   let text = "";
   for (const block of content as { type?: unknown; text?: unknown }[]) {
     if (block.type === "text" && typeof block.text === "string") text += block.text;
@@ -118,10 +129,18 @@ function clip(message: string): string {
   return flat.length <= MAX_VENDOR_MESSAGE ? flat : `${flat.slice(0, MAX_VENDOR_MESSAGE)}…`;
 }
 
-/** Seconds form only; anything else falls back to the wrapper's backoff. */
+/**
+ * Seconds form only; anything else falls back to the wrapper's backoff.
+ *
+ * Zero falls back too. It is not a shorter delay but no delay, and taken as a
+ * value it beat the backoff ladder and took the jitter with it — the whole
+ * retry budget spent in microseconds against a server that had just said it
+ * was rate-limited. The ladder is the right answer when the vendor gives none.
+ */
 function parseRetryAfter(header: string | undefined): number | undefined {
   if (header === undefined || !/^\d+$/.test(header.trim())) return undefined;
-  return Number(header.trim()) * 1000;
+  const ms = Number(header.trim()) * 1000;
+  return ms > 0 ? ms : undefined;
 }
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

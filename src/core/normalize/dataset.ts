@@ -1,6 +1,6 @@
 // Dataset sources become a descriptor card; the original file is retained
 // (handoff.md §6.1). Head sample is fixed at 10 rows by §17.
-import { normalizationSuspect } from "../markers";
+import { datasetColumnsOmitted } from "../markers";
 import { basename } from "../paths";
 
 const HEAD_ROWS = 10;
@@ -92,10 +92,7 @@ export function datasetToMarkdown(text: string, sourcePath: string): string {
 
   out.push("## Schema", "");
   if (shown.length < columns.length) {
-    out.push(
-      normalizationSuspect([`showing ${shown.length} of ${columns.length} columns`]),
-      "",
-    );
+    out.push(datasetColumnsOmitted(shown.length, columns.length), "");
   }
   out.push("| Column | Type |", "| --- | --- |");
   shown.forEach((column, index) => {

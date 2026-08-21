@@ -195,7 +195,11 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
 function delayBeforeAttempt(attempt: number, lastError: unknown, random: () => number): number {
   if (lastError instanceof ProviderError && lastError.retryAfterMs !== undefined) {
     // Honored, but bounded: a vendor asking for an hour would otherwise hold
-    // the global operation lock for that hour.
+    // the global operation lock for that hour. Honoring means using the value,
+    // not max()-ing it against the ladder — a vendor that says 100ms knows
+    // something the ladder does not. A zero is filtered out at the parse
+    // boundary rather than here, because it is not a shorter delay, it is no
+    // delay at all.
     return Math.min(lastError.retryAfterMs, BACKOFF_CAP_MS);
   }
   // Equal jitter: half the exponential step is fixed, half is random.

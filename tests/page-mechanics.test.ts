@@ -324,3 +324,27 @@ describe("a page names every source the model did not fully receive", () => {
     expect(body).toBe("PROSE");
   });
 });
+
+describe("a source with no body is not grounding", () => {
+  it("names a citer whose file is empty, though it fitted the budget", async () => {
+    // §6.5 writes the citation block from the full citer set, so an empty file
+    // is the same false claim as a dropped one by a different route: the model
+    // received a header with nothing under it.
+    const body = await generatePageBody(
+      { complete: async () => "PROSE", stats: () => ({ requests: 0, byTask: {} }) } as never,
+      {
+        title: "PageRank",
+        kind: "concept" as const,
+        aliases: [],
+        sources: [
+          { path: "raw/empty.md", body: "" },
+          { path: "raw/real.md", body: "Real content." },
+        ],
+        contextBudgetTokens: 40_000,
+      },
+    );
+
+    expect(body).toContain("raw/empty.md");
+    expect(body).not.toContain("raw/real.md");
+  });
+});

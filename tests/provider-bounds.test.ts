@@ -162,3 +162,69 @@ describe("localizing an image rewrites the link, not the prose", () => {
     expect(result.text).toContain('"A title"');
   });
 });
+
+describe("a truncated reply is not a complete one", () => {
+  it("refuses a prose reply the model ran out of room to finish", async () => {
+    // §11 caps max_tokens per task. When the model hits that cap the reply is
+    // a fragment, and for a prose task that fragment is written straight into
+    // wiki/ under a code-written citation block claiming the full citer set.
+    const http = new ScriptedHttp([
+      jsonRoute(200, {
+        stop_reason: "max_tokens",
+        content: [{ type: "text", text: "A body that stops mid-" }],
+      }),
+    ]);
+    const provider = createProvider({
+      http,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k" },
+      sleep: async () => {},
+      random: () => 0.5,
+    });
+
+    await expect(
+      provider.complete({ task: "page-generation", system: "s", user: "u" }),
+    ).rejects.toThrow(/max_tokens|ran out|truncat/i);
+  });
+
+  it("accepts a reply that stopped for any other reason", async () => {
+    const http = new ScriptedHttp([
+      jsonRoute(200, { stop_reason: "end_turn", content: [{ type: "text", text: "Done." }] }),
+    ]);
+    const provider = createProvider({
+      http,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k" },
+      sleep: async () => {},
+      random: () => 0.5,
+    });
+
+    await expect(provider.complete({ task: "page-generation", system: "s", user: "u" })).resolves
+      .toBe("Done.");
+  });
+});
+
+describe("honouring Retry-After has a floor as well as a ceiling", () => {
+  it("does not let Retry-After: 0 spend the whole budget at once", async () => {
+    // `0` is a value, so it won out over the backoff ladder and deleted the
+    // jitter with it — the retry budget was spent in microseconds against a
+    // server that had just said it was rate-limited.
+    const slept: number[] = [];
+    const http = new ScriptedHttp([
+      { status: 429, headers: { "retry-after": "0" }, bytes: utf8("{}") },
+      { status: 429, headers: { "retry-after": "0" }, bytes: utf8("{}") },
+      jsonRoute(200, { content: [{ type: "text", text: "ok" }] }),
+    ]);
+    const provider = createProvider({
+      http,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k" },
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+      random: () => 0.5,
+    });
+
+    await provider.complete({ task: "synthesis", system: "s", user: "u" });
+
+    expect(slept).toHaveLength(2);
+    for (const ms of slept) expect(ms).toBeGreaterThan(0);
+  });
+});

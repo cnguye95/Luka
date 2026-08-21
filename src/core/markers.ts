@@ -27,6 +27,19 @@ export function repoFileOmitted(path: string, reason: string): string {
   return `<!-- repo file omitted: ${inComment(path)} — ${inComment(reason)} -->`;
 }
 
+/**
+ * A deliberate render bound, not a suspicion about an extraction.
+ *
+ * §6.5 scopes `normalization suspect` to PDF-derived text, and the smell test
+ * is its only other producer — a descriptor that shows 200 of 4,000 columns
+ * has not been extracted badly, it has been summarized. Placed at the point of
+ * the omission like `repo file omitted`, rather than at the head of the file
+ * where §6.5 puts suspect markers.
+ */
+export function datasetColumnsOmitted(shown: number, total: number): string {
+  return `<!-- dataset columns omitted: showing ${shown} of ${total} -->`;
+}
+
 export function normalizationSuspect(reasons: readonly string[]): string {
   return `<!-- normalization suspect: ${inComment(reasons.join("; "))} -->`;
 }

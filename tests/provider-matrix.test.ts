@@ -387,6 +387,9 @@ describe("how long the lock is held", () => {
     ["seconds", 5_000, 5_000],
     ["an hour", 3_600_000, BACKOFF_CAP_MS],
     ["absurd", Number.MAX_SAFE_INTEGER, BACKOFF_CAP_MS],
+    // The wrapper's contract for a zero it is handed. The transport no longer
+    // produces one — `parseRetryAfter` falls back to the ladder instead — so
+    // the reachable behaviour is asserted end-to-end in provider-bounds.
     ["zero", 0, 0],
   ] as const) {
     it(`honours a Retry-After of ${label}, bounded by the cap`, async () => {

@@ -97,7 +97,14 @@ function budgetShortfall(input: GeneratePageInput): string[] {
     const cut = input.sources[packed.items.length - 1];
     if (cut !== undefined) short.unshift(cut.path);
   }
-  return short;
+  // A source that fitted but has no body is the same claim by a different
+  // route: the model received a header and nothing under it, while code writes
+  // the citation block from the full citer set either way.
+  for (const source of input.sources.slice(0, packed.items.length)) {
+    if (source.body.trim() === "" && !short.includes(source.path)) short.unshift(source.path);
+  }
+  return short.sort((a, b) => input.sources.findIndex((s) => s.path === a)
+    - input.sources.findIndex((s) => s.path === b));
 }
 
 /**
