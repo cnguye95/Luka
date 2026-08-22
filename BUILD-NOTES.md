@@ -1877,3 +1877,33 @@ checklist item could observe.
 - **S26** — a refresh keeps surviving nodes at their current positions and their
   pins, hash-seeding only the new ones. Re-hashing everything on each compile would
   discard the arrangement the user has been reading.
+
+**The pane's pure halves are tested after all.** §14 puts "UI" under a manual
+checklist, and the `ItemView` genuinely is manual — lifecycle, canvas painting and
+CSS-variable sampling need a host. But `sim.ts` and `render.ts` were written with
+no Obsidian import and no DOM access so the view could be read for lifecycle and
+they could be read for behaviour, and what is readable in isolation is testable in
+isolation. §14 names a *minimum* set for `src/core`; it does not forbid covering
+pure plugin modules, and the boundary check scans `src/core` only.
+
+The camera transform earned it. Every §9 interaction resolves a pointer through
+`hitTest`, which reverses `draw`'s own `toScreen` — so if the two ever disagree,
+hover, drag, double-click and every overlay pick the wrong node together, and
+nothing else in the milestone would have caught it.
+
+**Two of the first ten assertions did not test what they claimed**, both found by
+mutation and both fixed:
+
+- Making the seed radius constant — every node on one ring instead of spread over
+  a disc — passed all twenty. "Separates different paths" was satisfied by distinct
+  *angles* alone. Now pinned by comparing the spread of radii.
+- "Keeps a surviving node where it was, and its pin" set `x`/`y` *and* `fx`/`fy` on
+  the same node. d3 copies a pin into `x` on every `nodes()` call, so the pin was
+  answering the position assertion and re-seeding survivors passed clean. Split
+  into two tests: an unpinned survivor for position, a pinned one for the pin.
+
+A third finding was the harness, not the code: the first mutation batch restored
+only the file it had mutated, so an earlier render mutation persisted into the sim
+runs and showed up as four phantom failures. Worth recording because the phantom
+looked exactly like a real cross-module coupling, and the fix was to re-run rather
+than to explain it.
