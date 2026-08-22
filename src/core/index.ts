@@ -307,6 +307,12 @@ export interface AnswerResult {
   grounded: boolean;
   /** Whether §8.2's follow-up round ran. */
   round2: boolean;
+  /**
+   * Logical model calls, which is what invariant 12 bounds at three — not
+   * transport attempts. §11's retries and its one repair recover a single
+   * logical call; counting them here would report a violation whenever the
+   * network hiccuped.
+   */
   modelCalls: number;
 }
 
@@ -325,7 +331,17 @@ export interface AnswerResult {
 async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> {
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
-  const before = provider.stats().requests;
+  // Invariant 12 bounds *logical* calls: "ask = ≤ 3 calls". `stats().requests`
+  // and `byTask` both count transport attempts — they increment together
+  // inside the retry loop — so neither is this number. §11's retries and its
+  // one repair are recovery of a single logical call, not extra calls, and
+  // reporting them as calls would make the invariant look violated whenever
+  // the network hiccuped. Counted here, where the calls are made.
+  let modelCalls = 0;
+  const called = <T,>(work: Promise<T>): Promise<T> => {
+    modelCalls += 1;
+    return work;
+  };
 
   const pages = await loadPageTable(deps.fs);
   const graph = await buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath });
@@ -333,10 +349,12 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   // §7.4 step 1: the same renderer that writes `wiki/_index.md`, so the seed
   // call and the file the user reads can never drift apart.
   const indexText = renderIndex(pages);
-  const chosen = await selectSeeds(provider, question, indexText, pages, {
-    seeds: deps.settings.seedsCap,
-    keywords: deps.settings.keywordsCap,
-  });
+  const chosen = await called(
+    selectSeeds(provider, question, indexText, pages, {
+      seeds: deps.settings.seedsCap,
+      keywords: deps.settings.keywordsCap,
+    }),
+  );
 
   // §7.4 step 2: force-includes are additive to whatever the model chose.
   const seedPaths = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
@@ -360,7 +378,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   // §7.4 step 5: "Zero seeds and zero lexical candidates → skip retrieval;
   // synthesis runs from model knowledge and the answer is labeled ungrounded."
   const grounded = assembly.nodes.length > 0;
-  let reply = await synthesize(provider, question, assembly.nodes);
+  let reply = await called(synthesize(provider, question, assembly.nodes));
 
   // §8.2's follow-up round: "identical in both modes: lexical-score the
   // missing-information strings (as keywords) over wiki pages, take the
@@ -391,7 +409,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
           nodes: [...assembly.nodes, ...extra.nodes],
           usedTokens: assembly.usedTokens + extra.usedTokens,
         };
-        reply = await synthesize(provider, question, assembly.nodes);
+        reply = await called(synthesize(provider, question, assembly.nodes));
         round2 = true;
       }
     }
@@ -408,7 +426,11 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     pages,
     trace: {
       mode,
-      seeds: seedPaths,
+      // Named the way §8.3's example names them, and the way §4 spells a link:
+      // a wiki page by its title, a raw source by its path. `top` already did;
+      // seeds carried vault paths, so one four-line block used two vocabularies
+      // and §5's shared `parseTrace` had to resolve both.
+      seeds: seedPaths.map((path) => labelFor(path, pages)),
       round2,
       top: assembly.nodes.map((node) => ({
         label: node.kind === "raw" ? node.path : node.title,
@@ -426,8 +448,13 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     mode,
     grounded,
     round2,
-    modelCalls: provider.stats().requests - before,
+    modelCalls,
   };
+}
+
+/** §4's link form for a node: a wiki page by title, anything else by path. */
+function labelFor(path: string, pages: readonly PageMeta[]): string {
+  return pages.find((page) => page.path === path)?.title ?? path;
 }
 
 /**

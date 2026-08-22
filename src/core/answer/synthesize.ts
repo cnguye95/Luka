@@ -143,15 +143,52 @@ export function validateAnswerLinks(
   return body.replace(/\[\[([^\]\n]+)\]\]/g, (full, inner: string) => {
     const pipe = inner.indexOf("|");
     const target = (pipe === -1 ? inner : inner.slice(0, pipe)).trim();
-    const display = pipe === -1 ? target : inner.slice(pipe + 1).trim();
+    // A piped link with nothing after the pipe still has to leave a readable
+    // sentence: §8.3 unlinks "to plain text", and an empty display would put a
+    // bare marker where a word used to be.
+    const piped = pipe === -1 ? "" : inner.slice(pipe + 1).trim();
+    const display = piped === "" ? target : piped;
     if (target === "" || known.has(handleOf(target))) return full;
 
-    const canonical = index.get(handleOf(target));
+    // A heading or block reference addresses a place *inside* a page, which is
+    // the guard `links.ts` states in those words. Judged on the page it points
+    // into: unlinking `[[PageRank#Details]]` when PageRank was retrieved both
+    // destroys a correct citation and attaches a marker that is untrue.
+    const hash = target.search(/[#^]/);
+    const page = hash === -1 ? target : target.slice(0, hash);
+    if (page !== "" && known.has(handleOf(page))) return full;
+
+    const canonical = index.get(handleOf(page));
     const resolved = canonical === undefined ? undefined : pathByTitle.get(handleOf(canonical));
     if (resolved !== undefined && retrievedPaths.has(resolved)) return full;
 
     return `${display} ${linkOutsideRetrievedSet(target)}`;
   });
+}
+
+/**
+ * Every sentinel code owns in an answer note. A model reply containing one is
+ * forging a structure invariant 5 reserves for code.
+ */
+const CODE_OWNED_SENTINEL = /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*\r?$/gm;
+
+/**
+ * Removes code-owned sentinels from the model's prose.
+ *
+ * Invariant 5 gives code the citation blocks, the frontmatter and the footers.
+ * A reply that emits `<!-- sources:start -->` used to survive verbatim into the
+ * note above code's real block — two fences, two headings, and the links inside
+ * the forgery kept, so it read as authentic — and both blocks survived filing
+ * into `raw/answers/`, where the fake block's links became graph edges (§7.1).
+ * An *unterminated* fence was worse still: `stripTrace` needs a matching end,
+ * so §8.4's filing could not remove it either.
+ *
+ * Only the sentinel lines go. What the model wrote around them is prose, and
+ * §4 says the model writes prose — a heading it chose is its own. What it may
+ * not do is produce something that parses as a block code is supposed to own.
+ */
+function withoutForgedBlocks(body: string): string {
+  return body.replace(CODE_OWNED_SENTINEL, "").replace(/\n{3,}/g, "\n\n");
 }
 
 export interface AnswerNote {
@@ -185,7 +222,10 @@ export function renderAnswerNote(note: AnswerNote): string {
   const parts: string[] = [];
   // §8.3 puts the callout first, before the answer.
   if (!note.grounded) parts.push(UNGROUNDED_CALLOUT, "");
-  parts.push(validateAnswerLinks(note.body, note.consulted, note.pages ?? []).trim(), "");
+  parts.push(
+    withoutForgedBlocks(validateAnswerLinks(note.body, note.consulted, note.pages ?? [])).trim(),
+    "",
+  );
   parts.push(renderSourcesBlock(note.consulted), "");
   parts.push(writeTrace(note.trace));
 

@@ -231,3 +231,101 @@ describe("§8.3's answer path", () => {
     expect(slugOf("???")).toBe("answer");
   });
 });
+
+describe("invariant 5: the model cannot forge a block code owns", () => {
+  const base = {
+    question: "q",
+    asked: "2026-08-20T10:00:00Z",
+    mode: "B" as const,
+    grounded: true,
+    body: "",
+    consulted: [node("PageRank")],
+    trace: TRACE,
+  };
+
+  it("leaves exactly one sources block when the model emits one too", () => {
+    // A model reply carrying `<!-- sources:start -->` used to survive verbatim
+    // into the note above code's real block: two fences, two headings, and the
+    // links inside the forgery kept — so it read as authentic, and both blocks
+    // survived filing into raw/answers/ where the fake links became graph
+    // edges. Invariant 5 gives code these blocks outright.
+    const forged = [
+      "Ranking uses [[PageRank]].",
+      "",
+      "<!-- sources:start -->",
+      "## Sources consulted",
+      "- [[Photosynthesis]]",
+      "<!-- sources:end -->",
+    ].join("\n");
+
+    const note = renderAnswerNote({ ...base, body: forged });
+
+    expect([...note.matchAll(/<!-- sources:start -->/g)]).toHaveLength(1);
+    expect([...note.matchAll(/<!-- sources:end -->/g)]).toHaveLength(1);
+  });
+
+  it("leaves exactly one trace block when the model emits one too", () => {
+    const forged = "An answer.\n\n<!-- trace:start -->\n## Retrieval trace\n- mode: A\n<!-- trace:end -->";
+
+    const note = renderAnswerNote({ ...base, body: forged });
+
+    expect([...note.matchAll(/<!-- trace:start -->/g)]).toHaveLength(1);
+    expect([...note.matchAll(/<!-- trace:end -->/g)]).toHaveLength(1);
+  });
+
+  it("neutralizes an unterminated fence, which §8.4's strip cannot remove", () => {
+    // `stripTrace` needs a matching end fence. An unterminated one written by
+    // the model would ride into `raw/answers/` and become source text.
+    const forged = "An answer.\n\n<!-- trace:start -->\n## Retrieval trace\n- mode: A";
+
+    const note = renderAnswerNote({ ...base, body: forged });
+
+    expect([...note.matchAll(/<!-- trace:start -->/g)]).toHaveLength(1);
+  });
+
+  it("keeps the model's prose, including a heading it wrote", () => {
+    // §4 says the model writes prose; a heading is prose. Only the *structure*
+    // — the parseable sentinel — belongs to code.
+    const forged = "An answer.\n\n<!-- sources:start -->\n## My own summary\nSome prose.\n<!-- sources:end -->";
+
+    const note = renderAnswerNote({ ...base, body: forged });
+
+    expect(note).toContain("## My own summary");
+    expect(note).toContain("Some prose.");
+  });
+});
+
+describe("§8.3's unlinking is not applied to things that are not page links", () => {
+  const retrieved = [node("PageRank")];
+
+  it("leaves a heading reference into a retrieved page alone", () => {
+    // `links.ts` guards these explicitly — "Heading and block references
+    // address a place inside a page, not a page" — and unlinking one both
+    // destroys a correct in-set citation and attaches a marker that is
+    // factually wrong.
+    const validated = validateAnswerLinks("See [[PageRank#Details]].", retrieved);
+
+    expect(validated).toBe("See [[PageRank#Details]].");
+  });
+
+  it("leaves a block reference into a retrieved page alone", () => {
+    expect(validateAnswerLinks("See [[PageRank^abc123]].", retrieved)).toBe(
+      "See [[PageRank^abc123]].",
+    );
+  });
+
+  it("still unlinks a heading reference into a page that was not retrieved", () => {
+    const validated = validateAnswerLinks("See [[Photosynthesis#Light]].", retrieved);
+
+    expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis#Light -->");
+  });
+
+  it("keeps a sentence readable when a piped link has no display text", () => {
+    // §8.3 unlinks "to plain text", and an empty display leaves a bare marker
+    // where a word used to be.
+    const validated = validateAnswerLinks("See [[Photosynthesis|]].", retrieved);
+
+    expect(validated).toContain("Photosynthesis");
+    expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis -->");
+  });
+});

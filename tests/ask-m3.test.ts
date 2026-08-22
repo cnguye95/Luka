@@ -11,7 +11,7 @@ import { BusyError } from "../src/core/lock";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
-import { StubProvider, fatalError, inventoryReply } from "./helpers/provider";
+import { StubProvider, fatalError, inventoryReply, retryableError } from "./helpers/provider";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 const ASKED = new Date("2026-08-20T10:07:00Z");
@@ -116,7 +116,6 @@ describe("invariant 12: ask makes at most three model calls", () => {
     expect(stats.byTask["seed-selection"]).toBe(1);
     expect(stats.byTask.synthesis).toBe(1);
     expect(result.modelCalls).toBe(2);
-    expect(result.modelCalls).toBeLessThanOrEqual(3);
   });
 
   it("still runs the seed call in Mode A (§7.3)", async () => {
@@ -322,7 +321,6 @@ describe("§8.2's follow-up round", () => {
     expect(stats.byTask["seed-selection"]).toBe(1);
     expect(stats.byTask.synthesis).toBe(2);
     expect(result.modelCalls).toBe(3);
-    expect(result.modelCalls).toBeLessThanOrEqual(3);
   });
 
   it("runs at most one round, however much the second answer still misses", async () => {
@@ -405,5 +403,94 @@ describe("§8.2's follow-up round", () => {
 
     const listed = [...note.matchAll(/^- \[\[PageRank\]\]$/gm)];
     expect(listed).toHaveLength(1);
+  });
+});
+
+describe("invariant 12's number means what the invariant says", () => {
+  // "ask = ≤ 3 calls". `stats().requests` and `byTask` both count transport
+  // *attempts* — they increment on the same line inside the retry loop — so
+  // neither is the number the invariant bounds. §11 sanctions retries and one
+  // repair, and those are recovery of a single logical call, not extra calls.
+  it("counts logical calls, not the attempts §11 spends making them", async () => {
+    const { fs } = await compiled();
+    // The seed reply is unparseable once, which the wrapper repairs with a
+    // second transport attempt for the same logical call.
+    let seedAttempts = 0;
+    const provider = new StubProvider(
+      (request) => {
+        if (request.task === "seed-selection") {
+          seedAttempts += 1;
+          return seedAttempts === 1
+            ? "not json at all"
+            : { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+        }
+        return answerWith("About [[PageRank]].");
+      },
+      { maxRetries: 2 },
+    );
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    // Two transport attempts were spent on one logical seed call.
+    expect(provider.stats().byTask["seed-selection"]).toBe(2);
+    // The reported number is the one invariant 12 bounds.
+    expect(result.modelCalls).toBe(2);
+  });
+
+  it("never reports more than three, even when §11 retries hard", async () => {
+    const { fs } = await compiled();
+    let synthAttempts = 0;
+    const provider = new StubProvider(
+      (request) => {
+        if (request.task === "seed-selection") {
+          return { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+        }
+        synthAttempts += 1;
+        if (synthAttempts < 3) return retryableError("503 upstream");
+        return answerWith("About [[PageRank]].");
+      },
+      { maxRetries: 3 },
+    );
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(provider.stats().requests).toBeGreaterThan(3);
+    expect(result.modelCalls).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("§8.3's trace names things one way", () => {
+  it("writes seeds and top entries in the same form", async () => {
+    // §8.3's example shows `- seeds: [[A]], [[B]]` and `- top: [[X]] 0.0812` —
+    // both title-shaped. §5 shares `parseTrace` with the pane's replay, so a
+    // block whose two lines use different naming schemes makes the pane
+    // resolve two vocabularies from one four-line block.
+    const { fs, provider } = await compiled();
+    const result = await core(fs, provider).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    const seeds = /^- seeds: (.*)$/m.exec(note)?.[1] ?? "";
+    expect(seeds).toContain("[[PageRank]]");
+    expect(seeds).not.toContain("wiki/concepts/");
+  });
+
+  it("records the scores it actually ranked with", async () => {
+    // Nothing asserted these before, so `score: 0` for every entry passed.
+    const { fs, provider } = await compiled();
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    const top = /^- top: (.*)$/m.exec(fs.text(result.path))?.[1] ?? "";
+    expect(top).not.toBe("(none)");
+    const scores = [...top.matchAll(/\]\]\s+([0-9.]+)/g)].map((m) => Number(m[1]));
+    expect(scores.length).toBeGreaterThan(0);
+    expect(scores.some((score) => score > 0)).toBe(true);
+  });
+
+  it("records the seeds it actually retrieved with", async () => {
+    // Likewise: `seeds: []` used to pass the whole suite.
+    const { fs, provider } = await compiled();
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(fs.text(result.path)).not.toContain("- seeds: (none)");
   });
 });

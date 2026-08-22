@@ -1255,3 +1255,62 @@ callout dropped (2), `ask` taken outside the lock (2), and the mode predicate's
 node threshold made exclusive (1).
 
 Tree byte-identical afterwards.
+
+### Fixes from the M3 review wave — invariants
+
+Three reviewers took disjoint scopes: §7's mathematics, §8 and the invariants,
+and eval honesty. Two died mid-run to API errors and a watchdog stall and were
+relaunched narrower; running three sets of gates at once on one machine is what
+killed the second, and the lesson is recorded here because the M1/M2 campaign
+learned it too and it did not stick.
+
+**Invariant 5 was violated, and this is the review's headline.** A synthesis
+reply containing `<!-- sources:start -->…<!-- sources:end -->` survived verbatim
+into the note *above* code's real block — two fences, two headings — and the
+links inside the forgery that happened to name retrieved pages passed
+validation, so it read as authentic. Both blocks then survived filing into
+`raw/answers/`, where the fake block's links became real graph edges (§7.1).
+Nothing in the codebase parsed, de-duplicated or stripped a sources block, so
+nothing downstream could have caught it. An *unterminated* forged trace fence
+was worse: `stripTrace` needs a matching end, so §8.4's filing could not remove
+that either.
+
+The fix is at the invariant's level rather than the symptom's: code-owned
+sentinels are removed from the model's prose before the note is assembled. Only
+the sentinel lines go — what the model wrote around them stays, because §4 says
+the model writes prose and a heading it chose is prose. What it may not produce
+is something that *parses* as a structure code owns.
+
+**A heading reference into a retrieved page was being unlinked and marked.**
+`links.ts` guards `#` and `^` in those words — "a place inside a page, not a
+page" — and `validateAnswerLinks` had not carried the guard over, so
+`[[PageRank#Details]]` lost a correct in-set citation and gained a marker that
+was untrue. A link is now judged on the page it points into. A piped link with
+an empty display half also falls back to the target, so §8.3's "unlinked to
+plain text" leaves a sentence that still reads.
+
+**Invariant 12's number was not the number the invariant is about.**
+`stats().requests` and `byTask` both count transport *attempts* — they increment
+together inside the retry loop — and there was no logical-call counter anywhere.
+Measured: a repaired seed reply plus a follow-up round reported **4**; 503
+retries reported **6**. The bound held structurally the whole time, but every
+assertion guarding it was green only because `StubProvider` defaults
+`maxRetries: 0` and every scripted reply parses. `runAsk` counts logical calls
+now, at the three places they are made.
+
+**And the BUILD-NOTES entry for it was false.** It claimed "the test asserts
+`byTask` for exactly that reason", of a counter that counts the same attempts
+`requests` does. That is precisely the entry-contradicting-the-code shape the
+M1/M2 audit was created to find, written here by me. Corrected above.
+
+**The trace named things two ways.** `seeds:` carried vault paths while `top:`
+carried labels, where §8.3's example shows both title-shaped and §5 hands the
+same block to the pane's replay. Both use §4's link form now: a wiki page by
+title, a raw source by path.
+
+Two decorative assertions removed: `expect(modelCalls).toBeLessThanOrEqual(3)`
+written directly beneath `expect(modelCalls).toBe(2)` cannot fail, and those
+were the only three places invariant 12's bound was written down as a bound.
+Three new assertions cover what nothing covered: that the trace's `seeds:` and
+`top:` carry the values actually retrieved and ranked with — `seeds: []` and
+`score: 0` for every entry both used to pass the entire suite.
