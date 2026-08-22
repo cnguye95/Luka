@@ -2031,3 +2031,37 @@ click-PPR and trace replay carry on unchanged.
   would discard what the user was looking at in exchange for nothing.
 - **S48** — a question that reaches nothing gets a notice rather than a silently
   empty overlay, which is indistinguishable from the overlay having failed to draw.
+
+### Step 13 — the full-scale testing pass
+
+Instruments at review scale, all green: churn 1500 in both fault modes (26.5s),
+fuzz-compile 1500, fuzz-localize 1500, fuzz-ppr 2000. `npm run eval` green against
+its floors. Suite 893 passed / 4 skipped.
+
+**The M1/M2 evidence set holds after M4.** Removing the float branch in
+`renames.ts` fails **exactly 7**; removing `chooseTarget`'s recorded-path fallback
+fails **exactly 1**. Both restored, tree clean. That is the strongest available
+statement that the rename subsystem is untouched by this milestone — M4 changed
+`GraphNode`, which `buildGraph` fills from the page table the rename path also
+feeds, so the counts moving would have meant a coupling nobody intended.
+
+**All 28 new assertions re-validated by mutation, each against the code it is
+about.** Steps 1–3: hardcoded summary, title-as-summary, dropped title fallback,
+dropped path match, leaked unresolved, dropped force-include union, Mode-A ranked
+by the graph ranker, injected vault write. The pane's pure modules: forward
+transform ignoring the camera, hit test picking the first rather than the topmost,
+inverse with the offset in the wrong order, linear radius, label limit and drop
+threshold moved, hovered label dropped, constant seed radius, absent seed position,
+refresh re-seeding survivors, refresh dropping pins, path-blind hash, Mode-A given
+a ramp, unnormalized ramp, negative scores admitted, unbroken top-K ties, zero-score
+counted as lit, case-sensitive filter, dims taking a minimum, filter ignored in
+opacity. Every one failed and every one failed its own tests.
+
+**Timing evidence for §15's "opens under 1s".** Measured headlessly on the shipped
+65-node / 118-edge fixture vault, ten runs after a warm-up: `buildGraph` 121.8 /
+130.9 / 144.6 ms (min / median / max), and `computePPR` from every one of the 65
+single seeds at 0.8 / 1.7 / 10.5 ms. Numbers only — no rule is attached, and they
+are not a claim about the demo vault, a different machine, or the paint that
+follows. What they bound is the part §15's criterion depends on that can be
+measured without a host; the criterion itself is a stopwatch item on the README
+checklist.
