@@ -22,6 +22,9 @@ import type { GraphEdge, GraphSnapshot } from "../src/core/types";
 
 // From §7.2 and §17, not imported from the code under test.
 const SPEC_EPSILON = 1e-8;
+// §17's shipped defaults, from the spec rather than from `DEFAULT_SETTINGS`.
+const SPEC_ALPHA = 0.85;
+const SPEC_MAX_ITERATIONS = 100;
 
 const SEEDS = Number(process.env.PPR_SEEDS ?? 250);
 const FIRST = Number(process.env.PPR_FIRST ?? 0);
@@ -223,6 +226,45 @@ describe("PPR agrees with an independent solution of the same equation", { timeo
           failures.push(`seed ${seed}: permuting the input changed the answer`);
         }
       }
+
+    if (failures.length > 0) for (const line of failures.slice(0, 8)) console.log(line);
+    expect(failures).toEqual([]);
+  });
+});
+
+describe("PPR at the configuration it actually ships with", { timeout: 600_000 }, () => {
+  it(`agrees with the dense solution over ${SEEDS} graphs at §17's defaults`, () => {
+    // The sweep above runs `maxIterations: 5000` so it compares against the
+    // fixed point. That is the right oracle for the arithmetic and the wrong
+    // one for the product: §17 ships α = 0.85 and a cap of 100, and nothing
+    // else in the suite checks what comes back at those numbers. Here the
+    // tolerance is the spec's own bound rather than 1e-6, and `converged` says
+    // which answer we are holding.
+    const failures: string[] = [];
+
+    for (let seed = FIRST; seed < FIRST + SEEDS; seed++) {
+      const generated = generate(seed);
+      const shipped = computePPR(generated.graph, generated.seeds, {
+        alpha: SPEC_ALPHA,
+        maxIterations: SPEC_MAX_ITERATIONS,
+      });
+      const expected = solveDense({ ...generated, alpha: SPEC_ALPHA });
+
+      let worst = 0;
+      generated.order.forEach((nodePath, at) => {
+        worst = Math.max(worst, Math.abs((shipped.scores.get(nodePath) as number) - (expected[at] as number)));
+      });
+
+      // A converged answer must be at the fixed point. A truncated one is only
+      // required to be honest about being truncated.
+      if (shipped.converged && worst > 1e-6) {
+        failures.push(`seed ${seed}: converged but ${worst} from the fixed point`);
+        continue;
+      }
+      if (!shipped.converged && shipped.iterations !== SPEC_MAX_ITERATIONS) {
+        failures.push(`seed ${seed}: not converged but stopped at ${String(shipped.iterations)}`);
+      }
+    }
 
     if (failures.length > 0) for (const line of failures.slice(0, 8)) console.log(line);
     expect(failures).toEqual([]);

@@ -5,6 +5,7 @@ import { buildGraph } from "../src/core/graph/build";
 import { createCore } from "../src/core/index";
 import { DEFAULT_SETTINGS, type GraphSnapshot } from "../src/core/types";
 import { CASCADE_PENDING } from "../src/core/manifest";
+import { comparePaths } from "../src/core/paths";
 import { StubHttp } from "./helpers/http";
 import { MemFs } from "./helpers/memfs";
 import { StubProvider, inventoryReply } from "./helpers/provider";
@@ -191,12 +192,28 @@ describe("the graph does not depend on the order the vault is read in", () => {
       "raw/n.md": "A source.\n",
       [MANIFEST]: JSON.stringify({ "raw/n.md": { hash: "a" } }),
     };
-    const reversed = Object.fromEntries(Object.entries(seed).reverse());
+    // Two builds cannot be made to disagree here, and that is the point worth
+    // stating rather than dressing up: `loadPageTable` sorts its own result and
+    // the manifest keys are sorted before use, so `build.ts` sees the same
+    // input order whatever the adapter hands back. The first version of this
+    // test reversed a seed map and compared a build against itself — it passed
+    // with every sort in `build.ts` deleted.
+    //
+    // What is observable, and what a caller depends on, is that the output is
+    // ordered. §7.2 ranks over `graph.nodes` and expects "node order
+    // lexicographic by path".
+    const graph = await build(new MemFs(seed));
 
-    const forward = await build(new MemFs(seed));
-    const backward = await build(new MemFs(reversed));
-
-    expect(backward).toEqual(forward);
+    expect(graph.nodes.map((node) => node.path)).toEqual(
+      [...graph.nodes.map((node) => node.path)].sort(comparePaths),
+    );
+    expect(graph.edges.map((edge) => `${edge.a}|${edge.b}`)).toEqual(
+      [...graph.edges].sort((a, b) => comparePaths(a.a, b.a) || comparePaths(a.b, b.b))
+        .map((edge) => `${edge.a}|${edge.b}`),
+    );
+    // Every edge is canonicalized, so an edge list is order-independent even
+    // before it is sorted.
+    for (const edge of graph.edges) expect(comparePaths(edge.a, edge.b)).toBeLessThan(0);
   });
 });
 

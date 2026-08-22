@@ -126,6 +126,38 @@ describe("seeds that name nothing (§7.4 step 2 drops them before this)", () => 
 });
 
 describe("determinism (§7.2)", () => {
+  it("orders nodes by code point, not by the host's collation", () => {
+    // §7.2: "node order lexicographic by path". `comparePaths` is code-point
+    // order deliberately, because `localeCompare` is locale- and ICU-dependent:
+    // under it `_x` sorts before `A-B` and `alpha` before `Zeta`, which changes
+    // the index assignment, hence the floating-point summation order, hence the
+    // low bits of every score — differently on two users' machines. Every path
+    // in the other fixtures is comparator-invariant, so nothing else here can
+    // tell the two apart.
+    const names = ["Zeta", "alpha", "A-B", "AB", "_x"];
+    const graph: GraphSnapshot = {
+      nodes: names.map((name) => ({
+        path: N(name),
+        title: name,
+        kind: "concept" as const,
+        degree: 1,
+      })),
+      edges: names.slice(1).map((name) => ({ a: N(names[0] as string), b: N(name) })),
+    };
+
+    const scores = computePPR(graph, [N("Zeta")], { alpha: SPEC_ALPHA, maxIterations: 100 }).scores;
+
+    // Code-point order puts capitals first and `_` after them; a collation
+    // order would interleave differently.
+    expect([...scores.keys()]).toEqual([
+      N("A-B"),
+      N("AB"),
+      N("Zeta"),
+      N("_x"),
+      N("alpha"),
+    ]);
+  });
+
   it("is bit-identical across runs", () => {
     expect([...run([N("a")]).scores]).toEqual([...run([N("a")]).scores]);
   });
@@ -172,5 +204,33 @@ describe("snapshots (§7.2)", () => {
 
     expect(result.iterations).toBeGreaterThan(100);
     expect(result.snapshots).toHaveLength(100);
+  });
+});
+
+describe("the caller can tell a settled vector from a truncated one (§7.2)", () => {
+  it("reports convergence on a graph that settles inside the limit", () => {
+    const result = run([N("a")]);
+
+    expect(result.converged).toBe(true);
+    expect(result.iterations).toBeLessThan(100);
+  });
+
+  it("reports truncation at §17's own defaults, which a chain reaches", () => {
+    // §17 ships α = 0.85 and a 100-iteration cap. A chain of eight or more
+    // nodes needs about 118 iterations to reach L1 < 1e-8, so the shipped
+    // configuration truncates on an ordinary topology — a reading path, a
+    // chain of prerequisite notes. That is spec-compliant ("max 100") and the
+    // residual is ~1e-8, but without this flag nothing distinguishes it from a
+    // settled answer, and a change that made convergence worse would be
+    // invisible.
+    const result = computePPR(chain(12), [N("n00")], { alpha: 0.85, maxIterations: 100 });
+
+    expect(result.converged).toBe(false);
+    expect(result.iterations).toBe(100);
+  });
+
+  it("reports convergence for an empty seed set rather than truncation", () => {
+    // Nothing to iterate is not the same as giving up part-way.
+    expect(run([N("nobody")]).converged).toBe(true);
   });
 });

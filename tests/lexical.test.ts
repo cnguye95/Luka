@@ -51,6 +51,8 @@ describe("each tier scores what §7.4 says it scores", () => {
 
 describe("a keyword takes its best tier and only that one", () => {
   it("does not also collect the lower tiers it satisfies", () => {
+    // The discriminating case is the second one: a page whose title, summary
+    // and body all hold the keyword scores 10, not 10+2+1.
     // "Personalized PageRank" is an exact title, and it is also a substring of
     // the title, and it appears in neither summary nor body. Adding the tiers
     // instead of choosing one would score 14 here and would make an exact
@@ -93,7 +95,16 @@ describe("matching folds case and Unicode form, like every other handle", () => 
   });
 
   it("ignores an alias that is blank", () => {
-    expect(score(["   "], { aliases: ["  ", "PPR"] })).toBe(0);
+    // The keyword here is deliberately *not* blank. A blank keyword is
+    // short-circuited before any alias is consulted, so the first version of
+    // this test — which passed one — exercised the blank-keyword guard and
+    // never reached the alias path at all.
+    //
+    // The blank alias matters because `contains` asks `keyword.includes(name)`,
+    // and every string contains "". One empty entry in a page's `aliases:`
+    // would otherwise score every keyword at the substring tier, floating that
+    // page to the top of every Mode A ranking.
+    expect(score(["photosynthesis"], { aliases: ["  ", "PPR"] })).toBe(0);
   });
 });
 

@@ -145,3 +145,40 @@ describe("a failure leaves the answer where the user can see it", () => {
     expect(fs.files.has(NOTE_PATH)).toBe(true);
   });
 });
+
+describe("a filing that cannot finish does not leave two copies", () => {
+  it("removes the copy it wrote when the original cannot be deleted", async () => {
+    // Write-then-delete leaves the note in both places if the delete fails, and
+    // the next compile ingests the copy regardless of what the user was told.
+    // Retrying then lands at `-2`, so §8.4's collision suffix — meant to
+    // separate two different answers — silently produces two identical sources,
+    // each manifested, each costing an inventory and a page-generation call.
+    const fs = vault();
+    const guarded = Object.create(fs) as MemFs;
+    guarded.delete = async (path: string) => {
+      // Only the original is locked — the copy just written is removable,
+      // which is the realistic shape of this failure.
+      if (path === NOTE_PATH) throw new Error("EBUSY answers/");
+      return MemFs.prototype.delete.call(fs, path);
+    };
+
+    await expect(fileBack(guarded, NOTE_PATH)).rejects.toThrow(/EBUSY/);
+
+    // The original is still there — nothing was lost.
+    expect(fs.files.has(NOTE_PATH)).toBe(true);
+    // And no half-finished copy is left for compile to find.
+    expect(fs.paths().filter((path) => path.startsWith("raw/answers/"))).toEqual([]);
+  });
+});
+
+describe("an answer is filed once", () => {
+  it("refuses a note that is already under raw/answers/", async () => {
+    // Everything under `raw/` is a source. Filing a filed answer renames it
+    // `-2`, `-2-2`, … and churns the manifest through §6.2's rename path each
+    // time, for no gain.
+    const fs = new MemFs({ "raw/answers/already.md": note() });
+
+    await expect(fileBack(fs, "raw/answers/already.md")).rejects.toThrow(/already filed/);
+    expect(fs.files.has("raw/answers/already.md")).toBe(true);
+  });
+});

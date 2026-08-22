@@ -13,7 +13,7 @@
 // graph rather than just archiving prose.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
-import { basename, dirname } from "../paths";
+import { basename, dirname, isUnder } from "../paths";
 import { parseFrontmatter } from "../yaml";
 import { stripTrace } from "./trace";
 
@@ -37,13 +37,35 @@ export async function fileBack(fs: FsAdapter, answerPath: string): Promise<strin
   if (data["kind"] !== "answer") {
     throw new Error(`${answerPath} is not an answer note`);
   }
+  // An answer is filed once. A filed answer is a source like any other, and
+  // filing it again renames it `-2`, `-2-2`, … churning the manifest through
+  // §6.2's rename path every time for no gain. `activeAnswerPath` offers the
+  // command on any note whose frontmatter says `kind: answer`, which a filed
+  // one still does.
+  if (isUnder(answerPath, FILED_ANSWERS_FOLDER)) {
+    throw new Error(`${answerPath} is already filed`);
+  }
 
   const filed = `${stripTrace(text)}\n`;
   const target = await freePath(fs, `${FILED_ANSWERS_FOLDER}/${basename(answerPath)}`);
 
   await fs.mkdir(dirname(target));
   await fs.write(target, filed);
-  await fs.delete(answerPath);
+  try {
+    await fs.delete(answerPath);
+  } catch (error) {
+    // Write-then-delete leaves the note in *both* places if the delete fails,
+    // and the next compile ingests the copy whatever the user was told. Worse,
+    // retrying then lands at `-2`, so §8.4's collision suffix — which exists to
+    // separate two different answers — silently produces two identical sources,
+    // each manifested and each costing a compile's calls. Withdrawing the copy
+    // leaves the vault exactly as it was, which is the failure the user can act
+    // on. Best effort: if the withdrawal fails too, the original error is
+    // still what surfaces, because that is the one the user can do something
+    // about.
+    await fs.delete(target).catch(() => {});
+    throw error;
+  }
 
   return target;
 }

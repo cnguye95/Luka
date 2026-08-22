@@ -30,6 +30,17 @@ export interface PPROptions {
 export interface PPRResult {
   scores: ReadonlyMap<string, number>;
   iterations: number;
+  /**
+   * Whether the iteration reached §7.2's L1 threshold, or stopped at the
+   * limit with the vector still moving.
+   *
+   * Worth reporting because the spec's own defaults truncate on ordinary
+   * topologies: at α = 0.85 a chain of eight or more nodes needs about 118
+   * iterations to settle, and §7.2 caps at 100. That is spec-compliant and the
+   * residual is small, but a caller that could not tell the two apart has no
+   * way to notice a change that made convergence worse.
+   */
+  converged: boolean;
   snapshots?: ReadonlyMap<string, number>[];
 }
 
@@ -50,12 +61,22 @@ export function computePPR(
 
   const seeds = [...new Set(seedPaths)].filter((path) => index.has(path));
   if (size === 0 || seeds.length === 0) {
-    return { scores: new Map(), iterations: 0, ...(options.snapshots === true ? { snapshots: [] } : {}) };
+    return {
+      scores: new Map(),
+      iterations: 0,
+      converged: true,
+      ...(options.snapshots === true ? { snapshots: [] } : {}),
+    };
   }
 
-  // Undirected adjacency as index lists, built in node order so the arithmetic
-  // is summed in one fixed sequence — floating-point addition is not
-  // associative, so this is what makes two runs bit-identical.
+  // Undirected adjacency as index lists. What fixes the summation order — and
+  // floating-point addition is not associative, so something must — is the
+  // `comparePaths` sort of `order` above: the outer loop below walks that index
+  // space, and every summand accumulating into one slot arrives in that order.
+  // Sorting each neighbour list only decides which distinct slot is written
+  // first within a single source node, which cannot change any sum. It is kept
+  // because a stable adjacency is easier to reason about and to print, not
+  // because determinism rests on it.
   const neighbours: number[][] = order.map(() => []);
   for (const edge of graph.edges) {
     const a = index.get(edge.a);
@@ -73,6 +94,7 @@ export function computePPR(
   let current = [...personalization];
   const snapshots: ReadonlyMap<string, number>[] = [];
   let iterations = 0;
+  let converged = false;
 
   for (let step = 0; step < options.maxIterations; step++) {
     const next = new Array<number>(size).fill(0);
@@ -98,12 +120,16 @@ export function computePPR(
     if (options.snapshots === true && snapshots.length < SNAPSHOT_CAP) {
       snapshots.push(vectorOf(order, current));
     }
-    if (delta < PPR_EPSILON) break;
+    if (delta < PPR_EPSILON) {
+      converged = true;
+      break;
+    }
   }
 
   return {
     scores: vectorOf(order, current),
     iterations,
+    converged,
     ...(options.snapshots === true ? { snapshots } : {}),
   };
 }

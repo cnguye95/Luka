@@ -1314,3 +1314,64 @@ were the only three places invariant 12's bound was written down as a bound.
 Three new assertions cover what nothing covered: that the trace's `seeds:` and
 `top:` carry the values actually retrieved and ranked with — `seeds: []` and
 `score: 0` for every entry both used to pass the entire suite.
+
+### Fixes from the M3 review wave — filing, §7, and five tests that could not fail
+
+**Filing left two copies when the delete failed.** Write-then-delete is the
+right order — it never loses the answer — but if the delete failed the note
+stood in both places, and the next compile ingested the copy whatever the user
+had been told. Retrying then landed at `-2`, so §8.4's collision suffix, which
+exists to separate two different answers, silently produced two identical
+sources: both manifested, both with a source page, both costing a compile's
+calls. The copy is now withdrawn on that path, leaving the vault as it was.
+Best effort — if the withdrawal fails too, the original error is still what
+surfaces, because that is the one the user can act on.
+
+**An answer is filed once.** `activeAnswerPath` offers the command on any note
+whose frontmatter says `kind: answer`, which a *filed* one still does, so filing
+a filed answer renamed it `-2`, `-2-2`, … churning the manifest through §6.2's
+rename path each time. Refused now.
+
+**The blank-alias filter in the lexical scorer was load-bearing and untested.**
+`contains` asks `keyword.includes(name)`, and every string contains `""` — so a
+single empty entry in a page's `aliases:` scores *every* keyword at the
+substring tier and floats that page to the top of every Mode A ranking. The test
+named for it passed a blank *keyword*, which is short-circuited before any alias
+is consulted, so it exercised a different guard entirely and passed with the
+filter deleted.
+
+**Nothing pinned `comparePaths` against `localeCompare`.** Every fixture path in
+M3 — `a`,`b`,`c`,`d`,`e`; `n00`–`n11`; `Alpha`/`Beta` — sorts identically under
+both, so the comparator could be swapped at every call site with the suite
+green. That is a cross-machine determinism break: collation changes the index
+assignment, hence the summation order, hence the low bits of every score, hence
+tie-broken ranking — differently on two users' vaults. Pinned now with a fixture
+whose paths separate the two orders.
+
+**The neighbour-list sort does not do what its comment claimed.** Summation
+order is fixed entirely by the `comparePaths` sort of the node order: the outer
+loop walks that index space, and sorting each neighbour list only decides which
+distinct slot is written first within one source node, which cannot change any
+sum. The sort is kept for legibility; the comment now says what actually holds.
+
+**PPR truncates at §17's own defaults, and said nothing.** At α = 0.85 with a
+100-iteration cap, a chain of twelve nodes stops at the limit with the vector
+still moving. That is spec-compliant — §7.2 says "max 100" — and the residual is
+about 1e-8, but nothing distinguished a settled answer from a truncated one, and
+a change that made convergence worse would have been invisible. `PPRResult` now
+carries `converged`, and the instrument gained a sweep at the shipped
+configuration: a converged answer must sit at the fixed point, a truncated one
+need only be honest about being truncated.
+
+**The graph determinism test compared a build against itself.** `loadPageTable`
+sorts its own result and manifest keys are sorted before use, so `build.ts` sees
+one input order whatever an adapter hands back — the test passed with every sort
+in `build.ts` deleted. It asserts the observable guarantee instead: the returned
+node and edge lists are in `comparePaths` order, and every edge is
+canonicalized.
+
+**`src/core/graph/build.ts` had two literal NUL bytes**, used as the edge-pair
+separator. Git classified the file as binary, so no change to it could be
+reviewed as a diff. The M1/M2 campaign found exactly this in a test file and
+fixed it the same way — an escape is the identical string to the compiler — and
+it was reintroduced here in new code.
