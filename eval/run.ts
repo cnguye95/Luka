@@ -63,7 +63,60 @@ async function readQueries(): Promise<QueryFile> {
   if (typeof file.rankingQueries !== "number") {
     throw new Error("queries.yaml records no rankingQueries count");
   }
-  return { floors: file.floors, rankingQueries: file.rankingQueries, queries: file.queries };
+  return {
+    floors: validateFloors(file.floors as unknown),
+    rankingQueries: file.rankingQueries,
+    queries: file.queries,
+  };
+}
+
+/**
+ * Checks every floor is a real number before any mode is measured.
+ *
+ * A floor that reads as `undefined` compares `measured < NaN`, which is false —
+ * so a malformed entry switches its own check off rather than failing, which is
+ * the one thing floors exist to prevent. Two guards were written for this and
+ * both sat one level too shallow: the first checked that `ranking:` existed,
+ * not that it held numbers; the second checked the numbers, not that `ranking:`
+ * held anything at all — a bare `ranking:` key parses as `null` and threw a
+ * TypeError mid-run instead of naming the file. Validating the whole shape once
+ * here is one place to be right, rather than three guards in the reporting loop
+ * that each have to remember the same thing. `belowFloor` keeps its own
+ * `Number.isFinite` check as a backstop for callers that do not come through
+ * this function.
+ */
+function validateFloors(raw: unknown): Record<string, Floor> {
+  if (raw === null || typeof raw !== "object") throw new Error("queries.yaml: floors is not a mapping");
+  const out: Record<string, Floor> = {};
+
+  for (const [mode, entry] of Object.entries(raw as Record<string, unknown>)) {
+    const at = (where: string, value: unknown): number => {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new Error(`queries.yaml: floors.${mode}.${where} is not a number`);
+      }
+      return value;
+    };
+    if (entry === null || typeof entry !== "object") {
+      throw new Error(`queries.yaml: floors.${mode} is not a mapping`);
+    }
+    const level = entry as Record<string, unknown>;
+    const ranking = level["ranking"];
+    if (ranking === null || typeof ranking !== "object") {
+      throw new Error(`queries.yaml: floors.${mode}.ranking is not a mapping`);
+    }
+    const inner = ranking as Record<string, unknown>;
+    out[mode] = {
+      recallAt5: at("recallAt5", level["recallAt5"]),
+      recallAt10: at("recallAt10", level["recallAt10"]),
+      mrr: at("mrr", level["mrr"]),
+      ranking: {
+        recallAt5: at("ranking.recallAt5", inner["recallAt5"]),
+        recallAt10: at("ranking.recallAt10", inner["recallAt10"]),
+        mrr: at("ranking.mrr", inner["mrr"]),
+      },
+    };
+  }
+  return out;
 }
 
 /**
@@ -196,13 +249,9 @@ async function main(): Promise<void> {
       failed = true;
       continue;
     }
-    if (floor.ranking === undefined) {
-      // Without this the ranking floors silently pass, which is the whole
-      // failure this subset exists to catch.
-      console.error(`  no ranking floor recorded for mode ${mode}`);
-      failed = true;
-      continue;
-    }
+    // No `floor.ranking` guard here: `validateFloors` has already refused a
+    // file whose ranking floors are missing, null, or not numbers, and it
+    // names the offending key instead of throwing mid-measurement.
     for (const under of belowFloor(summary, floor)) {
       // §13 says `--live` "prints the same metrics". It cannot be held to the
       // ranking floors: those were calibrated from the 8 queries CI seeding

@@ -50,6 +50,26 @@ function chain(size: number): GraphSnapshot {
   };
 }
 
+/**
+ * A cycle. Even ones are bipartite and mix as slowly as a chain; odd ones are
+ * not, and settle well inside §7.2's cap at the same edges per node.
+ */
+function cycle(size: number): GraphSnapshot {
+  const name = (at: number) => N(`n${String(at).padStart(2, "0")}`);
+  return {
+    nodes: Array.from({ length: size }, (_unused, at) => ({
+      path: name(at),
+      title: `n${at}`,
+      kind: "concept" as const,
+      degree: 2,
+    })),
+    edges: Array.from({ length: size }, (_unused, at) => ({
+      a: name(at),
+      b: name((at + 1) % size),
+    })),
+  };
+}
+
 const run = (seeds: string[], overrides: { alpha?: number; maxIterations?: number; snapshots?: boolean } = {}) =>
   computePPR(fixture(), seeds, {
     alpha: overrides.alpha ?? SPEC_ALPHA,
@@ -231,8 +251,8 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
   });
 
   it("truncates on a two-node chain exactly as on a long one", () => {
-    // The claim above, as an assertion: node count is not the variable. If
-    // truncation were a large-graph phenomenon this would converge.
+    // Node count is not the variable. If truncation were a large-graph
+    // phenomenon this would converge.
     const short = computePPR(chain(2), [N("n00")], { alpha: 0.85, maxIterations: 100 });
 
     expect(short.converged).toBe(false);
@@ -245,6 +265,22 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     expect(computePPR(chain(16), [N("n00")], { alpha: 0.85, maxIterations: 5000 }).iterations).toBe(
       SPEC_SETTLES_AT,
     );
+  });
+
+  it("truncates on an even cycle and settles on an odd one of the same density", () => {
+    // Sparsity is not the variable either — two comments in a row said it was.
+    // Both cycles carry exactly one edge per node. The even one is bipartite,
+    // so its walk matrix has an eigenvalue of -1 and that error component
+    // decays at exactly α; the odd one has no such eigenvalue and mixes.
+    const options = { alpha: 0.85, maxIterations: 100 };
+
+    expect(computePPR(cycle(4), [N("n00")], options).converged).toBe(false);
+    expect(computePPR(cycle(6), [N("n00")], options).converged).toBe(false);
+    expect(computePPR(cycle(3), [N("n00")], options).converged).toBe(true);
+    expect(computePPR(cycle(5), [N("n00")], options).converged).toBe(true);
+    // Same edges per node on both sides of that split.
+    expect(cycle(4).edges.length / cycle(4).nodes.length).toBe(1);
+    expect(cycle(5).edges.length / cycle(5).nodes.length).toBe(1);
   });
 
   it("reports convergence for an empty seed set rather than truncation", () => {

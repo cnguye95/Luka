@@ -35,13 +35,21 @@ export interface PPRResult {
    * limit with the vector still moving.
    *
    * Worth reporting because the spec's own defaults truncate on ordinary
-   * topologies — and not because of size. At α = 0.85, with §7.2's cap of 100,
-   * a chain of *two* nodes truncates exactly as a chain of sixteen does: both
-   * need 118 iterations, as do stars of three and of ten. A sparse graph
-   * converges at a rate set by α, not by node count, so a small vault is no
-   * protection. The 65-node fixture this repo ships converges from every
-   * single seed, in 69–82 iterations — inside the cap, but not far inside it.
-   * All of that is spec-compliant ("max 100") and the residual is small, but a
+   * topologies. Neither size nor sparsity is the variable — *bipartiteness* is.
+   * A bipartite walk matrix carries an eigenvalue of −1, so that component of
+   * the error decays at exactly α per step and never faster; at α = 0.85 that
+   * is 118 iterations to reach §7.2's 1e-8, whatever the graph's size, and
+   * §7.2 caps at 100. Measured: chains of 2 through 16, stars of 3, 5 and 10,
+   * and cycles of 4 and 6 all need exactly 118 and all truncate. Cycles of 3,
+   * 5 and 7 — the same edges per node, but odd, so not bipartite — settle in
+   * 24, 53 and 73. The 65-node fixture this repo ships converges from every
+   * single seed in 69–82, inside the cap but by less than a fifth of it.
+   *
+   * Two earlier versions of this comment blamed node count and then sparsity.
+   * Both were wrong, which is why the odd/even cycle pair is now pinned by a
+   * test rather than described here.
+   *
+   * All of it is spec-compliant ("max 100") and the residual is small, but a
    * caller that could not tell a settled answer from a truncated one has no
    * way to notice a change that made convergence worse.
    */

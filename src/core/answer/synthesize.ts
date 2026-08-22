@@ -178,17 +178,20 @@ export function validateAnswerLinks(
  * forging a structure invariant 5 reserves for code.
  */
 const CODE_OWNED_SENTINEL =
-  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*\r?\n?/gm;
+  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
 
 /**
  * Removes code-owned sentinels from the model's prose.
  *
  * Invariant 5 gives code the citation blocks, the frontmatter and the footers.
- * The harm is a *parse* harm, not a link harm: a reply that emits
- * `<!-- trace:start -->` puts a second parseable block in front of `parseTrace`,
- * which treats the last match as authoritative and deletes the span of every
- * match — so a forgery silently eats whatever sits between it and code's real
- * block. An unterminated one is worse still, since §8.4's filing cannot pair it.
+ * The harm is a *parse* harm, not a link harm. `parseTrace` deletes the span of
+ * every block it matches and reads the last one as authoritative, so a
+ * terminated forgery is removed at filing — and takes its own span with it,
+ * including any prose the model wrote between its own start and end. Text
+ * *between* two blocks is preserved; an earlier version of this comment said it
+ * was eaten, and measured, it is not. An unterminated forgery is the worse
+ * case: `BLOCK` cannot pair it with anything, so filing removes nothing and the
+ * sentinel rides into `raw/answers/` as source text.
  *
  * It is *not* true that a forged block's links become graph edges §7.1 would
  * not otherwise have. `validateAnswerLinks` runs over the whole body first, so
@@ -205,10 +208,17 @@ const CODE_OWNED_SENTINEL =
  * two lines from it. The example loses its delimiters, which is the honest cost
  * of the parsers being fence-blind — and the cheaper of the two losses.
  *
- * Only the sentinel lines go, each with its own newline so no blank is left
- * where one stood. What the model wrote around them is prose, and §4 says the
- * model writes prose — a heading it chose is its own. What it may not do is
- * produce something that parses as a block code is supposed to own.
+ * Only whole sentinel lines go, each with its own newline so no blank is left
+ * where one stood. The end-of-line anchor is load-bearing: `BLOCK` requires the
+ * sentinel to be the entire line, so a sentinel with prose after it on the same
+ * line was never parseable and is not a forgery. Matching it anyway deleted the
+ * first half of a sentence that merely *mentioned* the delimiters — and left an
+ * identical sentinel later in that line untouched, which is the asymmetry this
+ * whole file keeps having to be checked for.
+ *
+ * What the model wrote around the sentinels is prose, and §4 says the model
+ * writes prose — a heading it chose is its own. What it may not do is produce
+ * something that parses as a block code is supposed to own.
  */
 function withoutForgedBlocks(body: string): string {
   return body.replace(CODE_OWNED_SENTINEL, "");

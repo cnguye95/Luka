@@ -1496,3 +1496,71 @@ sweep in `fuzz-ppr.test.ts` said "the tolerance is the spec's own bound rather
 than 1e-6" two lines above `worst > 1e-6`. What differs in that sweep is the
 configuration, not the tolerance; §7.2's 1e-8 is a bound on the L1 step, not on
 the distance to the dense solution.
+
+### Step 21b — the verification round, which faulted the fixes again
+
+Five of the six findings were mine, from the round immediately before. Verified
+each before touching anything; all five hold.
+
+**Taking the newline with the sentinel silently dropped its end-of-line anchor.**
+`-->[ \t]*\r?$` became `-->[ \t]*\r?\n?`. Both trailing pieces are optional and
+the `$` is gone, so the pattern matched a sentinel followed by *anything* on the
+same line — which `BLOCK` never treats as a block and which therefore was never
+a forgery. Measured: the body `<!-- trace:start --> and <!-- trace:end --> delimit
+the trace.` rendered as `and <!-- trace:end --> delimit the trace.` — the
+line-initial sentinel deleted along with the sentence's subject, the identical
+mid-line one untouched. Inside a fence, `<!-- trace:start -->   <- code writes
+this` lost its delimiter and kept the dangling annotation, making the "honest
+cost" of fence-blindness larger than the comment beside it claimed, for no parse
+safety at all. `(?:\r?\n|$)` takes the newline and keeps the anchor. Two tests
+pin it, including the asymmetric one.
+
+**The comment written to correct a false claim about `parseTrace` was itself
+false.** It said a forgery "eats whatever sits between it and code's real block".
+`parseTrace` accumulates `rest += text.slice(cursor, match.index)`, so text
+between two blocks is preserved verbatim — measured, `MIDDLE PROSE KEPT?` between
+a forgery and the real block survives. What a forgery actually costs is its own
+span, including any prose the model wrote inside it, and an unterminated one is
+never matched at all so filing cannot remove it. That second half was right all
+along. Third iteration of this docstring; the corrected version states only what
+was measured.
+
+**And the `converged` explanation was wrong a second time, in the same shape.**
+Step 21 replaced "a chain of eight or more nodes" with "a sparse graph converges
+at a rate set by α". Sparsity is not the variable either. At one edge per node
+throughout: cycles of 4 and 6 need 118 and truncate; cycles of 3, 5 and 7 settle
+in 24, 53 and 73. The variable is **bipartiteness** — a bipartite walk matrix
+carries an eigenvalue of −1, so that error component decays at exactly α and no
+faster, giving 118 at α = 0.85 whatever the size. Paths, stars and even cycles
+are bipartite; the shipped fixture is not, and converges in 69–82. Having now
+been wrong twice in prose, the odd/even cycle pair is pinned by a test instead.
+
+**The `scope` label had no test that could see it inverted.** `scope` is the
+whole mechanism that stops `--live` being held to floors calibrated from a
+subset it does not measure, and `run.ts` is its only consumer — one CI never
+exercises. Its test asserted three `overall` and three `ranking`, a symmetric
+count satisfied just as well by every label swapped. Swapping them typechecks,
+lints, passes all 23 unit tests and passes `npm run eval`, and would make
+`--live` skip the overall floors and enforce the ranking ones. Asserted as a
+metric→scope mapping now.
+
+**The floor guard was written one level too shallow for the third time.** Step
+20 checked that `ranking:` existed, not that it held numbers. Step 21 checked
+the numbers, not that `ranking:` held anything — a bare `ranking:` key parses as
+`null`, slipped `=== undefined`, and threw `TypeError: Cannot read properties of
+null` mid-run, with mode B never measured. Rather than add a third guard beside
+the other two, `validateFloors` now checks the whole shape once when the file is
+read, names the offending key, and runs before any mode is measured — which also
+removes two `--live` ordering bugs the reviewer found in the same area, where
+the scope skip ran ahead of the non-finite check and where the container guard
+failed a run for a floor `--live` would not have applied.
+
+Left open, logged not fixed: `buildTitleTable` (title order, titles-then-aliases
+in two passes) and `buildGraph`'s `claim` loop (path order, titles and aliases
+interleaved) can disagree on which page owns a contested alias, so §8.3 could
+approve a link that §7.1 draws to a page that was never retrieved. `dedup.ts`
+enforces one owner per alias at compile time, so a Luka-generated wiki should
+not reach that state; it builds its table from non-source pages while both
+consumers use the full table, which is where to look first if it ever fires.
+Pre-existing, reachable only through a hand-edited vault, and not a property of
+the forged-block path it was found beside.

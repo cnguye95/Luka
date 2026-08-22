@@ -320,6 +320,28 @@ describe("invariant 5: the model cannot forge a block code owns", () => {
     expect([...note.matchAll(/<!-- trace:start -->/g)]).toHaveLength(1);
   });
 
+  it("leaves a sentinel alone when prose follows it on the same line", () => {
+    // `BLOCK` in trace.ts requires the sentinel to be the whole line, so one
+    // with text after it was never parseable and is not a forgery. Matching it
+    // anyway ate the first half of this sentence — and left the second
+    // sentinel, identical structure, standing.
+    const mention = "<!-- trace:start --> and <!-- trace:end --> delimit the trace.";
+
+    const note = renderAnswerNote({ ...base, body: mention });
+
+    expect(note).toContain(mention);
+  });
+
+  it("leaves a fenced sentinel that carries an inline annotation", () => {
+    // The same asymmetry inside the fence it costs the most: stripping the
+    // delimiter here leaves the annotation dangling with nothing to annotate.
+    const annotated = ["```markdown", "<!-- trace:start -->   <- code writes this", "```"].join("\n");
+
+    const note = renderAnswerNote({ ...base, body: annotated });
+
+    expect(note).toContain("<!-- trace:start -->   <- code writes this");
+  });
+
   it("does not collapse blank lines the model put in its own prose", () => {
     // The old stripper swept `\n{3,}` across the whole body to tidy the gap it
     // left behind. Taking the newline with the sentinel removes the need, and a

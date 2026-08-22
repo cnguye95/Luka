@@ -193,8 +193,17 @@ describe("the floor check", () => {
       ranking: { recallAt5: 1.1, recallAt10: 1.1, mrr: 1.1 },
     });
 
-    expect(under.filter((check) => check.scope === "overall")).toHaveLength(3);
-    expect(under.filter((check) => check.scope === "ranking")).toHaveLength(3);
+    // Asserted as a mapping, not as two counts of three. The counts are
+    // symmetric: they hold just as well with every label swapped, which would
+    // make `--live` skip the overall floors and enforce the ranking ones.
+    expect(under.map((check) => [check.metric, check.scope])).toEqual([
+      ["recall@5", "overall"],
+      ["recall@10", "overall"],
+      ["MRR", "overall"],
+      ["ranking recall@5", "ranking"],
+      ["ranking recall@10", "ranking"],
+      ["ranking MRR", "ranking"],
+    ]);
   });
 
   it("fails a ranking floor while every overall mean still passes", () => {
