@@ -51,8 +51,11 @@ function chain(size: number): GraphSnapshot {
 }
 
 /**
- * A cycle. Even ones are bipartite and mix as slowly as a chain; odd ones are
- * not, and settle well inside §7.2's cap at the same edges per node.
+ * A cycle: `size` nodes, `size` edges, one edge per node at every size.
+ *
+ * Used to hold density fixed while something else varies. It carries no claim
+ * about which cycles converge — an earlier version of this comment said odd
+ * ones settle, which `cycle(13)` below disproves.
  */
 function cycle(size: number): GraphSnapshot {
   const name = (at: number) => N(`n${String(at).padStart(2, "0")}`);
@@ -236,8 +239,10 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
   });
 
   it("reports truncation at §17's own defaults, which a chain reaches", () => {
-    // §17 ships α = 0.85 and a 100-iteration cap, and a sparse graph needs 118
-    // iterations to reach L1 < 1e-8 — a figure set by α, not by node count.
+    // §17 ships α = 0.85 and a 100-iteration cap, and a chain needs 118
+    // iterations to reach L1 < 1e-8. No claim about why: "sparse graphs need
+    // 118" was one of four wrong explanations, and `cycle(5)` — the same one
+    // edge per node — needs 53.
     // Measured, a chain of 2 truncates exactly as a chain of 16 does, so this
     // is not a large-vault condition; the shipped configuration truncates on
     // an ordinary topology, a reading path or a chain of prerequisite notes.
@@ -286,10 +291,9 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     expect(settles(51)).toBe(false);
   });
 
-  it("truncates or not by seed set, on one unchanged graph", () => {
-    // The graph is held fixed and only the seeds move, so nothing about the
-    // topology can explain this one. Mode B seeds several nodes, so the
-    // converging case is the normal one.
+  it("truncates or not by seed set, and not by how many seeds there are", () => {
+    // Two things pinned here. First: the graph is held fixed and only the
+    // seeds move, so nothing about the topology explains the split.
     const options = { alpha: 0.85, maxIterations: 100 };
     const ends = computePPR(chain(4), [N("n00")], options);
     const every = computePPR(chain(4), ["n00", "n01", "n02", "n03"].map(N), options);
@@ -297,6 +301,18 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     expect(ends.converged).toBe(false);
     expect(every.converged).toBe(true);
     expect(every.iterations).toBe(22);
+
+    // Second, and the reason this test is shaped this way: "more seeds
+    // converges, and Mode B seeds several, so truncation is a toy-graph
+    // curiosity" was written in the comment above as though the first half
+    // established it. It does not. Seeding *more* of a chain truncates, and
+    // seeding *all* of a slightly longer one truncates too, so the assertion
+    // above is a fact about that graph and that seeding — not a rule.
+    const threeOfFour = computePPR(chain(4), ["n00", "n01", "n02"].map(N), options);
+    const allOfFive = computePPR(chain(5), ["n00", "n01", "n02", "n03", "n04"].map(N), options);
+
+    expect(threeOfFour.converged).toBe(false);
+    expect(allOfFive.converged).toBe(false);
   });
 
   it("reports convergence for an empty seed set rather than truncation", () => {

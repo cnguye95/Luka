@@ -192,17 +192,18 @@ export function validateAnswerLinks(
  *      pattern is deliberately more permissive about surrounding whitespace, so
  *      that a near-miss a parser might one day accept is already gone.
  *
- * Three families, because there are three block parsers: `sources` and `trace`
- * here and in `trace.ts`, and `citations` in `compile/citations.ts`. The third
- * belongs because §8.4 files an answer into `raw/answers/`, where the next
- * compile reads it as a source — so a forged `citations:` block does reach
- * `parseCitationBlock`. It cannot corrupt the citer record, since
- * `withCitationBlock` strips every block and appends code's own; what it costs
- * is the model's prose inside the forgery, deleted at compile time instead of
- * surviving as the prose §4 says the model is entitled to write.
+ * Two families, not three. `compile/citations.ts` has a third `BLOCK`, for
+ * `citations:start`/`end`, and it was briefly added here on the reasoning that
+ * §8.4 files an answer into `raw/answers/` where the next compile reads it.
+ * That reasoning is wrong: all three `parseCitationBlock` call sites iterate
+ * the wiki page table, and `loadPageTable` seeds its walk with `wiki/` alone,
+ * so a filed answer's text never reaches that parser. With no parse harm on
+ * one side, the strip is pure cost on the other — every wiki page carries a
+ * citation block, so an answer quoting one would silently lose two of its
+ * lines. Rule 2 above is scoped to the parsers that read an answer note.
  */
 const CODE_OWNED_SENTINEL =
-  /^[ \t]*<!--[ \t]*(?:sources|trace|citations):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
+  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
 
 /**
  * Removes code-owned sentinels from the model's prose.

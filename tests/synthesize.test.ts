@@ -414,16 +414,17 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
   //
   // Redeclared locally rather than imported: a test that imports the pattern it
   // checks agrees with the code by construction.
-  // All three block parsers: `trace.ts`'s BLOCK, this module's sources block,
-  // and `compile/citations.ts`'s BLOCK — the last reachable because §8.4 files
-  // an answer into raw/answers/, which the next compile reads as a source.
+  // The parsers that read an answer note: `trace.ts`'s BLOCK and this module's
+  // sources block. `compile/citations.ts` has a third BLOCK, deliberately not
+  // covered — every `parseCitationBlock` call site iterates the wiki page
+  // table, and `loadPageTable` walks `wiki/` alone, so a filed answer's text
+  // never reaches it. Covering it would cost an answer that quotes a wiki
+  // page's citation block two of its lines, for no parse harm avoided.
   const SPEC_PARSER_SENTINELS = [
     "<!-- trace:start -->",
     "<!-- trace:end -->",
     "<!-- sources:start -->",
     "<!-- sources:end -->",
-    "<!-- citations:start -->",
-    "<!-- citations:end -->",
   ];
 
   /**

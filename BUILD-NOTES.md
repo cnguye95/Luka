@@ -1547,6 +1547,16 @@ seeded at one end truncates, and seeded at all four nodes converges in 22;
 `cycle(6)` seeded everywhere converges in 1. Mode B seeds several nodes, so the
 converging case is the ordinary one.
 
+**That last sentence was attempt #4, and it is wrong too.** It was written in
+the commit that removed attempt #3 and declared no mechanism claimed — three
+bullets after the declaration. Seed count predicts nothing: `chain(4)` seeded at
+three of its four nodes needs 111 and truncates, `chain(5)` seeded at all five
+needs 108, `chain(16)` seeded at eight needs 118. The 22-iteration figure is a
+fact about that graph under that seeding, not evidence for a rule, and the test
+built to pin it used the same example as the claim — the identical
+agreeing-by-construction failure this entry diagnoses two paragraphs down. The
+seed-set test now carries the counterexamples, so the wrong reading fails it.
+
 The lesson taken is not "find the right mechanism". Three attempts produced
 three confident wrong ones, each surviving because the test was built from the
 same examples as the claim. The docstring now records measured numbers and
@@ -1579,9 +1589,11 @@ non-finite check in `run.ts`, in that order, unchanged — what changed is that
 `belowFloor` can no longer be reached from `run.ts` with a non-finite floor, so
 the `NO FLOOR:` branch beneath it is now unreachable. It is kept, like
 `health.ts`'s `Object.hasOwn` guard, as the correct thing for a function that is
-also called directly by its unit tests — which do exercise it. Saying it was
-removed, when it was only made unreachable, is the kind of claim this log has
-already been wrong about three times.
+also called directly by its unit tests. Precisely: those tests exercise
+`belowFloor`'s `!Number.isFinite` filter, not the `NO FLOOR:` reporting branch
+in `run.ts`, which has no coverage at all — nothing imports `run.ts`. Saying it
+was removed, when it was only made unreachable, is the kind of claim this log
+has already been wrong about three times.
 
 Left open, logged not fixed: `buildTitleTable` (title order, titles-then-aliases
 in two passes) and `buildGraph`'s `claim` loop (path order, titles and aliases
@@ -1671,7 +1683,7 @@ the wave.** The finding was that the eval cannot catch a PPR regression,
 evidenced by quartering the damping factor and watching CI stay green. Both
 halves fail on measurement: quartering α *raises* Mode B recall@5 from 0.7604 to
 0.8229, so it is not a regression on this fixture and no floor can fire on it,
-and it already fails eight tests — six in `ppr.test.ts`, two in
+and it already fails nine tests — seven in `ppr.test.ts`, two in
 `fuzz-ppr.test.ts` — when α is quartered *inside* `computePPR`. Worth separating
 the two mutations, because the sentence above ran them together: quartering
 `DEFAULT_SETTINGS.pprAlpha` instead, which is what produces the 0.8229 figure,
@@ -1714,3 +1726,45 @@ float branch in `renames.ts` fails exactly 7; removing `chooseTarget`'s
 recorded-path fallback fails exactly 1. Both numbers unchanged from the M1/M2
 campaign, which is the strongest available statement that M3 left the rename
 subsystem intact. 841 passed, 4 skipped; build, boundary, lint and eval green.
+
+### Step 21d — the final check, which faulted it again
+
+Four consecutive rounds of fixes, four rounds faulted. The subject was the same
+every time: a causal claim about PPR convergence in a docstring, and a test
+built from the same examples as the claim.
+
+**Attempt #4 was written inside the commit that banned attempts.** "Mode B seeds
+several nodes, so this is the normal case" appeared three bullets below "No
+mechanism is claimed here, deliberately". Falsified by the helper the test
+itself uses: `chain(4)` seeded at three of four needs 111, `chain(5)` seeded at
+all five needs 108, `chain(16)` seeded at eight needs 118. The docstring now
+records measurements with no rule attached, states plainly which of its numbers
+are pinned by tests and which are only measurements, and the seed-set test
+carries the counterexamples so the wrong reading fails it.
+
+**Two retracted claims were left standing elsewhere in the file.** Attempt #3
+survived verbatim in `cycle`'s helper docstring, 220 lines above the assertion
+that disproves it, and attempt #2's sparsity claim survived in the comment on
+the truncation test. Removing a claim from the place it was challenged is not
+removing it; both are gone.
+
+**The `citations` family is reverted.** It was added on the reasoning that §8.4
+files an answer into `raw/answers/`, where the next compile reads it, so a
+forged `citations:` block reaches `parseCitationBlock`. It does not: all three
+call sites iterate the wiki page table, and `loadPageTable` seeds its walk with
+`wiki/` alone. With no parse harm to avoid, the strip was pure cost — every wiki
+page carries a citation block, so an answer quoting one would silently lose two
+lines. A fix whose rationale is false is a fix that should not ship, even when
+the diff is defensible on other grounds.
+
+**And the count in this log was stale by one commit.** "Fails eight tests, six
+in `ppr.test.ts`" was measured before the same commit split that file's cycle
+test in two; it is nine and seven. Fifth wrong number here, and the first caused
+by editing prose and code together without re-measuring the prose.
+
+The pattern is now specific enough to name: **prose about mechanism is where
+this project's defects live, not the code.** Every one of the four rounds
+shipped correct numbers and correct behaviour beside a wrong explanation, and
+each round's test agreed with its explanation because it was built from the same
+example. The standing rule at the end of this section is written accordingly —
+a claim needs a case chosen to break it, or it needs to not be a claim.
