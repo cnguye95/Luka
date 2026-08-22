@@ -1457,3 +1457,42 @@ added in step 20 checked that `ranking:` existed, not that it held numbers —
 the same half-a-fix shape, one level down, and the outer three floors had it
 too. A non-finite floor is now a failure in its own right, reported as `NO
 FLOOR` rather than `BELOW FLOOR`, because they are different faults.
+
+**Compile's call counter was never converted, and nothing asserted its half of
+invariant 12.** `runAsk` was given a logical-call counter in this milestone
+precisely because the ≤ 3 bound could not otherwise be stated. `runCompile` kept
+a `stats().requests` delta — transport attempts — and the entry recording that
+called it "compile's convention". Invariant 12 bounds compile by the same kind
+of number it bounds ask by: "S inventory calls + P page-generation calls (+1
+vision call per orphan image)", a function of the worklist. §11's retries and
+its one repair are transport, not worklist. Measured on one source whose
+inventory needs repairing: S = 1, P = 2, so the invariant's number is 3, and the
+delta read 4. The test there asserted `modelCalls === stats().requests`, pinning
+the defect rather than the invariant. Compile now counts one call per
+`complete()`, through a decorator sitting *above* the wrapper so invariant 10 is
+untouched and §11's retries happen inside the call being counted — which also
+catches the vision call `normalize` makes, that `index.ts` cannot otherwise see.
+The test asserts the invariant's 3, that transport made 4, and that the extra
+one is the repair; a second asserts one logical call under three 503 attempts.
+
+Not changed: §15's acceptance criterion is "re-compile makes zero model calls",
+and an empty worklist reads 0 on either counter, so that criterion was never
+affected either way.
+
+**`converged`'s documentation blamed the wrong variable, in both places it was
+written.** Both said a chain of eight or more nodes needs about 118 iterations,
+framing truncation as something large graphs do. Node count is not the variable.
+Measured at α = 0.85 against a 5000-iteration cap: chains of 2, 3, 8 and 16 and
+stars of 3 and 10 all need exactly 118, and all truncate against §7.2's cap of
+100. A sparse graph converges at a rate set by α, so a two-page vault truncates
+like a sixteen-page one and being small is no protection. The fixture this repo
+ships (65 nodes, 118 edges) converges from every single seed in 69–82 — inside
+the cap, but by less than a fifth of it, which is the fact worth knowing. The
+truncation itself stays on the accepted list; what was wrong was the story told
+about it. A test now pins the two-node case beside the twelve-node one.
+
+**A comment claimed a tolerance the code beside it did not use.** The §17-defaults
+sweep in `fuzz-ppr.test.ts` said "the tolerance is the spec's own bound rather
+than 1e-6" two lines above `worst > 1e-6`. What differs in that sweep is the
+configuration, not the tolerance; §7.2's 1e-8 is a bound on the L1 step, not on
+the distance to the dense solution.

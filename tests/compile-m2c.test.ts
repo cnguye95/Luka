@@ -448,9 +448,15 @@ describe("the index is regenerated every compile (§6.5)", () => {
 });
 
 describe("the call counter counts what the provider really does (§11, invariant 12)", () => {
-  it("counts the JSON repair retry as a model call", async () => {
-    // §11's repair retry is a real request. If the counter only saw logical
-    // calls, invariant 12's budget would understate what the vault was billed.
+  it("does not count §11's repair retry against invariant 12's budget", async () => {
+    // Invariant 12 makes compile "S inventory calls + P page-generation calls"
+    // — a function of the worklist. §11's repair is transport, not worklist, so
+    // a counter reading `stats().requests` reports a number the invariant never
+    // promised: this run is one source and one page, and the delta reads 3.
+    // `runAsk` was given a logical counter for exactly this; compile has one
+    // now too. The transport count is still available on the provider, and the
+    // two must genuinely disagree here — otherwise the repair never happened
+    // and the test is measuring nothing.
     const fs = new MemFs({ "raw/note.md": "PageRank ranks pages.\n" });
     let firstInventory = true;
     const provider = new StubProvider((request) => {
@@ -466,7 +472,35 @@ describe("the call counter counts what the provider really does (§11, invariant
     expect(result.failed).toEqual([]);
     // One source, but two inventory requests: the original and the repair.
     expect(provider.stats().byTask.inventory).toBe(2);
-    expect(result.modelCalls).toBe(provider.stats().requests);
+    // S = 1 inventory, P = 2 page generations (the source page and the concept
+    // page the inventory names), no orphan images.
+    const SPEC_INVARIANT_12 = 1 + 2;
+    expect(result.modelCalls).toBe(SPEC_INVARIANT_12);
+    // Transport made one more than that, and the extra is the repair.
+    expect(provider.stats().requests).toBe(SPEC_INVARIANT_12 + 1);
+    expect(provider.calls.map((call) => call.task)).toEqual([
+      "inventory",
+      "inventory",
+      "page-generation",
+      "page-generation",
+    ]);
+  });
+
+  it("counts one call per logical call, not per transport attempt", async () => {
+    // The mirror of the case above: three attempts at one inventory call is
+    // still one call the worklist asked for. Reported as three, invariant 12's
+    // bound would look violated whenever the network hiccuped.
+    const fs = new MemFs({ "raw/note.md": "PageRank ranks pages.\n" });
+    const provider = new StubProvider(
+      (request) =>
+        request.task === "inventory" ? retryableError("503 upstream") : replyFor(request),
+      { maxRetries: 2 },
+    );
+
+    const result = await core(fs, provider).compile();
+
+    expect(provider.stats().byTask.inventory).toBe(3);
+    expect(result.modelCalls).toBe(1);
   });
 
   it("counts each retry of a retryable transport failure", async () => {

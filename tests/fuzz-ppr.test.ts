@@ -237,9 +237,12 @@ describe("PPR at the configuration it actually ships with", { timeout: 600_000 }
     // The sweep above runs `maxIterations: 5000` so it compares against the
     // fixed point. That is the right oracle for the arithmetic and the wrong
     // one for the product: §17 ships α = 0.85 and a cap of 100, and nothing
-    // else in the suite checks what comes back at those numbers. Here the
-    // tolerance is the spec's own bound rather than 1e-6, and `converged` says
-    // which answer we are holding.
+    // else in the suite checks what comes back at those numbers. What differs
+    // here is the configuration, not the tolerance — that stays 1e-6, as above,
+    // because this compares per-node scores against the dense solution rather
+    // than measuring §7.2's 1e-8 L1 step. `converged` says which of the two
+    // answers we are holding, and only a settled one is held to the fixed
+    // point.
     const failures: string[] = [];
 
     for (let seed = FIRST; seed < FIRST + SEEDS; seed++) {

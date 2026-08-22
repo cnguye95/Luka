@@ -35,9 +35,14 @@ export interface PPRResult {
    * limit with the vector still moving.
    *
    * Worth reporting because the spec's own defaults truncate on ordinary
-   * topologies: at α = 0.85 a chain of eight or more nodes needs about 118
-   * iterations to settle, and §7.2 caps at 100. That is spec-compliant and the
-   * residual is small, but a caller that could not tell the two apart has no
+   * topologies — and not because of size. At α = 0.85, with §7.2's cap of 100,
+   * a chain of *two* nodes truncates exactly as a chain of sixteen does: both
+   * need 118 iterations, as do stars of three and of ten. A sparse graph
+   * converges at a rate set by α, not by node count, so a small vault is no
+   * protection. The 65-node fixture this repo ships converges from every
+   * single seed, in 69–82 iterations — inside the cap, but not far inside it.
+   * All of that is spec-compliant ("max 100") and the residual is small, but a
+   * caller that could not tell a settled answer from a truncated one has no
    * way to notice a change that made convergence worse.
    */
   converged: boolean;

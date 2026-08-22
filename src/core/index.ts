@@ -497,14 +497,45 @@ interface NormalizedSource {
   derivativePath: string | null;
 }
 
+/**
+ * Wraps a provider so every `complete()` is counted once.
+ *
+ * Sits *above* the wrapper, never below it, so invariant 10 still holds — the
+ * transport is untouched and §11's retries happen inside the call being
+ * counted. That is what makes the tally logical rather than transport: one
+ * count per call the worklist asked for, whatever the network did with it.
+ */
+function countingProvider(inner: LLMProvider, onCall: () => void): LLMProvider {
+  const complete = inner.complete.bind(inner) as (request: unknown) => Promise<unknown>;
+  return {
+    complete: ((request: unknown) => {
+      onCall();
+      return complete(request);
+    }) as LLMProvider["complete"],
+    stats: () => inner.stats(),
+  };
+}
+
 async function runCompile(input: CoreDeps, options: CompileOptions): Promise<CompileResult> {
   // One consistent settings state for the whole run, taken now rather than at
   // `createCore`, so a key typed since load is seen and a key typed mid-run
   // cannot change the rules underneath a compile already in flight.
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const emit = options.onProgress ?? (() => {});
-  const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
-  const before = provider.stats().requests;
+  const wrapped = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
+  // Invariant 12 bounds compile by "S inventory calls + P page-generation calls
+  // (+1 vision call per orphan image)" — a function of the worklist. §11's
+  // retries and its one repair are transport, not worklist, so a `requests`
+  // delta reports a number the invariant never promised: one source whose
+  // inventory needs repairing reads 2, and a 503 storm reads more still. This
+  // is the counter `runAsk` was given for the same reason; compile kept the
+  // delta. Counting one call per `complete()` — above the wrapper, so retries
+  // stay underneath it — is the same logical count at every site, including the
+  // vision call `normalize` makes, which index.ts cannot otherwise see.
+  let modelCalls = 0;
+  const provider = countingProvider(wrapped, () => {
+    modelCalls += 1;
+  });
   emit({ phase: "discovering" });
 
   const manifest = await loadManifest(deps.fs, deps.manifestPath);
@@ -1148,7 +1179,7 @@ async function runCompile(input: CoreDeps, options: CompileOptions): Promise<Com
     pagesWritten,
     pagesDeleted,
     derivativesDeleted,
-    modelCalls: provider.stats().requests - before,
+    modelCalls,
     noop: !wrote,
     cancelled: false,
   };

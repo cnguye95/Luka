@@ -216,17 +216,35 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
   });
 
   it("reports truncation at §17's own defaults, which a chain reaches", () => {
-    // §17 ships α = 0.85 and a 100-iteration cap. A chain of eight or more
-    // nodes needs about 118 iterations to reach L1 < 1e-8, so the shipped
-    // configuration truncates on an ordinary topology — a reading path, a
-    // chain of prerequisite notes. That is spec-compliant ("max 100") and the
-    // residual is ~1e-8, but without this flag nothing distinguishes it from a
-    // settled answer, and a change that made convergence worse would be
-    // invisible.
+    // §17 ships α = 0.85 and a 100-iteration cap, and a sparse graph needs 118
+    // iterations to reach L1 < 1e-8 — a figure set by α, not by node count.
+    // Measured, a chain of 2 truncates exactly as a chain of 16 does, so this
+    // is not a large-vault condition; the shipped configuration truncates on
+    // an ordinary topology, a reading path or a chain of prerequisite notes.
+    // Spec-compliant ("max 100") and the residual is ~1e-8, but without this
+    // flag nothing distinguishes it from a settled answer, and a change that
+    // made convergence worse would be invisible.
     const result = computePPR(chain(12), [N("n00")], { alpha: 0.85, maxIterations: 100 });
 
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(100);
+  });
+
+  it("truncates on a two-node chain exactly as on a long one", () => {
+    // The claim above, as an assertion: node count is not the variable. If
+    // truncation were a large-graph phenomenon this would converge.
+    const short = computePPR(chain(2), [N("n00")], { alpha: 0.85, maxIterations: 100 });
+
+    expect(short.converged).toBe(false);
+    expect(short.iterations).toBe(100);
+    // And both settle at the same count once the cap is lifted.
+    const SPEC_SETTLES_AT = 118;
+    expect(computePPR(chain(2), [N("n00")], { alpha: 0.85, maxIterations: 5000 }).iterations).toBe(
+      SPEC_SETTLES_AT,
+    );
+    expect(computePPR(chain(16), [N("n00")], { alpha: 0.85, maxIterations: 5000 }).iterations).toBe(
+      SPEC_SETTLES_AT,
+    );
   });
 
   it("reports convergence for an empty seed set rather than truncation", () => {
