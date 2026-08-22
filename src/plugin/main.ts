@@ -7,6 +7,7 @@ import { ObsidianFs } from "./fs-obsidian";
 import { ObsidianHttp } from "./http-obsidian";
 import { notify, progressNotice, reportAnswer, reportCompile } from "./notices";
 import { confirmScope } from "./scope-modal";
+import { GRAPH_VIEW_TYPE, LukaGraphView } from "./graph-view/view";
 import { LukaSettingTab } from "./settings";
 
 const FALLBACK_PLUGIN_DIR = ".obsidian/plugins/luka";
@@ -27,6 +28,11 @@ export default class LukaPlugin extends Plugin {
     });
 
     this.addSettingTab(new LukaSettingTab(this.app, this));
+    this.registerView(GRAPH_VIEW_TYPE, (leaf) => new LukaGraphView(leaf, this.core));
+    // §8.1: "One ribbon icon: the graph pane." The only one Luka adds.
+    this.addRibbonIcon("git-fork", "Luka: Open graph", () => {
+      void this.openGraph();
+    });
     registerCommands(this);
     // §7.1: the graph is "built in memory at plugin load and after compile".
     // Not awaited — `onload` must not block Obsidian on a vault walk, and every
@@ -94,6 +100,22 @@ export default class LukaPlugin extends Plugin {
       if (error instanceof BusyError) new Notice(error.message, 6000);
       else notify(`health check failed — ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * §8.1's "Open graph": reveal the pane if it is already open, else put one in
+   * the right sidebar.
+   *
+   * Reveal-not-duplicate because §9's pane is a view of one snapshot; a second
+   * copy would be a second simulation over the same data, and the ribbon is a
+   * button users press more than once.
+   */
+  async openGraph(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(GRAPH_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (leaf === null) return;
+    if (existing.length === 0) await leaf.setViewState({ type: GRAPH_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   /** §8.4's "File this answer", on the active answer note. */

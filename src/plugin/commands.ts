@@ -31,6 +31,14 @@ export function registerCommands(plugin: LukaPlugin): void {
   });
 
   plugin.addCommand({
+    id: "open-graph",
+    name: "Open graph",
+    callback: () => {
+      void plugin.openGraph();
+    },
+  });
+
+  plugin.addCommand({
     id: "file-answer",
     name: "File this answer",
     // §8.1 scopes this to "active answer note", so the command hides itself

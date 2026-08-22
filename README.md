@@ -257,3 +257,27 @@ adapter can show this.
       `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
       pages keep their grounding, and nothing is rewritten from an empty
       context. Restore the file afterwards.
+
+### M4 — Graph pane
+
+§14 puts the pane under this checklist rather than automated tests, so these are
+the only evidence that §9's view works. Run them on the compiled demo vault
+unless a step says otherwise.
+
+- [ ] **Luka: Open graph** in the command palette opens the pane, and the ribbon
+      icon opens the same one. Pressing the ribbon again *reveals* that pane
+      rather than opening a second copy.
+- [ ] On the compiled demo vault the pane opens in under a second (§15's AC —
+      wall-clock it from the click to the node/edge counts appearing).
+- [ ] On an empty vault — no `wiki/`, no manifest — the pane shows
+      "No graph yet. Run Luka: Compile to build one." rather than a blank area.
+- [ ] With the pane open, run **Luka: Compile**. When it finishes, the pane's
+      counts update on their own, with no click. (§7.1's rebuild event.)
+- [ ] The **Refresh** button updates the counts after a compile run from another
+      window or a vault sync.
+- [ ] Close the pane and reopen it: it works, and the developer console shows no
+      error logged at close. (Invariant 1 — nothing of the view outlives it.)
+- [ ] Open the pane on a vault where one file under `wiki/` is unreadable (make
+      one a directory, or lock it). The pane shows a notice naming the problem
+      and falls back to the empty state — it does not throw into the console or
+      render a blank surface with no explanation.

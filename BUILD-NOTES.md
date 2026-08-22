@@ -252,7 +252,7 @@ A review scoped to where M2c's new callers meet older committed modules, rather 
 - The confirm gate fires on §8.1's literal wording — the diff includes deletions or modifications — and only when a callback was supplied. An adds-only or pure-rename diff never confirms.
 - Confirm is a callback inside `CompileOptions` rather than an exposed acquire/release pair or a third façade method. The core's single `lock.run("compile", …)` then spans preview → confirm → work exactly as §8.1 requires, a second invocation during the modal gets invariant 2's notice verbatim, and there is no lock a caller can forget to release.
 - No callback means proceed unconfirmed. Tests and the headless eval harness want that; the modal is the plugin's concern, and §5's core contract has no UI in it.
-- `previewCompile` deliberately does **not** take the lock: it does no work and writes nothing, the same reason §9's pane is never blocked by it. §8.1's flow does not use it — compile's own callback is what holds the lock — so it exists for §5's contract and for M4's pane.
+- `previewCompile` deliberately does **not** take the lock: it does no work and writes nothing, the same reason §9's pane is never blocked by it. §8.1's flow does not use it — compile's own callback is what holds the lock — so it exists for §5's contract and for M4's pane. *(M4 correction: the pane does not call it. §9 never asks for a diff — its states are the Mode-A banner and the empty-vault pointer, both answerable from `getGraph()` alone — and §0 forbids resolving that silence by adding a consumer. `previewCompile` exists for §5's contract and for nothing else today.)*
 - A declined preview returns `CompileResult{cancelled: true, noop: true}` carrying the diff counts, with zero model calls, zero writes and the manifest untouched. The gate sits before the first write, so "nothing happened" is structural rather than undone.
 
 ### Retry after an interrupted cascade
@@ -334,7 +334,7 @@ A pass scoped to the previous commit rather than a fresh review. It re-ran the c
 
 ### Known limitations, accepted
 
-- `previewCompile` is deliberately lock-free, so a preview taken *while* a compile runs can read a half-written vault, and a page deleted between its `list` and its `read` makes it reject. Nothing calls it in the plugin today — §8.1's flow uses compile's own confirm callback — but M4's pane will, and that is where the tolerance belongs.
+- `previewCompile` is deliberately lock-free, so a preview taken *while* a compile runs can read a half-written vault, and a page deleted between its `list` and its `read` makes it reject. Nothing calls it in the plugin today — §8.1's flow uses compile's own confirm callback. *(M4 correction: this entry predicted the pane would call it and place the tolerance there. It does not, so the tolerance is still unowned — the looseness is real but nothing exercises it, which is the honest state rather than the predicted one.)*
 - Deletions are permanent, not routed to Obsidian's trash. `FsAdapter` has only `delete`, the spec never mentions trash, and a derivative is already overwritten wholesale when its original changes — so a trash concept would be new scope (§0), not the smaller option.
 - The scope preview lists pages, not the derivatives the sweep will remove. §6.6 enumerates what the preview shows, so a third list is scope the spec did not ask for; the README checklist covers the behaviour for a human tester.
 - A failed page deletion leaves `wiki/_index.md` naming a page that this run's other pages resolved their links as though gone. It self-heals on the retry the manifest restore forces.
@@ -1822,3 +1822,28 @@ retrieve rather than an approximation of it.
 - **S4b** — stopping after ranking is what makes the label true. Assembly reads every
   candidate page to fill a context budget nothing here spends, and step 5's
   ungrounded branch is a property of an answer, not of a ranking.
+
+**The pane's shell, and the two notes it corrected.** §9's view registers as
+`luka-graph`, opens from §8.1's command and from the one ribbon icon §8.1 allows,
+and renders the last-built snapshot. §14 puts everything below the façade under
+the README checklist, so this step's evidence is seven checklist items rather than
+assertions.
+
+- **S15** — the pane does not call `previewCompile`. Two M2d entries predicted it
+  would and placed the tolerance for its looseness there. §9 never asks for a diff:
+  its states are the Mode-A banner and the empty-vault pointer, both answerable
+  from `getGraph()` alone, and §0 forbids resolving that silence by adding a
+  consumer. Both entries are corrected in place; the tolerance is still unowned,
+  which is the honest state rather than the predicted one.
+- **S21** — a `getGraph()` rejection becomes a notice and the empty state. One
+  unreadable file under `wiki/` is enough to reject it, which is the deferred
+  compile-side IO gap and stays deferred; what the pane owes is to say so rather
+  than render a blank surface. The alternative — letting it throw into Obsidian's
+  event loop — reports nothing to the user at all.
+- **S22** — "Open graph" reveals an existing pane rather than opening a second.
+  §9 describes one view of one snapshot, and a second copy would be a second
+  simulation over the same data on a button users press more than once.
+- **S23** — `styles.css` is layout only, and `install:vault` now copies it.
+  Obsidian loads it from the plugin directory on its own, so it has to travel with
+  the build; every colour is still sampled from CSS variables at render time, which
+  is what §15's theme-switch criterion needs.
