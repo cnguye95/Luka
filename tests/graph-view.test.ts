@@ -406,6 +406,14 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
     ["cold.md", 0],
   ]);
 
+  it("names which of §9's three overlays it is", () => {
+    // The pane tells a click-PPR overlay it produced from a gesture apart from
+    // one the user asked for, so opening a page does not discard the latter.
+    expect(fromClickPPR(scores, "a.md", 2).source).toBe("click");
+    expect(fromInspect({ mode: "B", seeds: [], ranked: [] }, 2, "q").source).toBe("inspect");
+    expect(fromTrace({ seeds: [], top: [] }, "B", 0).source).toBe("trace");
+  });
+
   it("rings the seed and strokes the top K", () => {
     const overlay = fromClickPPR(scores, "a.md", 2);
 

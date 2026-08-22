@@ -322,7 +322,32 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
     const parsed = parseTrace(written).trace as Trace;
 
     expect(parsed.seeds).toEqual(["Alpha", "Beta"]);
-    expect(parsed.unparsed).toEqual(["[[Newton", "Isaac]]"]);
+    // One label lost, counted once. The split leaves `[[Newton` and `Isaac]]`
+    // behind and rejoining them is what keeps the count from overstating —
+    // reporting two losses for one missing page would defeat the purpose of
+    // counting at all.
+    expect(parsed.unparsed).toEqual(["[[Newton, Isaac]]"]);
+  });
+
+  it("keeps two lost labels apart rather than fusing them into one", () => {
+    // With a single lost label the trailing flush alone produces the right
+    // answer, so nothing distinguishes a run that closes at `]]` from one that
+    // never closes. Two lost labels do: fused, they report as one loss.
+    const written = writeTrace(trace({ seeds: ["Newton, Isaac", "Curie, Marie"], top: [] }));
+
+    const parsed = parseTrace(written).trace as Trace;
+
+    expect(parsed.seeds).toEqual([]);
+    expect(parsed.unparsed).toEqual(["[[Newton, Isaac]]", "[[Curie, Marie]]"]);
+  });
+
+  it("counts a label carrying several commas once, not once per fragment", () => {
+    const written = writeTrace(trace({ seeds: ["Alpha", "A, B, C", "Beta"], top: [] }));
+
+    const parsed = parseTrace(written).trace as Trace;
+
+    expect(parsed.seeds).toEqual(["Alpha", "Beta"]);
+    expect(parsed.unparsed).toEqual(["[[A, B, C]]"]);
   });
 
   it("reports the fragments in the replay's unresolved count", () => {

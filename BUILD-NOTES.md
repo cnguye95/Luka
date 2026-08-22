@@ -894,7 +894,7 @@ unreadable mode accepted, and a non-greedy top-entry capture.
 *(M4 correction: the sixth is not a mutation at all. `parseTop` is anchored with
 `^`/`$`, and against those anchors plus a maximal numeric tail, greedy and lazy
 are provably equivalent for every string `writeTrace` emits — changing `(.+)` to
-`(.+?)` there leaves all 23 trace tests green. The anchors do the work the
+`(.+?)` there leaves every trace test green. The anchors do the work the
 sentence credits to greediness. Greediness is load-bearing in `parseLinks`,
 which has no anchors, and that one is now pinned. This claim was false when
 written in M3 and survived seven review rounds before anyone ran it.)*
@@ -2052,7 +2052,10 @@ click-PPR and trace replay carry on unchanged.
   The parser splits on the comma, which loses a comma-bearing label. The
   alternative — matching brackets lazily — instead truncates raw paths carrying
   `]]` *and* fabricates a score for them, and a wrong number drawn on the heat
-  ramp as though it were measured is worse than a missing entry.
+  ramp as though it were measured is worse than a missing entry. Neither
+  reading is safe on a label carrying *both*: a raw path like
+  `raw/[[Fig]] x, y.md` is truncated to `raw/[[Fig` by the split parser too, and
+  silently. The split narrows the corrupting class; it does not empty it.
 
   What is not accepted is losing it silently. `Trace.unparsed` carries the
   fragments the split leaves behind, and `resolveTraceNodes` folds them into the

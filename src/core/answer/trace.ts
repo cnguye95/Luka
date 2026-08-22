@@ -135,7 +135,14 @@ export interface ResolvedTrace {
   seeds: string[];
   /** Node paths and their recorded scores, in the order the trace listed them. */
   top: { path: string; score: number }[];
-  /** Labels that name no node in this graph, in the order encountered. */
+  /**
+   * What the overlay could not light: labels naming no node in this graph, in
+   * the order encountered, followed by whatever the list parser could not read
+   * at all (`Trace.unparsed`).
+   *
+   * The two have different causes and the same consequence — a page the note
+   * names that the pane cannot show — so the pane reports one count.
+   */
   unresolved: string[];
 }
 
@@ -216,19 +223,48 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
  */
 const LINK = /\[\[(.+)\]\]/;
 
+/**
+ * Rejoins the fragments a comma-split left behind, one entry per lost label.
+ *
+ * `[[Newton, Isaac]]` splits into `[[Newton` and `Isaac]]`, and `[[A, B, C]]`
+ * into three — reporting those as two and three losses would overstate the
+ * count in the one place that exists to make the count honest. A fragment
+ * opening with `[[` starts a label; the run closes at the fragment ending in
+ * `]]`, and what is between them was one label all along.
+ */
+function rejoin(fragments: readonly string[]): string[] {
+  const out: string[] = [];
+  let open: string[] = [];
+  for (const fragment of fragments) {
+    if (open.length === 0 && !fragment.startsWith("[[")) {
+      // Not part of a split link — a stray value that was never a label.
+      out.push(fragment);
+      continue;
+    }
+    open.push(fragment);
+    if (fragment.endsWith("]]")) {
+      out.push(open.join(", "));
+      open = [];
+    }
+  }
+  // An unterminated run: whatever it was, it was one thing.
+  if (open.length > 0) out.push(open.join(", "));
+  return out;
+}
+
 function parseLinks(value: string): { labels: string[]; unparsed: string[] } {
   if (value === "" || value === "(none)") return { labels: [], unparsed: [] };
   const labels: string[] = [];
-  const unparsed: string[] = [];
+  const fragments: string[] = [];
   for (const part of value.split(",")) {
     const trimmed = part.trim();
     const link = LINK.exec(trimmed);
     // A part that is not a whole link is a fragment of one the split cut in
     // half — the comma case. Kept so the count downstream is honest about it.
     if (link) labels.push((link[1] as string).trim());
-    else if (trimmed !== "") unparsed.push(trimmed);
+    else if (trimmed !== "") fragments.push(trimmed);
   }
-  return { labels, unparsed };
+  return { labels, unparsed: rejoin(fragments) };
 }
 
 function parseTop(value: string): {
@@ -237,7 +273,7 @@ function parseTop(value: string): {
 } {
   if (value === "" || value === "(none)") return { entries: [], unparsed: [] };
   const entries: { label: string; score: number }[] = [];
-  const unparsed: string[] = [];
+  const fragments: string[] = [];
   for (const part of value.split(",")) {
     // Anchored: the score sits after the closing brackets, so the link stays
     // greedy and a label containing `]` still round-trips. Without `^`/`$` this
@@ -245,7 +281,7 @@ function parseTop(value: string): {
     const trimmed = part.trim();
     const entry = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/.exec(trimmed);
     if (entry) entries.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
-    else if (trimmed !== "") unparsed.push(trimmed);
+    else if (trimmed !== "") fragments.push(trimmed);
   }
-  return { entries, unparsed };
+  return { entries, unparsed: rejoin(fragments) };
 }

@@ -12,6 +12,14 @@ import type { RetrievalMode } from "../../core/index";
 import type { SimNode } from "./sim";
 
 export interface Overlay {
+  /**
+   * Which of §9's three overlays this is.
+   *
+   * The pane needs to tell a click-PPR overlay — which it produced from a
+   * gesture — apart from one the user deliberately asked for, so that opening a
+   * page does not discard the latter.
+   */
+  source: "click" | "inspect" | "trace";
   /** §9's ring. */
   seeds: ReadonlySet<string>;
   /** §9's stroke. */
@@ -72,6 +80,7 @@ export function fromClickPPR(
   k: number,
 ): Overlay {
   return {
+    source: "click",
     seeds: new Set([seedPath]),
     topK: topOf(scores, k),
     scores: normalize(scores),
@@ -93,6 +102,7 @@ export function fromInspect(
 ): Overlay {
   const scores = new Map(result.ranked.map((node) => [node.path, node.score]));
   return {
+    source: "inspect",
     seeds: new Set(result.seeds),
     topK: topOf(scores, k),
     scores: result.mode === "B" ? normalize(scores) : null,
@@ -116,6 +126,7 @@ export function fromTrace(
   const scores = new Map(resolved.top.map((entry) => [entry.path, entry.score]));
   const missing = unresolved === 0 ? "" : `, ${String(unresolved)} unresolved`;
   return {
+    source: "trace",
     seeds: new Set(resolved.seeds),
     topK: new Set(resolved.top.map((entry) => entry.path)),
     scores: mode === "B" ? normalize(scores) : null,

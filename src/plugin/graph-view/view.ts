@@ -51,7 +51,6 @@ const CLICK_SLOP = 4;
 /** Device ratio the exported PNG is rendered at, independent of the display. */
 const PNG_SCALE = 2;
 
-
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
@@ -109,6 +108,23 @@ export class LukaGraphView extends ItemView {
    * teardown that would have released them already run.
    */
   private closed = false;
+  /**
+   * The overlay standing before the current run of click-PPRs, so opening a
+   * page can put it back.
+   *
+   * §9 gives Esc the job of clearing an overlay. A double-click's own first
+   * press produces a click-PPR overlay on the way past, and discarding an
+   * Inspect or replay overlay the user deliberately asked for is not something
+   * "double-click opens the page" licenses.
+   */
+  private beforeClick: Overlay | null = null;
+  /**
+   * Bumped when a double-click lands. A click-PPR still in flight from that
+   * gesture's first press checks it and drops its result — otherwise, on the
+   * cold path where `computePPR` has to walk the vault, the overlay resolves
+   * after the page opens and reappears on top of it.
+   */
+  private clickEpoch = 0;
   /**
    * True while an inspect call is in flight. The disabled button covers the
    * mouse; nothing covered the Enter key, which called the same handler
@@ -248,6 +264,7 @@ export class LukaGraphView extends ItemView {
     this.panFrom = null;
     this.hovered = null;
     this.overlay = null;
+    this.beforeClick = null;
     this.filter = "";
     this.graph = null;
     this.contentEl.empty();
@@ -453,9 +470,13 @@ export class LukaGraphView extends ItemView {
       const point = at(event);
       const node = hitTest(frame, point.x, point.y);
       if (node === null) return;
-      // The press that opened this gesture already ran PPR. It was not asked
-      // for, so it goes before the page arrives.
-      this.setOverlay(null);
+      // The presses that opened this gesture each ran a click-PPR on the way
+      // past. Neither was asked for, so the pane goes back to what it was
+      // showing — which may be nothing, or may be an Inspect or replay overlay
+      // the user put there deliberately.
+      this.clickEpoch += 1;
+      this.setOverlay(this.beforeClick);
+      this.beforeClick = null;
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
@@ -533,6 +554,10 @@ export class LukaGraphView extends ItemView {
     draw(ctx, { ...frame, dpr: PNG_SCALE });
 
     offscreen.toBlob((blob) => {
+      // A callback rather than an `await`, and so missed by a sweep that looked
+      // only at awaits: a pane closed during encoding would still hand the user
+      // a download it no longer has a view for.
+      if (this.closed) return;
       if (blob === null) {
         new Notice("Luka: could not encode the image.", 6000);
         return;
@@ -623,9 +648,13 @@ export class LukaGraphView extends ItemView {
    * no provider call, which is why §9 calls it instant.
    */
   private async runClickPPR(path: string): Promise<void> {
+    const epoch = this.clickEpoch;
+    // Only the first press of a run records what it is replacing; the second
+    // would otherwise record the first one's own overlay.
+    if (this.overlay?.source !== "click") this.beforeClick = this.overlay;
     try {
       const result = await this.core.computePPR([path]);
-      if (this.closed) return;
+      if (this.closed || epoch !== this.clickEpoch) return;
       // Never `snapshots: true`: the per-iteration vectors are the M5
       // scrubber's, and retaining up to 100 of them costs memory for a feature
       // this milestone does not ship.
