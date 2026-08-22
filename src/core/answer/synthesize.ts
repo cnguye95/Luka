@@ -176,6 +176,21 @@ export function validateAnswerLinks(
 /**
  * Every sentinel code owns in an answer note. A model reply containing one is
  * forging a structure invariant 5 reserves for code.
+ *
+ * This pattern and `trace.ts`'s `BLOCK` describe one subject — what counts as a
+ * code-owned sentinel — from two sides, and they are written separately. Two
+ * rounds of fixes drifted them apart in opposite directions, so the relationship
+ * between them is a named property rather than something to re-derive by eye,
+ * and `synthesize.test.ts` pins it:
+ *
+ *   1. **Whole lines only.** Whatever this removes, it removes as complete
+ *      lines. `BLOCK` requires a sentinel to be its entire line, so a line with
+ *      prose after the sentinel is not structure to any parser, and cutting the
+ *      sentinel out of it destroys prose for no gain.
+ *   2. **Covers the parser.** Every line `BLOCK` would accept as a start or end
+ *      sentinel is removed here. Slack is allowed only in this direction: this
+ *      pattern is deliberately more permissive about surrounding whitespace, so
+ *      that a near-miss a parser might one day accept is already gone.
  */
 const CODE_OWNED_SENTINEL =
   /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
@@ -220,7 +235,7 @@ const CODE_OWNED_SENTINEL =
  * writes prose — a heading it chose is its own. What it may not do is produce
  * something that parses as a block code is supposed to own.
  */
-function withoutForgedBlocks(body: string): string {
+export function withoutForgedBlocks(body: string): string {
   return body.replace(CODE_OWNED_SENTINEL, "");
 }
 

@@ -1564,3 +1564,57 @@ not reach that state; it builds its table from non-source pages while both
 consumers use the full table, which is where to look first if it ever fires.
 Pre-existing, reachable only through a hand-edited vault, and not a property of
 the forged-block path it was found beside.
+
+### The stop-rule fired again, and what the re-open found
+
+Two consecutive rounds of fixes were faulted by the round after them, which is
+the rule from the M2d–f campaign: re-open the design rather than patch a third
+time. Applying the lesson from that campaign — the question is not "should we
+stop" but "does this subject have two rules that every fix has been unifying one
+of and fragmenting the other" — there was such a subject, and it is the sentinel.
+
+`CODE_OWNED_SENTINEL` (synthesize.ts) and `BLOCK` (trace.ts) both answer *what is
+a code-owned sentinel*, from two sides, written separately and maintained by eye.
+`BLOCK` demands column 0, single interior spaces, and a paired start/heading/end.
+The stripper allows leading whitespace, loose interior spacing, and an unpaired
+sentinel. Some of that difference is deliberate — strip defensively, so a
+near-miss a parser might one day accept is already gone — but nothing said which
+direction the slack was allowed to run, and both drifts went unnoticed:
+
+- The `$` loss made the stripper match lines `BLOCK` would never accept, and it
+  deleted prose. Slack in the wrong direction, caught only by a reviewer.
+- Nothing at all would have caught the mirror: tightening the stripper so a line
+  `BLOCK` *does* parse survives into `raw/answers/`.
+
+Named as a property now, in the comment and pinned by three tests:
+
+1. **Whole lines only.** Whatever the stripper removes, it removes as complete
+   lines. `BLOCK` requires a sentinel to be its entire line, so a line with prose
+   after one is structure to nobody and cutting it destroys prose for no gain.
+2. **Covers the parser.** Every line `BLOCK` accepts as a start or end sentinel
+   is removed.
+3. **Slack runs one way.** More permissive than the parser about surrounding
+   whitespace, never less.
+
+Verified from both sides: dropping the anchor fails four tests including the
+property; refusing trailing blanks fails coverage; demanding the parser's exact
+spelling fails permissiveness. The two patterns can no longer drift apart
+without a test saying so, which is what the earlier rounds were missing — not
+more care.
+
+`withoutForgedBlocks` is exported for this, matching `validateAnswerLinks` and
+`stripMissingBlock`, which are exported and tested directly for the same reason.
+
+Two standing conventions come out of this milestone's review waves, both earned
+the hard way:
+
+- **No causal claim in a comment unless it is measured and pinned.** Two
+  consecutive rewrites of `converged`'s documentation asserted a mechanism
+  (node count, then sparsity) that had never been measured, while the numbers
+  beside them were correct both times. The odd/even cycle test exists because
+  prose was wrong twice.
+- **Validate a shape at its boundary, once, not one guard at a time.** The
+  floor guard was written three times, each a level deeper — existence, then
+  leaf types, then container null — and each round's guard was correct about
+  what it checked. `validateFloors` checks the whole shape where the file is
+  read.

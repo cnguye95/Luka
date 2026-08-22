@@ -10,6 +10,7 @@ import {
   stripMissingBlock,
   synthesize,
   validateAnswerLinks,
+  withoutForgedBlocks,
 } from "../src/core/answer/synthesize";
 import type { AssembledNode } from "../src/core/retrieve/assemble";
 import type { Trace } from "../src/core/answer/trace";
@@ -401,5 +402,75 @@ describe("§8.3's unlinking is not applied to things that are not page links", (
 
     expect(validated).toContain("Photosynthesis");
     expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis -->");
+  });
+});
+
+describe("the stripper and the trace parser describe one subject (invariant 5)", () => {
+  // `CODE_OWNED_SENTINEL` in synthesize.ts and `BLOCK` in trace.ts both answer
+  // "what is a code-owned sentinel", from two sides, written separately. Two
+  // consecutive rounds of fixes drifted them apart in opposite directions — one
+  // made the stripper tighter than the parser, the next made it looser — so the
+  // relationship is pinned here as a property instead of re-derived by eye.
+  //
+  // Redeclared locally rather than imported: a test that imports the pattern it
+  // checks agrees with the code by construction.
+  const SPEC_PARSER_SENTINELS = ["<!-- trace:start -->", "<!-- trace:end -->"];
+
+  /**
+   * Every complete line of `text`. An empty result is zero lines, not one
+   * blank one — removing the only line of a body leaves "".
+   */
+  const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+
+  it("removes only whole lines, never part of one", () => {
+    // The property the `$` anchor carries. `BLOCK` requires a sentinel to be
+    // its entire line, so a line with prose after one is structure to nobody,
+    // and cutting the sentinel out of it destroys prose for no gain.
+    const bodies = [
+      "<!-- trace:start --> and <!-- trace:end --> delimit the trace.",
+      "Prose about <!-- sources:start --> inline.",
+      "<!-- sources:start -->",
+      "  <!-- trace:end -->  ",
+      "before\n<!-- trace:start -->\nafter",
+      "```md\n<!-- trace:start -->   <- annotated\n```",
+      "no sentinels here at all",
+      "<!-- trace:end -->",
+    ];
+
+    for (const body of bodies) {
+      const kept = linesOf(withoutForgedBlocks(body));
+      const original = linesOf(body);
+      // Every surviving line must appear verbatim among the original lines, in
+      // order — a subsequence. A partial cut produces a line that is not.
+      let at = 0;
+      for (const line of kept) {
+        const found = original.indexOf(line, at);
+        expect(found, `"${line}" is not a whole line of ${JSON.stringify(body)}`).toBeGreaterThan(-1);
+        at = found + 1;
+      }
+    }
+  });
+
+  it("removes every line the trace parser would accept as a sentinel", () => {
+    // Slack is allowed in one direction only: the stripper may be more
+    // permissive than the parser, never less. If `BLOCK` would treat a line as
+    // structure, that line must not survive into raw/answers/.
+    for (const sentinel of SPEC_PARSER_SENTINELS) {
+      // `BLOCK` accepts the sentinel at column 0 with optional trailing blanks.
+      for (const line of [sentinel, `${sentinel} `, `${sentinel}\t`]) {
+        expect(withoutForgedBlocks(`before\n${line}\nafter`)).toBe("before\nafter");
+      }
+    }
+  });
+
+  it("is deliberately more permissive than the parser, in that direction only", () => {
+    // `BLOCK` demands column 0 and single interior spaces. The stripper takes
+    // indented and loosely spaced near-misses too, so a shape some future
+    // parser might accept is already gone.
+    expect(withoutForgedBlocks("before\n  <!--  trace:start  -->\nafter")).toBe("before\nafter");
+    // And a line the parser could never accept, because prose follows it, is
+    // left exactly as the model wrote it.
+    const mention = "<!-- trace:start --> is what code writes.";
+    expect(withoutForgedBlocks(mention)).toBe(mention);
   });
 });
