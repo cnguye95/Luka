@@ -24,6 +24,7 @@ const trace = (over: Partial<Trace> = {}): Trace => ({
     { label: "Xylem", score: 0.0812 },
     { label: "Yarrow", score: 0.0631 },
   ],
+  unparsed: [],
   ...over,
 });
 
@@ -282,9 +283,15 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
     // The score is what the heat ramp draws. A parser that truncates the label
     // here also reads `3` out of `[[raw/[[Fig]] 3.md]] 0.5000` — a wrong number
     // rendered as though it were right, which is worse than a missing one.
-    const written = writeTrace(trace({ seeds: [], top: [{ label: doubled, score: 0.5 }] }));
+    // `raw/[[Fig]] 3.md` and not `doubled`: the label has to end in a digit for
+    // the two readings to differ. With any other ending, a lazy match still
+    // backtracks past the inner `]]` to reach the score and lands on the same
+    // split as greedy — which is why the first version of this test stayed
+    // green under the very parser it was written to exclude.
+    const trailing = "raw/[[Fig]] 3.md";
+    const written = writeTrace(trace({ seeds: [], top: [{ label: trailing, score: 0.5 }] }));
 
-    expect(parseTrace(written).trace?.top).toEqual([{ label: doubled, score: 0.5 }]);
+    expect(parseTrace(written).trace?.top).toEqual([{ label: trailing, score: 0.5 }]);
   });
 
   it("rejects a top entry that is prose rather than a list item", () => {
@@ -303,12 +310,37 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
     expect(parseTrace(hand).trace?.top).toEqual([]);
   });
 
-  it("loses a comma-bearing label, which is the accepted side of the trade", () => {
+  it("loses a comma-bearing label, and says so rather than losing it quietly", () => {
     // `,` is not forbidden in a title, so Luka can name a page `Newton, Isaac`
-    // and this parser will not recover it. Recorded rather than fixed: the fix
-    // is to change what `writeTrace` emits, and §8.3 fixes that shape.
-    const written = writeTrace(trace({ seeds: ["Newton, Isaac"], top: [] }));
+    // and this parser cannot recover it — the accepted side of an ambiguity
+    // that no parser over this grammar escapes. What is *not* accepted is
+    // silence: the fragments the split leaves behind are carried through so the
+    // count downstream is honest. An earlier version of this comment claimed a
+    // lost label was already visible as an unresolved count. It was not.
+    const written = writeTrace(trace({ seeds: ["Alpha", "Newton, Isaac", "Beta"], top: [] }));
 
-    expect(parseTrace(written).trace?.seeds).not.toContain("Newton, Isaac");
+    const parsed = parseTrace(written).trace as Trace;
+
+    expect(parsed.seeds).toEqual(["Alpha", "Beta"]);
+    expect(parsed.unparsed).toEqual(["[[Newton", "Isaac]]"]);
+  });
+
+  it("reports the fragments in the replay's unresolved count", () => {
+    // §9's replay: the note visibly lists three seeds. Lighting two and
+    // reporting nothing missing is the failure S5b names.
+    const written = writeTrace(trace({ seeds: ["Alpha", "Newton, Isaac", "Beta"], top: [] }));
+    const parsed = parseTrace(written).trace as Trace;
+    const graph: GraphSnapshot = {
+      nodes: [
+        { path: "wiki/Alpha.md", title: "Alpha", kind: "concept", degree: 1, summary: "" },
+        { path: "wiki/Beta.md", title: "Beta", kind: "concept", degree: 1, summary: "" },
+      ],
+      edges: [],
+    };
+
+    const resolved = resolveTraceNodes(parsed, graph);
+
+    expect(resolved.seeds).toHaveLength(2);
+    expect(resolved.unresolved.length).toBeGreaterThan(0);
   });
 });

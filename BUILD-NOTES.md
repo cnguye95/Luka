@@ -891,6 +891,14 @@ Six mutations turn the tests red: no ten-entry cap, scores not fixed to four
 decimals, first block winning over last, the heading requirement dropped, an
 unreadable mode accepted, and a non-greedy top-entry capture.
 
+*(M4 correction: the sixth is not a mutation at all. `parseTop` is anchored with
+`^`/`$`, and against those anchors plus a maximal numeric tail, greedy and lazy
+are provably equivalent for every string `writeTrace` emits — changing `(.+)` to
+`(.+?)` there leaves all 23 trace tests green. The anchors do the work the
+sentence credits to greediness. Greediness is load-bearing in `parseLinks`,
+which has no anchors, and that one is now pinned. This claim was false when
+written in M3 and survived seven review rounds before anyone ran it.)*
+
 Two of those needed the tests strengthened before they could fail. The greedy
 capture only matters for a label containing `]`, and the first version used one
 containing only `|`. The heading requirement is not what stops a stray fence
@@ -2031,6 +2039,26 @@ click-PPR and trace replay carry on unchanged.
   would discard what the user was looking at in exchange for nothing.
 - **S48** — a question that reaches nothing gets a notice rather than a silently
   empty overlay, which is indistinguishable from the overlay having failed to draw.
+
+### Known limitations, accepted (M4)
+
+- **A page whose title contains a comma cannot be replayed from a trace.**
+  §8.3 renders `seeds:` and `top:` as comma-separated lists of `[[label]]`, and
+  `,` is not in `pagetable.ts`'s FORBIDDEN set — so `Newton, Isaac` is a legal
+  title and `[[a]], [[b]]` is genuinely ambiguous: one label `a]], [[b`, or two.
+  No parser over that grammar is correct for every input, which is why three
+  successive attempts each fixed one side by breaking the other.
+
+  The parser splits on the comma, which loses a comma-bearing label. The
+  alternative — matching brackets lazily — instead truncates raw paths carrying
+  `]]` *and* fabricates a score for them, and a wrong number drawn on the heat
+  ramp as though it were measured is worse than a missing entry.
+
+  What is not accepted is losing it silently. `Trace.unparsed` carries the
+  fragments the split leaves behind, and `resolveTraceNodes` folds them into the
+  count §9's replay reports, so a note listing three seeds and lighting two says
+  so. The residue — recovering the label itself — needs `writeTrace` to emit an
+  unambiguous grammar, which is a §8.3 format decision rather than a parser one.
 
 ### Step 13 — the full-scale testing pass
 

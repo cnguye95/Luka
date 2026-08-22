@@ -25,7 +25,7 @@ const node = (title: string, over: Partial<AssembledNode> = {}): AssembledNode =
   ...over,
 });
 
-const TRACE: Trace = { mode: "B", seeds: ["Alpha"], round2: false, top: [] };
+const TRACE: Trace = { mode: "B", seeds: ["Alpha"], round2: false, top: [], unparsed: [] };
 
 describe("§8.2's trailing JSON block is stripped (§14)", () => {
   it("removes the block and reads its list", () => {

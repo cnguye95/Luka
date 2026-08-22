@@ -5,11 +5,14 @@
 // here writes anything. It is "never blocked by the lock" for the same reason:
 // every entry point it uses (`getGraph`, `computePPR`, `inspect`) is lock-free.
 //
-// Invariant 1 has no watchers and no timers. The pane refreshes on exactly two
-// things: the graph-rebuilt event, and its own refresh button. It does not
-// listen to the vault. The one loop it runs is §9's own sanction — d3's
-// simulation, from a reheat until it cools past `alphaMin` — and every frame is
-// scheduled by an event, never by a standing `requestAnimationFrame` chain.
+// Invariant 1 has no watchers and no timers, and this file has neither: no
+// `setTimeout`, no `setInterval`, no vault listener. The pane refreshes on
+// exactly two things — the graph-rebuilt event and its own refresh button. The
+// one loop it runs is §9's own sanction, d3's simulation, from a reheat until
+// it cools past `alphaMin`; every frame is scheduled by an event, never by a
+// standing `requestAnimationFrame` chain. A deferral was tried for the
+// double-click case and removed: it was both a timer the invariant forbids and
+// shorter than the platform's own double-click interval, so it fired anyway.
 import { ItemView, Notice, type WorkspaceLeaf } from "obsidian";
 import {
   modeOf,
@@ -47,15 +50,7 @@ const TOOLTIP_OFFSET = 12;
 const CLICK_SLOP = 4;
 /** Device ratio the exported PNG is rendered at, independent of the display. */
 const PNG_SCALE = 2;
-/**
- * How long a click waits to see whether it is half of a double-click.
- *
- * A timer, and invariant 1 forbids those — but the invariant is about work
- * starting on its own. This one is armed by a user gesture, fires once, and
- * runs no operation if the gesture turned out to be something else. The
- * alternative is what shipped: PPR twice on every double-click.
- */
-const DOUBLE_CLICK_GRACE = 250;
+
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
@@ -114,10 +109,6 @@ export class LukaGraphView extends ItemView {
    * teardown that would have released them already run.
    */
   private closed = false;
-  /** A click waiting to see whether a second one turns it into a double. */
-  private pendingClick: { path: string; at: number } | null = null;
-  /** When a double-click last opened a page, so its second press is ignored. */
-  private openedAt = -Infinity;
   /**
    * True while an inspect call is in flight. The disabled button covers the
    * mouse; nothing covered the Enter key, which called the same handler
@@ -238,7 +229,6 @@ export class LukaGraphView extends ItemView {
 
   override async onClose(): Promise<void> {
     this.closed = true;
-    this.pendingClick = null;
     // Invariant 1: nothing of this view outlives it. The simulation is stopped
     // and detached from its tick handler, the pending frame is cancelled, and
     // the rebuild subscription is dropped.
@@ -422,23 +412,14 @@ export class LukaGraphView extends ItemView {
       if (draggedPath === null || from === null) return;
       const point = at(event);
       if (Math.hypot(point.x - from.x, point.y - from.y) > CLICK_SLOP) return;
-      // A double-click opens the page (§9); running PPR on the way there would
-      // leave an overlay nobody asked for on top of it. `event.detail` looked
-      // like the way to spot the second press and is not — it is 0 on
-      // `pointerup` by spec, so the guard it replaced never fired once. The
-      // `dblclick` handler sets this instead, and it arrives after the second
-      // `pointerup`, so the flag is read on the *next* gesture rather than
-      // this one — hence the timestamp rather than a bare boolean.
-      const now = event.timeStamp;
-      if (now - this.openedAt < DOUBLE_CLICK_GRACE) return;
-      this.pendingClick = { path: draggedPath, at: now };
-      window.setTimeout(() => {
-        const pending = this.pendingClick;
-        if (pending === null || pending.path !== draggedPath || pending.at !== now) return;
-        this.pendingClick = null;
-        if (this.closed) return;
-        void this.runClickPPR(draggedPath);
-      }, DOUBLE_CLICK_GRACE);
+      // §9 wants this "instant", so it runs on the press rather than waiting to
+      // learn whether a second one is coming. Two earlier attempts to suppress
+      // the first half of a double-click were both wrong — `event.detail` is 0
+      // on `pointerup` so that guard never fired, and a 250ms deferral is
+      // shorter than the 500ms platform double-click interval so it fired
+      // anyway, on top of delaying every ordinary click. `dblclick` undoes the
+      // overlay instead, which needs no timer and cannot be mistimed.
+      void this.runClickPPR(draggedPath);
     };
     this.registerDomEvent(canvas, "pointerup", endGesture);
     this.registerDomEvent(canvas, "pointercancel", endGesture);
@@ -472,10 +453,9 @@ export class LukaGraphView extends ItemView {
       const point = at(event);
       const node = hitTest(frame, point.x, point.y);
       if (node === null) return;
-      // Cancel the single-click that is still waiting: this gesture was a
-      // double-click all along.
-      this.pendingClick = null;
-      this.openedAt = event.timeStamp;
+      // The press that opened this gesture already ran PPR. It was not asked
+      // for, so it goes before the page arrives.
+      this.setOverlay(null);
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
@@ -611,7 +591,9 @@ export class LukaGraphView extends ItemView {
   async showRetrieval(answerPath: string): Promise<void> {
     let trace;
     try {
-      trace = parseTrace(await this.host.readNote(answerPath)).trace;
+      const text = await this.host.readNote(answerPath);
+      if (this.closed) return;
+      trace = parseTrace(text).trace;
     } catch (error) {
       new Notice(`Luka: could not read ${answerPath} — ${message(error)}`, 6000);
       return;

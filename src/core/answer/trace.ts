@@ -35,6 +35,18 @@ export interface Trace {
   /** Whether §8.2's follow-up round ran. */
   round2: boolean;
   top: { label: string; score: number }[];
+  /**
+   * List entries neither list parser could read, verbatim.
+   *
+   * The grammar below is ambiguous, so some inputs cannot be recovered — but
+   * losing them *quietly* is a different failure from losing them. §9's replay
+   * would light fewer nodes than the note visibly lists and report nothing
+   * missing, which is exactly what `resolveTraceNodes`'s `unresolved` exists to
+   * prevent and could not, because these never reached it.
+   *
+   * `writeTrace` does not emit this; it is what parsing could not account for.
+   */
+  unparsed: string[];
 }
 
 export interface ParsedTrace {
@@ -89,12 +101,15 @@ export function parseTrace(text: string): ParsedTrace {
   // but nothing is reconstructed from it.
   if (mode !== "A" && mode !== "B") return { trace: null, rest };
 
+  const seeds = parseLinks(fields.get("seeds") ?? "");
+  const top = parseTop(fields.get("top") ?? "");
   return {
     trace: {
       mode,
-      seeds: parseLinks(fields.get("seeds") ?? ""),
+      seeds: seeds.labels,
       round2: (fields.get("round2") ?? "no") === "yes",
-      top: parseTop(fields.get("top") ?? ""),
+      top: top.entries,
+      unparsed: [...seeds.unparsed, ...top.unparsed],
     },
     rest,
   };
@@ -169,7 +184,9 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
     if (path !== null) top.push({ path, score: entry.score });
   }
 
-  return { seeds, top, unresolved };
+  // Fragments the parser could not read are missing from the overlay for the
+  // same reason a departed page is, and the pane owes the user the same notice.
+  return { seeds, top, unresolved: [...unresolved, ...trace.unparsed] };
 }
 
 /**
@@ -182,39 +199,53 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
  * real. So `[[a]], [[b]]` is genuinely ambiguous — one label `a]], [[b`, or two
  * labels — and no parser over this grammar is correct for every input.
  *
- * Splitting on the comma first is the reading that fails on the rarer input.
- * It loses a comma-bearing title; matching brackets lazily instead was tried
- * and is worse, because it truncates bracketed paths *and* fabricates a score
- * for them — `[[raw/[[Fig]] 3.md]] 0.5000` parsed as label `raw/[[Fig` with
- * score 3, a wrong number drawn on the heat ramp as if it were right. A label
- * lost is visible as an unresolved count; a label corrupted is not.
+ * Splitting on the comma is the reading that fails on the rarer input. It loses
+ * a comma-bearing title; matching brackets lazily instead was tried and is
+ * worse, because it truncates bracketed paths *and* fabricates a score for them
+ * — `[[raw/[[Fig]] 3.md]] 0.5000` parsed as label `raw/[[Fig` with score 3, a
+ * wrong number drawn on the heat ramp as though it were measured. Neither
+ * reading is safe on a label carrying both `]]` and a comma; this one narrows
+ * the corruption rather than ending it.
  *
- * The comma case is therefore accepted and recorded, not fixed here. Fixing it
- * means changing what `writeTrace` emits — §8.3 fixes that shape — which is a
- * format decision rather than a parser one.
+ * Both readings also lose quietly, which is the part that *is* fixable here: an
+ * earlier version of this comment claimed a lost label showed up as an
+ * unresolved count, and it did not — the split destroyed it before
+ * `resolveTraceNodes` could see it. `unparsed` carries those fragments through
+ * so the count is honest. Recovering the label needs `writeTrace` to emit an
+ * unambiguous grammar, which is a §8.3 format decision, not a parser one.
  */
 const LINK = /\[\[(.+)\]\]/;
 
-function parseLinks(value: string): string[] {
-  if (value === "" || value === "(none)") return [];
-  const out: string[] = [];
+function parseLinks(value: string): { labels: string[]; unparsed: string[] } {
+  if (value === "" || value === "(none)") return { labels: [], unparsed: [] };
+  const labels: string[] = [];
+  const unparsed: string[] = [];
   for (const part of value.split(",")) {
-    const link = LINK.exec(part.trim());
-    if (link) out.push((link[1] as string).trim());
+    const trimmed = part.trim();
+    const link = LINK.exec(trimmed);
+    // A part that is not a whole link is a fragment of one the split cut in
+    // half — the comma case. Kept so the count downstream is honest about it.
+    if (link) labels.push((link[1] as string).trim());
+    else if (trimmed !== "") unparsed.push(trimmed);
   }
-  return out;
+  return { labels, unparsed };
 }
 
-function parseTop(value: string): { label: string; score: number }[] {
-  if (value === "" || value === "(none)") return [];
-  const out: { label: string; score: number }[] = [];
+function parseTop(value: string): {
+  entries: { label: string; score: number }[];
+  unparsed: string[];
+} {
+  if (value === "" || value === "(none)") return { entries: [], unparsed: [] };
+  const entries: { label: string; score: number }[] = [];
+  const unparsed: string[] = [];
   for (const part of value.split(",")) {
     // Anchored: the score sits after the closing brackets, so the link stays
     // greedy and a label containing `]` still round-trips. Without `^`/`$` this
     // backtracks across the separator and invents labels out of prose.
-    const entry = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/.exec(part.trim());
-    if (!entry) continue;
-    out.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
+    const trimmed = part.trim();
+    const entry = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/.exec(trimmed);
+    if (entry) entries.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
+    else if (trimmed !== "") unparsed.push(trimmed);
   }
-  return out;
+  return { entries, unparsed };
 }

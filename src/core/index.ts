@@ -603,6 +603,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
       // and §5's shared `parseTrace` had to resolve both.
       seeds: seedPaths.map((path) => labelFor(path, pages)),
       round2,
+      unparsed: [],
       top: assembly.nodes.map((node) => ({
         label: node.kind === "raw" ? node.path : node.title,
         score: ranked.find((candidate) => candidate.path === node.path)?.score ?? 0,
