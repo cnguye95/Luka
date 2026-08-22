@@ -176,6 +176,21 @@ async function main(): Promise<void> {
       failed = true;
     }
 
+    // The count alone cannot see `metrics.ts` filtering the wrong way round —
+    // this fixture splits 8/8, so both halves satisfy it. The membership can:
+    // the ranking means must be a mean over exactly the queries whose expected
+    // pages were *not* all seeds, and that list is known here independently.
+    const shouldRank = outcomes.filter((outcome) => !outcome.seeded).map((o) => o.query);
+    const ranked = [...summary.rankingQueryNames];
+    if (ranked.length !== shouldRank.length || ranked.some((q, at) => q !== shouldRank[at])) {
+      console.error(
+        `  the ranking means average the wrong queries:\n` +
+          `    averaged: ${ranked.join(" | ")}\n` +
+          `    expected: ${shouldRank.join(" | ")}`,
+      );
+      failed = true;
+    }
+
     if (floor === undefined) {
       console.error(`  no floor recorded for mode ${mode}`);
       failed = true;
@@ -189,6 +204,21 @@ async function main(): Promise<void> {
       continue;
     }
     for (const under of belowFloor(summary, floor)) {
+      // §13 says `--live` "prints the same metrics". It cannot be held to the
+      // ranking floors: those were calibrated from the 8 queries CI seeding
+      // leaves unseeded, and a live model seeds the easy ones out of the
+      // subset, so what remains is the hardest few averaged against a floor set
+      // from all 8. A better model would fail the eval. The overall floors are
+      // over every query and stay in force.
+      if (live && under.scope === "ranking") {
+        console.log(`  (not floored under --live: ${under.metric} ${under.measured.toFixed(4)})`);
+        continue;
+      }
+      if (!Number.isFinite(under.floor)) {
+        console.error(`  NO FLOOR: ${under.metric} has no numeric floor in queries.yaml`);
+        failed = true;
+        continue;
+      }
       console.error(
         `  BELOW FLOOR: ${under.metric} ${under.measured.toFixed(4)} < ${under.floor.toFixed(4)}`,
       );

@@ -118,6 +118,12 @@ describe("the ranking-only means", () => {
     expect(mixed().perQuery.map((entry) => entry.seeded)).toEqual([true, false]);
   });
 
+  it("names which queries it averaged, so an inverted filter is visible", () => {
+    // The count cannot show this: the eval fixture splits 8/8, so filtering the
+    // wrong way round still counts 8. `run.ts` cross-checks the membership.
+    expect(mixed().rankingQueryNames).toEqual(["ranked"]);
+  });
+
   it("reports zero when every query was fully seeded", () => {
     // Nothing measured ranking at all. Zero — rather than a vacuous 1 — means
     // any positive floor fails, which is the right noise for a query set that
@@ -162,6 +168,33 @@ describe("the floor check", () => {
     expect(belowFloor(summary, floor)).toEqual([]);
     // Far enough above and it must still fail.
     expect(belowFloor(summary, { ...floor, mrr: summary.mrr + 1e-6 })).toHaveLength(1);
+  });
+
+  it("treats a floor that is not a number as a failure, not as no floor", () => {
+    // A floor omitted from queries.yaml compares `measured < NaN`, which is
+    // false — so the check would switch itself off rather than fail. Silently
+    // skipping a floor is the exact failure the floors exist to prevent.
+    const missing = {
+      ...NO_FLOOR,
+      ranking: { recallAt5: 0, recallAt10: 0, mrr: undefined as unknown as number },
+    };
+
+    const under = belowFloor(summary, missing);
+
+    expect(under.map((check) => check.metric)).toEqual(["ranking MRR"]);
+    expect(Number.isFinite(under[0]?.floor)).toBe(false);
+  });
+
+  it("scopes each check, so --live can report the ranking means without flooring them", () => {
+    const under = belowFloor(summary, {
+      recallAt5: 1.1,
+      recallAt10: 1.1,
+      mrr: 1.1,
+      ranking: { recallAt5: 1.1, recallAt10: 1.1, mrr: 1.1 },
+    });
+
+    expect(under.filter((check) => check.scope === "overall")).toHaveLength(3);
+    expect(under.filter((check) => check.scope === "ranking")).toHaveLength(3);
   });
 
   it("fails a ranking floor while every overall mean still passes", () => {

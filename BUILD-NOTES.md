@@ -1400,6 +1400,15 @@ numbers unchanged for continuity. The `ranking` floor is required, not optional:
 a mode that recorded only the overall floors would skip the new check silently,
 which is the failure it exists to prevent.
 
+Read that amplitude paragraph as a claim about *headroom*, not about detection.
+The one-neighbour mutation moves the overall recall@5 by 0.0625, which is
+already past the 0.05 margin — so the old instrument caught it too, and the
+example proves less than it was offered as proving. Across all four degrading
+mutations tried, the overall floors caught every one. No regression has been
+demonstrated that the subset catches and the overall means miss. What the
+subset buys is margin: on that mutation, 0.075 of headroom against the ranking
+floor versus 0.0125 against the overall one.
+
 **The fix was a no-op in one direction until the subset size was pinned.**
 Mutating `run.ts` so `seeded` is always false widens the subset back to all 16
 queries; every ranking floor then measures the overall means, which clear them
@@ -1413,3 +1422,38 @@ the count, and `every` → `some` by the count and two floors.
 **The eval's closing line claimed a floor failure for every failure.** With the
 subset-size check added it can now fail without any metric being under a floor,
 so the summary says the run did not match what `queries.yaml` records.
+
+### Step 21 — one reviewer over the step-20 diff, and what survived it
+
+**The subset pin closed one direction and left the mirror open — in the file the
+fix itself added.** `rankingQueries: 8` was recorded precisely because this
+project keeps shipping fixes that no-op in one direction. It catches `run.ts`
+computing `seeded` wrongly. It cannot catch `metrics.ts` filtering the wrong way
+round, because the fixture splits 8/8 and both halves count 8: inverted, the
+ranking means come from the eight force-seeded queries, score a free 1.0000 on
+everything, and clear all six floors. `npm run eval` stayed green. The unit
+suite did catch it — three assertions in `eval-metrics.test.ts` fail — so the
+gate set as a whole was never blind, but the instrument built to measure ranking
+was. `summarize` now reports `rankingQueryNames` and `run.ts` cross-checks the
+membership against the list it derives itself; the count and the membership
+catch different breaks, so both stay.
+
+**`--live` kept floors calibrated from a subset it does not measure.** The
+count check was skipped under `--live` on the correct reasoning that a live
+model adds seeds and moves the subset — and then the ranking floors, derived
+from exactly those 8 CI-seeded queries, were applied anyway. A live model good
+enough to name every expected page empties the subset, the means read 0, and
+three floors fail while every overall metric is a perfect 1.0000. The realistic
+case is worse than the degenerate one: the model seeds the *easy* queries out,
+leaving the hardest few averaged against a floor set from all eight. §13 says
+`--live` "prints the same metrics", so it now prints them and does not floor
+them. `FloorCheck` carries a `scope` for that, rather than the caller matching
+on the metric's name.
+
+**A floor that was not a number switched its own check off.** `measured <
+undefined - 1e-9` is `measured < NaN`, which is false, so deleting two of the
+three numbers under `floors.B.ranking` left the eval green. The object guard
+added in step 20 checked that `ranking:` existed, not that it held numbers —
+the same half-a-fix shape, one level down, and the outer three floors had it
+too. A non-finite floor is now a failure in its own right, reported as `NO
+FLOOR` rather than `BELOW FLOOR`, because they are different faults.

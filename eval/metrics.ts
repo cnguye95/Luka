@@ -48,6 +48,14 @@ export interface Summary {
   mrr: number;
   /** How many queries fed the `ranking*` means. */
   rankingQueries: number;
+  /**
+   * Which queries fed them, in order.
+   *
+   * A count alone cannot detect the filter below being inverted, because the
+   * fixture splits 8/8 and both halves count 8. `run.ts` knows independently
+   * which queries were fully seeded, so it cross-checks the membership.
+   */
+  rankingQueryNames: readonly string[];
   rankingRecallAt5: number;
   rankingRecallAt10: number;
   rankingMrr: number;
@@ -103,6 +111,7 @@ export function summarize(outcomes: readonly QueryOutcome[]): Summary {
     meanRecallAt10: mean(perQuery.map((entry) => entry.recallAt10)),
     mrr: mean(perQuery.map((entry) => entry.reciprocalRank)),
     rankingQueries: ranking.length,
+    rankingQueryNames: ranking.map((entry) => entry.query),
     rankingRecallAt5: mean(ranking.map((entry) => entry.recallAt5)),
     rankingRecallAt10: mean(ranking.map((entry) => entry.recallAt10)),
     rankingMrr: mean(ranking.map((entry) => entry.reciprocalRank)),
@@ -126,6 +135,12 @@ export interface Floor extends Means {
 
 export interface FloorCheck {
   metric: string;
+  /**
+   * Which set of queries the metric is a mean over. `--live` reports the
+   * ranking metrics but cannot floor them: the model adds seeds, so the subset
+   * it measures is not the subset the floors were calibrated from.
+   */
+  scope: "overall" | "ranking";
   measured: number;
   floor: number;
 }
@@ -133,24 +148,42 @@ export interface FloorCheck {
 /** Every metric that came in under its floor. Empty means the run passes. */
 export function belowFloor(summary: Summary, floor: Floor): FloorCheck[] {
   const checks: FloorCheck[] = [
-    { metric: "recall@5", measured: summary.meanRecallAt5, floor: floor.recallAt5 },
-    { metric: "recall@10", measured: summary.meanRecallAt10, floor: floor.recallAt10 },
-    { metric: "MRR", measured: summary.mrr, floor: floor.mrr },
+    { metric: "recall@5", scope: "overall", measured: summary.meanRecallAt5, floor: floor.recallAt5 },
+    {
+      metric: "recall@10",
+      scope: "overall",
+      measured: summary.meanRecallAt10,
+      floor: floor.recallAt10,
+    },
+    { metric: "MRR", scope: "overall", measured: summary.mrr, floor: floor.mrr },
     {
       metric: "ranking recall@5",
+      scope: "ranking",
       measured: summary.rankingRecallAt5,
       floor: floor.ranking.recallAt5,
     },
     {
       metric: "ranking recall@10",
+      scope: "ranking",
       measured: summary.rankingRecallAt10,
       floor: floor.ranking.recallAt10,
     },
-    { metric: "ranking MRR", measured: summary.rankingMrr, floor: floor.ranking.mrr },
+    {
+      metric: "ranking MRR",
+      scope: "ranking",
+      measured: summary.rankingMrr,
+      floor: floor.ranking.mrr,
+    },
   ];
-  // A hair of slack for float comparison: a floor recorded as the measured
-  // value should not fail against its own measurement.
-  return checks.filter((check) => check.measured < check.floor - 1e-9);
+  // A floor that did not parse as a number compares `measured < NaN`, which is
+  // false — so an omitted or malformed entry in the YAML would silently switch
+  // its check off rather than fail. That is the failure this whole check
+  // exists to prevent, so a floor that is not a real number *is* a failure.
+  // A hair of slack otherwise: a floor recorded as the measured value should
+  // not fail against its own measurement.
+  return checks.filter(
+    (check) => !Number.isFinite(check.floor) || check.measured < check.floor - 1e-9,
+  );
 }
 
 function mean(values: readonly number[]): number {
