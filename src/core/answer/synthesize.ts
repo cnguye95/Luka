@@ -156,7 +156,14 @@ export function validateAnswerLinks(
     // destroys a correct citation and attaches a marker that is untrue.
     const hash = target.search(/[#^]/);
     const page = hash === -1 ? target : target.slice(0, hash);
-    if (page !== "" && known.has(handleOf(page))) return full;
+    // `[[#Heading]]` and `[[^block]]` name no page at all — they address a
+    // place inside *this* note. Unlinking one destroys a working reference and
+    // attaches a marker asserting something untrue: it was never outside any
+    // retrieved set, because it never pointed outside this note. `build.ts`'s
+    // `resolve()` already treats every `#`/`^` target as not-a-page, so leaving
+    // it linked contributes no edge either.
+    if (page === "") return full;
+    if (known.has(handleOf(page))) return full;
 
     const canonical = index.get(handleOf(page));
     const resolved = canonical === undefined ? undefined : pathByTitle.get(handleOf(canonical));
@@ -170,25 +177,41 @@ export function validateAnswerLinks(
  * Every sentinel code owns in an answer note. A model reply containing one is
  * forging a structure invariant 5 reserves for code.
  */
-const CODE_OWNED_SENTINEL = /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*\r?$/gm;
+const CODE_OWNED_SENTINEL =
+  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*\r?\n?/gm;
 
 /**
  * Removes code-owned sentinels from the model's prose.
  *
  * Invariant 5 gives code the citation blocks, the frontmatter and the footers.
- * A reply that emits `<!-- sources:start -->` used to survive verbatim into the
- * note above code's real block — two fences, two headings, and the links inside
- * the forgery kept, so it read as authentic — and both blocks survived filing
- * into `raw/answers/`, where the fake block's links became graph edges (§7.1).
- * An *unterminated* fence was worse still: `stripTrace` needs a matching end,
- * so §8.4's filing could not remove it either.
+ * The harm is a *parse* harm, not a link harm: a reply that emits
+ * `<!-- trace:start -->` puts a second parseable block in front of `parseTrace`,
+ * which treats the last match as authoritative and deletes the span of every
+ * match — so a forgery silently eats whatever sits between it and code's real
+ * block. An unterminated one is worse still, since §8.4's filing cannot pair it.
  *
- * Only the sentinel lines go. What the model wrote around them is prose, and
- * §4 says the model writes prose — a heading it chose is its own. What it may
- * not do is produce something that parses as a block code is supposed to own.
+ * It is *not* true that a forged block's links become graph edges §7.1 would
+ * not otherwise have. `validateAnswerLinks` runs over the whole body first, so
+ * a forged link to a page outside the retrieved set is already unlinked, and a
+ * forged link to one inside it names a page code's own sources block lists
+ * anyway — §7.1 dedupes per pair, so the edge set is identical either way. An
+ * earlier version of this comment claimed otherwise; measured, it is not so.
+ *
+ * Deliberately blind to code fences, because every consumer downstream is.
+ * `parseTrace` and `linkTargets` both scan the whole file with a plain regex,
+ * so a sentinel quoted inside a fence is structure to them regardless. Sparing
+ * it here would not preserve the quote: it would hand `stripTrace` a block to
+ * remove at filing time, which empties the fence entirely instead of docking
+ * two lines from it. The example loses its delimiters, which is the honest cost
+ * of the parsers being fence-blind — and the cheaper of the two losses.
+ *
+ * Only the sentinel lines go, each with its own newline so no blank is left
+ * where one stood. What the model wrote around them is prose, and §4 says the
+ * model writes prose — a heading it chose is its own. What it may not do is
+ * produce something that parses as a block code is supposed to own.
  */
 function withoutForgedBlocks(body: string): string {
-  return body.replace(CODE_OWNED_SENTINEL, "").replace(/\n{3,}/g, "\n\n");
+  return body.replace(CODE_OWNED_SENTINEL, "");
 }
 
 export interface AnswerNote {

@@ -293,6 +293,44 @@ describe("invariant 5: the model cannot forge a block code owns", () => {
     expect(note).toContain("## My own summary");
     expect(note).toContain("Some prose.");
   });
+
+  it("strips a sentinel with its own newline, leaving no blank where it stood", () => {
+    // An answer to "what does Luka write at the foot of a note?" quotes code's
+    // own sentinels inside a fence. Stripping is deliberately fence-blind:
+    // `parseTrace` and `linkTargets` both scan the whole file with a plain
+    // regex, so a sentinel inside a fence is structure to them regardless, and
+    // sparing it here would hand `stripTrace` a block to delete at filing time
+    // — which empties the fence entirely rather than docking two lines from it.
+    // The example loses its delimiters; what it must not also lose is its shape.
+    const quoted = [
+      "Luka appends this:",
+      "",
+      "```markdown",
+      "<!-- trace:start -->",
+      "## Retrieval trace",
+      "- mode: B",
+      "<!-- trace:end -->",
+      "```",
+    ].join("\n");
+
+    const note = renderAnswerNote({ ...base, body: quoted });
+
+    expect(note).toContain("```markdown\n## Retrieval trace\n- mode: B\n```");
+    // Code's own trace block is still the only one in the note.
+    expect([...note.matchAll(/<!-- trace:start -->/g)]).toHaveLength(1);
+  });
+
+  it("does not collapse blank lines the model put in its own prose", () => {
+    // The old stripper swept `\n{3,}` across the whole body to tidy the gap it
+    // left behind. Taking the newline with the sentinel removes the need, and a
+    // normalization that reaches prose it was never aimed at is one more
+    // difference between what the model wrote and what lands in raw/answers/.
+    const spaced = "First.\n\n\n\nSecond.";
+
+    const note = renderAnswerNote({ ...base, body: spaced });
+
+    expect(note).toContain("First.\n\n\n\nSecond.");
+  });
 });
 
 describe("§8.3's unlinking is not applied to things that are not page links", () => {
@@ -318,6 +356,20 @@ describe("§8.3's unlinking is not applied to things that are not page links", (
     const validated = validateAnswerLinks("See [[Photosynthesis#Light]].", retrieved);
 
     expect(validated).toContain("<!-- link outside retrieved set: Photosynthesis#Light -->");
+  });
+
+  it("leaves a same-note heading reference alone", () => {
+    // `[[#Details]]` names no page. It is the mirror of the fixed input above:
+    // the page half is empty, so a guard written as `page !== "" && known.has`
+    // skips it and the link falls through to the marker — destroying a working
+    // reference and asserting it was outside a set it never pointed outside.
+    expect(validateAnswerLinks("See [[#Details]] below.", retrieved)).toBe(
+      "See [[#Details]] below.",
+    );
+  });
+
+  it("leaves a same-note block reference alone", () => {
+    expect(validateAnswerLinks("See [[^abc123]].", retrieved)).toBe("See [[^abc123]].");
   });
 
   it("keeps a sentence readable when a piped link has no display text", () => {
