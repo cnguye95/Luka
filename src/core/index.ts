@@ -266,17 +266,44 @@ export function createCore(deps: CoreDeps): Core {
   let building: Promise<GraphSnapshot> | null = null;
   const listeners = new Set<(graph: GraphSnapshot) => void>();
 
+  /**
+   * Bumped whenever the vault changes underneath an in-flight build. A build
+   * that started before the change publishes nothing when it lands.
+   *
+   * `building` collapses concurrent callers onto one walk, which is right while
+   * the vault is still — but M4 gave the graph readers that run *outside* the
+   * lock (§9's pane calls `getGraph`, `computePPR` and `inspect` while a compile
+   * runs). Without this, a rebuild the pane started before a compile's writes
+   * was still in flight when the compile finished, and the compile's own
+   * `rebuildGraph()` adopted it: a snapshot missing every page that compile had
+   * just written, cached and broadcast as if it were current, and not corrected
+   * until the next compile.
+   */
+  let generation = 0;
+
   function rebuildGraph(): Promise<GraphSnapshot> {
+    const mine = generation;
     building ??= buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
       .then((built) => {
-        graph = built;
-        for (const listener of listeners) listener(built);
+        // A newer generation means the vault moved while this walked. The
+        // caller still gets what was read — it asked for a graph and this is
+        // one — but it does not become the cached answer for everyone else.
+        if (mine === generation) {
+          graph = built;
+          for (const listener of listeners) listener(built);
+        }
         return built;
       })
       .finally(() => {
         building = null;
       });
     return building;
+  }
+
+  /** Retires any in-flight build, so the next one starts after this moment. */
+  function invalidateGraph(): void {
+    generation += 1;
+    building = null;
   }
 
   // `deps` is passed through, not copied. The plugin mutates its settings
@@ -288,7 +315,12 @@ export function createCore(deps: CoreDeps): Core {
       const result = await lock.run("compile", () => runCompile(deps, options));
       // "and after compile" (§7.1). A declined preview changed nothing, so
       // there is nothing to rebuild from.
-      if (!result.cancelled) await rebuildGraph();
+      if (!result.cancelled) {
+        // Retire first: a build begun before these writes cannot describe them,
+        // and joining it would cache a graph that is already wrong.
+        invalidateGraph();
+        await rebuildGraph();
+      }
       return result;
     },
     ask: (question: string) => lock.run("ask", () => runAsk(deps, question)),
@@ -364,16 +396,34 @@ async function runInspect(
     keywords: deps.settings.keywordsCap,
   });
 
-  const seeds = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
+  const chosenSeeds = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
     comparePaths,
   );
+
+  // Everything ranked has to be *on* the snapshot the pane is drawing, and
+  // that has to be true in both modes.
+  //
+  // The page table is read fresh, because the seed call needs `_index.md`'s
+  // text and §4's aliases, and neither survives on a `GraphNode`. So the two
+  // can disagree: a page written since the last rebuild is in `pages` and not
+  // in `graph`. Left alone that showed up twice, differently — Mode B fed such
+  // a seed to `computePPR`, which drops seeds it cannot find and returns an
+  // empty map, so the overlay came back silently blank; Mode A ranked the
+  // fresh table and lit nodes that are not on screen, which is the exact thing
+  // ranking over the snapshot was supposed to prevent.
+  //
+  // Both are narrowed to the snapshot here. What the user does about a page
+  // that is missing is Refresh, which is the control §9 gives them.
+  const onGraph = new Set(graph.nodes.map((node) => node.path));
+  const seeds = chosenSeeds.filter((path) => onGraph.has(path));
+  const candidates = pages.filter((page) => onGraph.has(page.path));
 
   // §7.3: the seed call runs in both modes; the mode governs ranking only.
   const mode = modeOf(graph, deps.settings);
   const ranked =
     mode === "B"
       ? rankModeB(graph, seeds, deps.settings)
-      : await rankModeA(deps.fs, pages, seeds, chosen.keywords);
+      : await rankModeA(deps.fs, candidates, seeds, chosen.keywords);
 
   return { mode, seeds, keywords: chosen.keywords, ranked };
 }

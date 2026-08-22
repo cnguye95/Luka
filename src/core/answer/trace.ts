@@ -23,9 +23,6 @@ const END = "<!-- trace:end -->";
 const BLOCK =
   /^<!-- trace:start -->[ \t]*\r?\n## Retrieval trace[ \t]*\r?\n(?:(?!<!-- trace:(?:start|end) -->)[^\n]*\r?\n)*<!-- trace:end -->[ \t]*$/gm;
 
-/** Greedy, so a path containing `]` round-trips — `citations.ts`'s reasoning. */
-const LINK = /\[\[(.+)\]\]/;
-
 /** §8.3: "The `top:` trace line lists at most 10 entries, scores to 4 decimals." */
 const TOP_LIMIT = 10;
 const SCORE_DECIMALS = 4;
@@ -175,25 +172,27 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
   return { seeds, top, unresolved };
 }
 
+// Both lists are comma-separated, and a label may itself contain a comma:
+// `,` is not in `pagetable.ts`'s FORBIDDEN set, so Luka will happily name a
+// page `Newton, Isaac`. Splitting on the separator first therefore destroys
+// exactly the labels a reader would most notice missing — and destroys them
+// *before* `resolveTraceNodes` can count them, so §9's replay reported nothing
+// unresolved while lighting fewer nodes than the note listed.
+//
+// Matching the brackets instead makes the comma a separator only where it is
+// one. Lazy, so a label containing `]` still ends at its own `]]`.
+const LINK_IN_LIST = /\[\[(.+?)\]\]/g;
+const TOP_IN_LIST = /\[\[(.+?)\]\]\s+(-?\d+(?:\.\d+)?)/g;
+
 function parseLinks(value: string): string[] {
   if (value === "" || value === "(none)") return [];
-  const out: string[] = [];
-  for (const part of value.split(",")) {
-    const link = LINK.exec(part.trim());
-    if (link) out.push((link[1] as string).trim());
-  }
-  return out;
+  return [...value.matchAll(LINK_IN_LIST)].map((match) => (match[1] as string).trim());
 }
 
 function parseTop(value: string): { label: string; score: number }[] {
   if (value === "" || value === "(none)") return [];
-  const out: { label: string; score: number }[] = [];
-  for (const part of value.split(",")) {
-    // The score sits after the closing brackets, so the link stays greedy and
-    // a label containing `]` still round-trips.
-    const entry = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/.exec(part.trim());
-    if (!entry) continue;
-    out.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
-  }
-  return out;
+  return [...value.matchAll(TOP_IN_LIST)].map((match) => ({
+    label: (match[1] as string).trim(),
+    score: Number(match[2]),
+  }));
 }

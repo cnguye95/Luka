@@ -52,15 +52,14 @@ export interface Sim {
   readonly nodes: SimNode[];
   /** Positions for a fresh snapshot, keeping what survived (§9's refresh). */
   replace(graph: GraphSnapshot): void;
-  reheat(): void;
   stop(): void;
   /** Holds a node under the pointer and keeps the walk warm while it moves. */
   dragStart(node: SimNode): void;
   dragTo(node: SimNode, x: number, y: number): void;
   /** Releases the drag but leaves the node pinned where it was dropped. */
   dragEnd(): void;
-  /** Whether every node has settled — the view stops drawing when true. */
-  readonly settled: boolean;
+  /** The node at this path in the current set, or `undefined` if it is gone. */
+  nodeAt(path: string): SimNode | undefined;
 }
 
 /**
@@ -154,13 +153,8 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     get nodes() {
       return nodes;
     },
-    get settled() {
-      return simulation.alpha() <= ALPHA_MIN;
-    },
     replace,
-    reheat: () => {
-      simulation.alpha(REHEAT_ALPHA).restart();
-    },
+    nodeAt: (path: string) => byPath.get(path),
     stop: () => {
       simulation.on("tick", null);
       simulation.stop();

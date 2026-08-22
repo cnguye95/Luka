@@ -84,13 +84,33 @@ export class LukaGraphView extends ItemView {
   private filter = "";
   /** Where a pointer went down, so a drag is not mistaken for a click. */
   private pressedAt: { x: number; y: number } | null = null;
-  /** The node under an active drag, or `null` when panning or idle. */
-  private dragging: SimNode | null = null;
+  /**
+   * Path of the node under an active drag, or `null` when panning or idle.
+   *
+   * A path, not the node: `sim.replace` allocates fresh `SimNode` objects, so a
+   * compile landing mid-drag would leave a held reference pointing at an object
+   * no longer in the simulation, and the drag would go on mutating an orphan.
+   */
+  private dragging: string | null = null;
   /** Where a background pan started, in canvas space. */
   private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
   private replayEl: HTMLButtonElement | null = null;
   private inspectEl: HTMLButtonElement | null = null;
+  /**
+   * Set in `onClose`. `getGraph()` can take seconds on a cold vault, and a
+   * `reload` that resolves after the view is gone would find `canvas === null`
+   * — the same condition a first render uses — and rebuild the simulation, the
+   * ResizeObserver and the pointer listeners onto a detached element, with the
+   * teardown that would have released them already run.
+   */
+  private closed = false;
+  /**
+   * True while an inspect call is in flight. The disabled button covers the
+   * mouse; nothing covered the Enter key, which called the same handler
+   * directly — so a held key billed one model call per repeat.
+   */
+  private inspecting = false;
 
   constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings, host: GraphHost) {
     super(leaf);
@@ -120,7 +140,7 @@ export class LukaGraphView extends ItemView {
 
     const toolbar = root.createDiv({ cls: "luka-graph-toolbar" });
     const refresh = toolbar.createEl("button", { text: "Refresh" });
-    refresh.addEventListener("click", () => {
+    this.registerDomEvent(refresh, "click", () => {
       void this.reload();
     });
 
@@ -189,7 +209,10 @@ export class LukaGraphView extends ItemView {
     // §7.1's rebuild signal. Subscribed before the first load so a compile that
     // finishes mid-load is not missed.
     this.unsubscribe = this.core.onGraphRebuilt((graph) => {
+      if (this.closed) return;
       this.graph = graph;
+      // Same reasoning as `reload`: a new snapshot retires the old overlay.
+      this.overlay = null;
       this.render();
     });
 
@@ -201,6 +224,7 @@ export class LukaGraphView extends ItemView {
   }
 
   override async onClose(): Promise<void> {
+    this.closed = true;
     // Invariant 1: nothing of this view outlives it. The simulation is stopped
     // and detached from its tick handler, the pending frame is cancelled, and
     // the rebuild subscription is dropped.
@@ -235,12 +259,19 @@ export class LukaGraphView extends ItemView {
    * to say so instead of rendering a blank surface with no explanation.
    */
   private async reload(): Promise<void> {
+    let next: GraphSnapshot | null = null;
     try {
-      this.graph = await this.core.getGraph();
+      next = await this.core.getGraph();
     } catch (error) {
-      this.graph = null;
       new Notice(`Luka: could not read the graph — ${message(error)}`, 6000);
     }
+    // The view may have closed while that walk ran.
+    if (this.closed) return;
+    this.graph = next;
+    // §9's refresh redraws a snapshot the overlay may predate: its paths can be
+    // gone and its scores were computed against a different edge set. The
+    // filter is a separate channel and survives, which is what §9 describes.
+    this.overlay = null;
     this.render();
   }
 
@@ -313,7 +344,7 @@ export class LukaGraphView extends ItemView {
         this.panFrom = { x: point.x, y: point.y, camX: this.camera.x, camY: this.camera.y };
         return;
       }
-      this.dragging = node;
+      this.dragging = node.path;
       this.pressedAt = point;
       this.sim?.dragStart(node);
     });
@@ -324,8 +355,17 @@ export class LukaGraphView extends ItemView {
       const point = at(event);
 
       if (this.dragging !== null) {
+        const held = this.sim?.nodeAt(this.dragging);
+        // Gone: a compile replaced the node set mid-drag. Ending the gesture is
+        // honest — there is nothing left to follow the pointer.
+        if (held === undefined) {
+          this.dragging = null;
+          this.pressedAt = null;
+          this.sim?.dragEnd();
+          return;
+        }
         const graphPoint = toGraph(this.camera, point.x, point.y);
-        this.sim?.dragTo(this.dragging, graphPoint.x, graphPoint.y);
+        this.sim?.dragTo(held, graphPoint.x, graphPoint.y);
         this.schedule();
         return;
       }
@@ -351,11 +391,11 @@ export class LukaGraphView extends ItemView {
 
     const endGesture = (event: PointerEvent) => {
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-      const node = this.dragging;
+      const draggedPath = this.dragging;
       const from = this.pressedAt;
       // §9's drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
       // so the node stays where it was dropped.
-      if (node !== null) this.sim?.dragEnd();
+      if (draggedPath !== null) this.sim?.dragEnd();
       this.dragging = null;
       this.panFrom = null;
       this.pressedAt = null;
@@ -363,10 +403,14 @@ export class LukaGraphView extends ItemView {
       // A press that did not travel is a click, not a drag. §9 gives the two
       // gestures different jobs on the same button, and distance is what tells
       // them apart — a pin that also re-ran PPR would fire on every drag.
-      if (node === null || from === null) return;
+      if (draggedPath === null || from === null) return;
       const point = at(event);
       if (Math.hypot(point.x - from.x, point.y - from.y) > CLICK_SLOP) return;
-      void this.runClickPPR(node.path);
+      // `detail` counts the presses in this click sequence. A double-click
+      // opens the page (§9), and running PPR twice on the way there would
+      // leave an overlay the user never asked for on top of it.
+      if (event.detail > 1) return;
+      void this.runClickPPR(draggedPath);
     };
     this.registerDomEvent(canvas, "pointerup", endGesture);
     this.registerDomEvent(canvas, "pointercancel", endGesture);
@@ -415,6 +459,14 @@ export class LukaGraphView extends ItemView {
   private async runInspect(question: string): Promise<void> {
     const asked = question.trim();
     if (asked === "") return;
+    if (this.graph === null || this.graph.nodes.length === 0) {
+      // §9 points an empty vault at Compile. Spending a model call to overlay
+      // a graph that does not exist would contradict the pointer beside it.
+      new Notice("Luka: no graph to inspect yet. Run Luka: Compile.", 6000);
+      return;
+    }
+    if (this.inspecting) return;
+    this.inspecting = true;
     const button = this.inspectEl;
     if (button !== null) button.disabled = true;
     try {
@@ -428,6 +480,7 @@ export class LukaGraphView extends ItemView {
       // the user was already looking at.
       new Notice(`Luka: inspect failed — ${message(error)}`, 6000);
     } finally {
+      this.inspecting = false;
       if (button !== null) button.disabled = false;
     }
   }

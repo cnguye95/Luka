@@ -169,9 +169,20 @@ export function toGraph(camera: Camera, x: number, y: number): { x: number; y: n
  * §9's "current metric" is degree until an overlay supplies scores; the overlay
  * steps replace this selection rather than adding a second one.
  */
-function labelled(nodes: readonly SimNode[]): Set<string> {
+function labelled(nodes: readonly SimNode[], overlay: Overlay | null): Set<string> {
+  // The metric is the overlay's scores when it has them, degree otherwise. An
+  // earlier version took only `nodes` and ranked by degree unconditionally,
+  // while this comment claimed the overlay replaced the selection — so under a
+  // PPR or Inspect overlay the ten labels stayed on the ten highest-degree
+  // hubs, which is what every query shares. The one moment the names matter is
+  // the one where they were least informative.
+  const metric = (node: SimNode): number =>
+    overlay === null || overlay.scores === null ? node.degree : heatOf(overlay, node.path);
   const ranked = [...nodes]
-    .sort((a, b) => b.degree - a.degree || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    // A score-less overlay — §9's Mode-A inspection — still narrows *which*
+    // nodes can be labelled, even though it cannot reorder them.
+    .filter((node) => overlay === null || isLit(overlay, node.path))
+    .sort((a, b) => metric(b) - metric(a) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
     .slice(0, LABEL_LIMIT);
   return new Set(ranked.map((node) => node.path));
 }
@@ -239,7 +250,8 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
 
   // §9's degradation: "drop labels first". The hovered node keeps its label —
   // it is the answer to a gesture the user just made, and it is one string.
-  const standing = nodes.length >= LABEL_DROP_THRESHOLD ? new Set<string>() : labelled(nodes);
+  const standing =
+    nodes.length >= LABEL_DROP_THRESHOLD ? new Set<string>() : labelled(nodes, frame.overlay);
   if (standing.size === 0 && frame.hovered === null) return;
 
   ctx.fillStyle = theme.label;

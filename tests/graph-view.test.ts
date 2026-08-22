@@ -396,10 +396,13 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
 });
 
 describe("§9's overlay: ring, stroke, ramp, dim", () => {
+  // Peak deliberately not 1: with a peak of 1.0 the division is the identity
+  // and the normalization assertion reads back its own inputs. Deleting the
+  // `/ peak` used to pass this block clean.
   const scores = new Map([
-    ["a.md", 1.0],
-    ["b.md", 0.5],
-    ["c.md", 0.25],
+    ["a.md", 4],
+    ["b.md", 2],
+    ["c.md", 1],
     ["cold.md", 0],
   ]);
 
@@ -417,6 +420,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
 
     expect(overlay.scores?.get("a.md")).toBe(1);
     expect(overlay.scores?.get("b.md")).toBe(0.5);
+    expect(overlay.scores?.get("c.md")).toBe(0.25);
   });
 
   it("survives an isolated seed, whose every score is zero", () => {
@@ -538,5 +542,119 @@ describe("§9's filter, and how it composes with the overlay", () => {
 
     expect(opacityOf(target, frameOf([target], { filter: "zzz" }))).toBeLessThan(1);
     expect(opacityOf(target, frameOf([target], { filter: "alp" }))).toBe(1);
+  });
+});
+
+describe("§9's labels follow the current metric", () => {
+  function recorder() {
+    const texts: string[] = [];
+    const ctx = {
+      texts,
+      setTransform: () => undefined,
+      fillRect: () => undefined,
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      stroke: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      fillText: (text: string) => texts.push(text),
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
+      globalAlpha: 1,
+      font: "",
+      textBaseline: "",
+    };
+    return ctx as unknown as CanvasRenderingContext2D & { texts: string[] };
+  }
+
+  // Degree and score deliberately run opposite ways: n00 has the least degree
+  // and the most heat. Ranking by degree and ranking by score therefore pick
+  // disjoint sets, so an implementation that ignores the overlay cannot pass
+  // by coincidence.
+  const nodes = Array.from({ length: 20 }, (_unused, at) =>
+    node(`n${String(at).padStart(2, "0")}.md`, { degree: at, x: at, y: 0 }),
+  );
+  // Fifteen lit, not ten. With exactly ten lit, slicing the top ten returns all
+  // of them whatever the metric says — the assertion passes with the metric
+  // reverted to degree, which is the defect it is meant to catch. Fifteen makes
+  // the ordering decide: by score the top ten are n00–n09, by degree n05–n14.
+  const hot = new Map(nodes.slice(0, 15).map((n, at) => [n.path, 15 - at]));
+
+  it("labels the highest-degree nodes with no overlay", () => {
+    const ctx = recorder();
+
+    draw(ctx, frameOf(nodes));
+
+    expect(new Set(ctx.texts)).toEqual(new Set(nodes.slice(10).map((n) => n.path)));
+  });
+
+  it("labels the hottest nodes when a PPR overlay supplies scores", () => {
+    // §9: "labels on hover plus top-10 by current metric". Under an overlay the
+    // metric is the score — labelling the degree hubs would name the pages every
+    // query shares, at the one moment the names are supposed to be informative.
+    const ctx = recorder();
+
+    draw(ctx, frameOf(nodes, { overlay: fromClickPPR(hot, "n00.md", 5) }));
+
+    expect(new Set(ctx.texts)).toEqual(new Set(nodes.slice(0, 10).map((n) => n.path)));
+  });
+
+  it("labels only lit nodes under a score-less Mode-A overlay", () => {
+    // No scores to rank by, so degree still orders — but the overlay still says
+    // which nodes are in play, and a dimmed node should not carry a label.
+    const ctx = recorder();
+    const overlay = fromInspect(
+      { mode: "A", seeds: ["n00.md"], ranked: [{ path: "n01.md", score: 3 }] },
+      5,
+      "q",
+    );
+
+    draw(ctx, frameOf(nodes, { overlay }));
+
+    expect(new Set(ctx.texts)).toEqual(new Set(["n00.md", "n01.md"]));
+  });
+});
+
+describe("the label-drop threshold is pinned from both sides", () => {
+  // §9's figure is 500. Tests using only 50 and 500 nodes leave every threshold
+  // in between green, so a build that dropped labels at 60 would ship.
+  const many = (count: number) =>
+    Array.from({ length: count }, (_unused, at) =>
+      node(`n${String(at).padStart(4, "0")}.md`, { degree: at, x: at, y: 0 }),
+    );
+
+  function labelCount(count: number): number {
+    const texts: string[] = [];
+    const ctx = {
+      setTransform: () => undefined,
+      fillRect: () => undefined,
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      stroke: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      fillText: (text: string) => texts.push(text),
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
+      globalAlpha: 1,
+      font: "",
+      textBaseline: "",
+    } as unknown as CanvasRenderingContext2D;
+    draw(ctx, frameOf(many(count)));
+    return texts.length;
+  }
+
+  const SPEC_DROP_AT = 500;
+
+  it("still labels at one node below the threshold", () => {
+    expect(labelCount(SPEC_DROP_AT - 1)).toBe(10);
+  });
+
+  it("drops at the threshold exactly", () => {
+    expect(labelCount(SPEC_DROP_AT)).toBe(0);
   });
 });

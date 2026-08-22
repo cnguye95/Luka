@@ -261,3 +261,45 @@ describe("resolving a trace's labels back onto graph nodes (§9's replay)", () =
     expect(resolved.seeds).toEqual(["raw/paper.md"]);
   });
 });
+
+describe("a label carrying a comma survives the round trip", () => {
+  // `,` is not in pagetable's FORBIDDEN set, so Luka can name a page
+  // `Newton, Isaac`. The lists are comma-separated, so splitting on the
+  // separator before matching the brackets destroyed exactly those labels —
+  // and destroyed them before `resolveTraceNodes` could report them, so replay
+  // lit fewer nodes than the note listed and called nothing unresolved.
+  const comma = "Newton, Isaac";
+
+  it("recovers a comma-bearing seed alongside its neighbours", () => {
+    const written = writeTrace(trace({ seeds: ["Alpha", comma, "Beta"], top: [] }));
+
+    expect(parseTrace(written).trace?.seeds).toEqual(["Alpha", comma, "Beta"]);
+  });
+
+  it("recovers a comma-bearing top entry with its score", () => {
+    const written = writeTrace(
+      trace({
+        seeds: [],
+        top: [
+          { label: comma, score: 0.0812 },
+          { label: "Beta", score: 0.0631 },
+        ],
+      }),
+    );
+
+    expect(parseTrace(written).trace?.top).toEqual([
+      { label: comma, score: 0.0812 },
+      { label: "Beta", score: 0.0631 },
+    ]);
+  });
+
+  it("reports such a label as unresolved rather than dropping it silently", () => {
+    // S5b's guarantee, which the split defeated: a label naming no node is
+    // counted, not lost.
+    const parsed = trace({ seeds: [comma], top: [] });
+
+    const resolved = resolveTraceNodes(parsed, { nodes: [], edges: [] });
+
+    expect(resolved.unresolved).toEqual([comma]);
+  });
+});

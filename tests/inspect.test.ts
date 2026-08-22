@@ -156,3 +156,58 @@ describe("§7.4 steps 1–3, as retrieval runs them", () => {
     expect(result.keywords).toEqual(["ranking"]);
   });
 });
+
+describe("§9: the overlay is over the snapshot the pane is drawing", () => {
+  /** A page written straight to disk, so the cached graph cannot know it. */
+  const GHOST = "wiki/concepts/Ghost.md";
+  const ghostPage =
+    "---\nkind: concept\nsummary: ''\nupdated: '2026-08-20'\n---\nGhost prose about ranking.\n";
+
+  it("ranks the cached snapshot, not a graph rebuilt for the occasion", async () => {
+    // The decision this pins: `inspect` takes the snapshot it is handed. If it
+    // rebuilt instead, the ghost would rank and the pane would light a node
+    // that is not on screen.
+    const { fs, provider } = await compiled();
+    const instance = core(fs, provider);
+    await instance.getGraph();
+    await fs.write(GHOST, ghostPage);
+
+    const result = await instance.inspect("What ranks pages?");
+
+    expect(result.ranked.map((node) => node.path)).not.toContain(GHOST);
+  });
+
+  it("drops a model seed that is not on the snapshot rather than ranking nothing", async () => {
+    // Mode B hands seeds to `computePPR`, which silently ignores any it cannot
+    // find — so an off-snapshot seed used to produce an empty overlay with no
+    // signal. Narrowing the seeds keeps the result honest about what it used.
+    const { fs } = await compiled();
+    const ghostSeeker = new StubProvider((request: CompletionRequest) =>
+      request.task === "seed-selection"
+        ? { seeds: [GHOST, "wiki/concepts/PageRank.md"], keywords: ["ranking"] }
+        : replyFor(request),
+    );
+    const instance = core(fs, ghostSeeker);
+    // Cache the snapshot first; only then does the ghost appear on disk, which
+    // is the state the pane is in whenever a compile lands elsewhere.
+    await instance.getGraph();
+    await fs.write(GHOST, ghostPage);
+
+    const result = await instance.inspect("What ranks pages?");
+
+    expect(result.seeds).not.toContain(GHOST);
+    expect(result.seeds).toContain("wiki/concepts/PageRank.md");
+    expect(result.ranked.length).toBeGreaterThan(0);
+  });
+
+  it("reports Mode A for a vault below §7.3's predicate", async () => {
+    // Read as a literal rather than from `modeOf`: an expectation derived from
+    // the function under test agrees with it however wrong it becomes. The
+    // fixture is a two-page vault, which is far below "≥ 20 nodes".
+    const { fs, provider } = await compiled();
+
+    const result = await core(fs, provider).inspect("What ranks pages?");
+
+    expect(result.mode).toBe("A");
+  });
+});
