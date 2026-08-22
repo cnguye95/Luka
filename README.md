@@ -350,3 +350,17 @@ unless a step says otherwise.
 - [ ] The exported image has an opaque background in both dark and light
       themes, not a transparent one.
 - [ ] Nothing new appears anywhere in the vault after an export.
+- [ ] With a real API key set, type a question into the graph's query box and
+      press **Inspect (1 model call)**. Exactly one request appears in the
+      developer tools network panel — not two, not three.
+- [ ] The button's label reads exactly "Inspect (1 model call)".
+- [ ] The overlay appears: seeds ringed, top-K stroked, and on a Mode-B vault a
+      heat ramp across what the query reached.
+- [ ] On a small Mode-A vault, inspection lights seeds and lexical top-K with
+      **no** heat ramp, and the Mode-A banner above explains why.
+- [ ] Nothing is written anywhere in the vault by an inspection — no answer
+      note, no file at all.
+- [ ] The button is disabled while the call is in flight, and pressing Enter in
+      the query box does the same thing as clicking it.
+- [ ] Inspect works while a compile is running (the pane is never blocked), and
+      Esc clears the resulting overlay.

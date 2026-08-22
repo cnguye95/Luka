@@ -20,7 +20,7 @@ import {
   type GraphSnapshot,
   type LukaSettings,
 } from "../../core/index";
-import { fromClickPPR, fromTrace, type Overlay } from "./overlay";
+import { fromClickPPR, fromInspect, fromTrace, type Overlay } from "./overlay";
 import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
 import { createSim, type Sim, type SimNode } from "./sim";
 
@@ -31,6 +31,9 @@ const EMPTY_VAULT_MESSAGE = "No graph yet. Run Luka: Compile to build one.";
 
 /** §9's wording, verbatim. The live counts follow it. */
 const MODE_A_BANNER = "Mode A (lexical) active — graph ranking off";
+
+/** §9's label, verbatim — and a claim about cost `Core.inspect` has to keep. */
+const INSPECT_LABEL = "Inspect (1 model call)";
 
 /**
  * Interaction constants. §9 and §17 fix none of these, so §0 takes the smallest
@@ -87,6 +90,7 @@ export class LukaGraphView extends ItemView {
   private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
   private replayEl: HTMLButtonElement | null = null;
+  private inspectEl: HTMLButtonElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings, host: GraphHost) {
     super(leaf);
@@ -144,6 +148,23 @@ export class LukaGraphView extends ItemView {
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncReplayButton()));
     this.syncReplayButton();
 
+    // §9's query inspection: a query box and a button whose label is a promise
+    // about cost. `Core.inspect` runs §7.4 steps 1–3 and stops, which is what
+    // makes the promise true — see `runInspect`.
+    const query = toolbar.createEl("input", {
+      type: "text",
+      cls: "luka-graph-query",
+      placeholder: "Ask the graph…",
+    });
+    this.inspectEl = toolbar.createEl("button", { text: INSPECT_LABEL });
+    const submit = () => {
+      void this.runInspect(query.value);
+    };
+    this.registerDomEvent(this.inspectEl, "click", submit);
+    this.registerDomEvent(query, "keydown", (event: KeyboardEvent) => {
+      if (event.key === "Enter") submit();
+    });
+
     // §9's "PNG export button".
     const exportEl = toolbar.createEl("button", { text: "Export PNG" });
     this.registerDomEvent(exportEl, "click", () => {
@@ -193,6 +214,8 @@ export class LukaGraphView extends ItemView {
     this.resize = null;
     this.canvas = null;
     this.tooltipEl = null;
+    this.replayEl = null;
+    this.inspectEl = null;
     this.dragging = null;
     this.panFrom = null;
     this.hovered = null;
@@ -380,6 +403,33 @@ export class LukaGraphView extends ItemView {
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
+  }
+
+  /**
+   * §9's "Inspect (1 model call)": overlay §7.4 steps 1–3 for a question.
+   *
+   * The button is disabled while the call is in flight. §16 rules out session
+   * state, so there is no queue and no history — a second press before the
+   * first returns would be a second call the label did not promise.
+   */
+  private async runInspect(question: string): Promise<void> {
+    const asked = question.trim();
+    if (asked === "") return;
+    const button = this.inspectEl;
+    if (button !== null) button.disabled = true;
+    try {
+      const result = await this.core.inspect(asked);
+      this.setOverlay(fromInspect(result, this.topK(), asked));
+      if (result.ranked.length === 0) {
+        new Notice("Luka: that question reached nothing in this graph.", 6000);
+      }
+    } catch (error) {
+      // The overlay is left alone: a failed inspection should not clear what
+      // the user was already looking at.
+      new Notice(`Luka: inspect failed — ${message(error)}`, 6000);
+    } finally {
+      if (button !== null) button.disabled = false;
+    }
   }
 
   /**

@@ -2014,3 +2014,20 @@ blob URL and an anchor download, revoked immediately after the click.
 - **S44** — the filename is `luka-graph-<YYYY-MM-DD-HHmm>.png` in UTC, following
   `answerNotePath`'s convention for the same reason: a vault synced between zones
   should not name two exports by the same local minute.
+
+**Query inspection, the milestone's designated cut seam.** §15's cut-order names
+this the first M4 feature to drop under pressure, so it went in last and depends on
+nothing: dropping it is deleting this commit and step 3's `Core.inspect`, and
+click-PPR and trace replay carry on unchanged.
+
+- **S45** — the button label is §9's string verbatim, and it is a claim about cost
+  rather than a name. `Core.inspect` keeps it by running §7.4 steps 1–3 and
+  stopping; the assertion that it makes exactly one seed-selection call and zero of
+  everything else is what holds the label honest.
+- **S46** — the button is disabled while the call is in flight. §16 rules out
+  session state, so there is no queue and no history: a second press before the
+  first returns would be a second call the label did not promise.
+- **S47** — a failed inspection leaves the previous overlay alone. Clearing it
+  would discard what the user was looking at in exchange for nothing.
+- **S48** — a question that reaches nothing gets a notice rather than a silently
+  empty overlay, which is indistinguishable from the overlay having failed to draw.

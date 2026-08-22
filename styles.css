@@ -79,3 +79,8 @@
   color: var(--text-normal);
   font-size: var(--font-ui-smaller);
 }
+
+.luka-graph-query {
+  flex: 2 1 12em;
+  min-width: 8em;
+}
