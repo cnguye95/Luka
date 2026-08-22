@@ -338,3 +338,10 @@ unless a step says otherwise.
       Replay again: the remaining pages light and the status line reports how
       many labels it could not resolve.
 - [ ] Trace replay makes no network request. (§9's "zero calls".)
+- [ ] On a small vault (a handful of pages), the pane shows the banner
+      "Mode A (lexical) active — graph ranking off" followed by live node, link
+      pair and ratio counts, and the counts match what `wiki/_index.md` implies.
+- [ ] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
+      pairs per node). After the refresh, the banner disappears.
+- [ ] On an empty vault the Compile pointer shows and the banner does not —
+      the two states never appear together.

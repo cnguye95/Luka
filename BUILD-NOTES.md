@@ -1986,3 +1986,18 @@ the view so the two entry points cannot drift.
   model calls, and the graph on screen may not be the graph the answer was written
   against — re-running PPR would show what retrieval *would* reach now, which is a
   different claim from the one the note is making.
+
+**The maturity banner asks the predicate rather than restating it.** §9's banner
+reports which mode a query would get, so it calls `modeOf` on the façade with the
+plugin's live settings. Writing "≥ 20 nodes and ≥ 1.5 pairs per node" a second
+time in the view would be a copy that can disagree with the one retrieval uses,
+and the disagreement would be invisible — the banner would simply be wrong about
+the thing it exists to report.
+
+- **S41** — the banner and the empty-vault pointer are exclusive. §9 gives an
+  empty vault a pointer at Compile; telling it its link ratio instead would be
+  answering a question nobody asked.
+- **S42** — the counts after §9's fixed string are node count, link pairs and the
+  ratio to two decimals. §9 says "with live counts" without naming them; these are
+  the three the predicate is computed from, so a user can see how far off the
+  threshold the vault is rather than only that it is.

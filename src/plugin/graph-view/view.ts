@@ -12,6 +12,7 @@
 // scheduled by an event, never by a standing `requestAnimationFrame` chain.
 import { ItemView, Notice, type WorkspaceLeaf } from "obsidian";
 import {
+  modeOf,
   normalizeSettings,
   parseTrace,
   resolveTraceNodes,
@@ -27,6 +28,9 @@ export const GRAPH_VIEW_TYPE = "luka-graph";
 
 /** §9: "empty vault → pointer at Compile." */
 const EMPTY_VAULT_MESSAGE = "No graph yet. Run Luka: Compile to build one.";
+
+/** §9's wording, verbatim. The live counts follow it. */
+const MODE_A_BANNER = "Mode A (lexical) active — graph ranking off";
 
 /**
  * Interaction constants. §9 and §17 fix none of these, so §0 takes the smallest
@@ -65,6 +69,7 @@ export class LukaGraphView extends ItemView {
   private resize: ResizeObserver | null = null;
 
   private statusEl!: HTMLElement;
+  private bannerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvas: HTMLCanvasElement | null = null;
   private tooltipEl: HTMLElement | null = null;
@@ -147,6 +152,8 @@ export class LukaGraphView extends ItemView {
     // Focusable, or the container never receives the key at all.
     root.tabIndex = -1;
 
+    this.bannerEl = root.createDiv({ cls: "luka-graph-banner" });
+    this.bannerEl.hide();
     this.statusEl = root.createDiv({ cls: "luka-graph-status" });
     this.bodyEl = root.createDiv({ cls: "luka-graph-body" });
 
@@ -217,12 +224,16 @@ export class LukaGraphView extends ItemView {
       this.resize?.disconnect();
       this.resize = null;
       this.statusEl.setText("");
+      // §9's two states are exclusive: an empty vault is pointed at Compile, not
+      // told its link ratio.
+      this.bannerEl.hide();
       this.bodyEl.empty();
       this.bodyEl.createDiv({ cls: "luka-graph-empty", text: EMPTY_VAULT_MESSAGE });
       return;
     }
 
     this.statusEl.setText(this.statusText());
+    this.syncBanner(graph);
 
     if (this.canvas === null) {
       this.bodyEl.empty();
@@ -361,6 +372,30 @@ export class LukaGraphView extends ItemView {
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
+  }
+
+  /**
+   * §9's maturity banner: below §7.3's predicate, say so, with live counts.
+   *
+   * The predicate comes from `modeOf` on the façade rather than a copy of "≥ 20
+   * nodes and ≥ 1.5 link pairs per node" here. A second copy is one that can
+   * disagree with the one retrieval actually uses, and the banner's whole job is
+   * to report which of them a query would get.
+   */
+  private syncBanner(graph: GraphSnapshot): void {
+    if (modeOf(graph, normalizeSettings(this.settings)) === "B") {
+      this.bannerEl.hide();
+      return;
+    }
+    const nodes = graph.nodes.length;
+    const edges = graph.edges.length;
+    const ratio = nodes === 0 ? 0 : edges / nodes;
+    this.bannerEl.setText(
+      // §9 fixes this string; the counts after it are what makes it actionable.
+      `${MODE_A_BANNER} (${String(nodes)} nodes, ${String(edges)} link pairs, ` +
+        `${ratio.toFixed(2)} per node)`,
+    );
+    this.bannerEl.show();
   }
 
   /** §9 shows the replay button only while an answer note is active. */
