@@ -95,7 +95,13 @@ export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types
 export { readablePathOf } from "./manifest";
 export { FILED_ANSWERS_FOLDER } from "./answer/fileback";
 export { HEALTH_PATH } from "./health";
-export { parseTrace, writeTrace, type Trace } from "./answer/trace";
+export {
+  parseTrace,
+  resolveTraceNodes,
+  writeTrace,
+  type ResolvedTrace,
+  type Trace,
+} from "./answer/trace";
 export type { PPROptions, PPRResult } from "./graph/ppr";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
 // invariant 10 requires every provider call to pass through the wrapper, and

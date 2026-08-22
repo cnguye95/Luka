@@ -1785,3 +1785,20 @@ parsed — no new parsing anywhere.
 - **S1** — a raw source node carries `summary: ""`. It is a file, not a §4 page, so
   there is no frontmatter to read one from, and deriving one from the body would be
   a model call §9 does not permit the pane to make.
+
+**Trace labels resolve back onto graph nodes.** §9's replay reads a trace the pane
+did not write, against whatever graph exists when it runs rather than the one the
+answer saw. `labelFor` renders §4's link form — a wiki page by title, anything else
+by path — so `resolveTraceNodes` reverses exactly that, and the two are written far
+enough apart that only running the pipeline proves they still agree. The end-to-end
+assertion does that: compile, ask, parse the note's own trace, resolve against the
+real graph, expect no unresolved labels.
+
+- **S5** — resolution is exact node path first, then title through `handleOf`. The
+  path is the unambiguous name, and a raw node's title is its basename, so
+  `raw/paper.md` is both; the path wins. `handleOf` is §4's own normalization, so a
+  trace written before a title's case changed still lands.
+- **S5b** — a label matching neither is counted in `unresolved`, not dropped. The
+  pane replays against the current graph and a page deleted since the answer was
+  written is ordinary; lighting fewer nodes than the note lists without saying so is
+  the failure this prevents.

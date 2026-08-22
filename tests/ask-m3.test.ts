@@ -6,7 +6,15 @@
 // never reaches the vault), 11 (the note is written on success only), and 12
 // (ask ≤ 3 model calls).
 import { describe, expect, it } from "vitest";
-import { createCore, type CompletionRequest, type CoreDeps } from "../src/core/index";
+import {
+  createCore,
+  parseTrace,
+  resolveTraceNodes,
+  type CompletionRequest,
+  type CoreDeps,
+  type Trace,
+} from "../src/core/index";
+import { decodeUtf8 } from "../src/core/hash";
 import { BusyError } from "../src/core/lock";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
@@ -492,5 +500,34 @@ describe("§8.3's trace names things one way", () => {
     const result = await core(fs, provider).ask("How does ranking work?");
 
     expect(fs.text(result.path)).not.toContain("- seeds: (none)");
+  });
+});
+
+describe("the trace a real answer writes replays onto the real graph (§9)", () => {
+  it("resolves every label the note recorded back to a node of the graph", async () => {
+    // The one place `labelFor` and `resolveTraceNodes` meet. They are written
+    // apart — one renders §4's link form, the other reverses it — so nothing
+    // but running the pipeline proves they still agree. A trace that replays to
+    // nothing would leave §9's overlay silently empty.
+    const { fs, provider } = await compiled();
+    const result = await core(fs, provider).ask("What ranks pages?");
+
+    const note = decodeUtf8(await fs.read(result.path));
+    const parsed = parseTrace(note).trace as Trace;
+    const graph = await core(fs, provider).getGraph();
+
+    const resolved = resolveTraceNodes(parsed, graph);
+
+    expect(parsed.seeds.length).toBeGreaterThan(0);
+    expect(resolved.unresolved).toEqual([]);
+    expect(resolved.seeds).toEqual(["wiki/concepts/PageRank.md"]);
+    // Every resolved path is a real node, and every top entry keeps its score.
+    const nodePaths = new Set(graph.nodes.map((node) => node.path));
+    for (const path of resolved.seeds) expect(nodePaths.has(path)).toBe(true);
+    for (const entry of resolved.top) {
+      expect(nodePaths.has(entry.path)).toBe(true);
+      expect(entry.score).toBeGreaterThanOrEqual(0);
+    }
+    expect(resolved.top.length).toBe(parsed.top.length);
   });
 });

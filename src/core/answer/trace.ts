@@ -14,7 +14,8 @@
 // one: fences anchored to a line start, a required heading so a stray fence in
 // prose cannot pair with the real block, the last block authoritative, and
 // every block stripped so regeneration cannot accumulate them.
-import type { RetrievalMode } from "../types";
+import { handleOf } from "../compile/pagetable";
+import type { GraphSnapshot, RetrievalMode } from "../types";
 
 const START = "<!-- trace:start -->";
 const END = "<!-- trace:end -->";
@@ -115,6 +116,63 @@ export function withTrace(text: string, trace: Trace): string {
 /** §8.4's filing: the trace goes, the sources block stays. */
 export function stripTrace(text: string): string {
   return parseTrace(text).rest;
+}
+
+export interface ResolvedTrace {
+  /** Node paths for the seeds the trace named, in the order it named them. */
+  seeds: string[];
+  /** Node paths and their recorded scores, in the order the trace listed them. */
+  top: { path: string; score: number }[];
+  /** Labels that name no node in this graph, in the order encountered. */
+  unresolved: string[];
+}
+
+/**
+ * Maps a parsed trace's labels back onto nodes of a graph (§9's replay).
+ *
+ * `labelFor` writes §4's link form — a wiki page by title, anything else by
+ * path — so resolution reverses exactly that: an exact node path first, then a
+ * title compared through `handleOf`, which is the same normalization §4's
+ * identity rules use, so a trace written before a title's case changed still
+ * lands.
+ *
+ * A label that matches neither is *not* dropped silently. The pane replays a
+ * trace against whatever graph exists now, and a page deleted since the answer
+ * was written is the ordinary case; `unresolved` is what lets the pane say so
+ * rather than quietly lighting fewer nodes than the note lists.
+ */
+export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedTrace {
+  const byPath = new Set(graph.nodes.map((node) => node.path));
+  const byTitle = new Map<string, string>();
+  // First claimant keeps a handle, matching `build.ts`'s own table, so two
+  // pages sharing a title resolve the same way here as they do there.
+  for (const node of graph.nodes) {
+    const handle = handleOf(node.title);
+    if (handle !== "" && !byTitle.has(handle)) byTitle.set(handle, node.path);
+  }
+
+  const unresolved: string[] = [];
+  const resolve = (label: string): string | null => {
+    if (byPath.has(label)) return label;
+    const byHandle = byTitle.get(handleOf(label));
+    if (byHandle !== undefined) return byHandle;
+    unresolved.push(label);
+    return null;
+  };
+
+  const seeds: string[] = [];
+  for (const label of trace.seeds) {
+    const path = resolve(label);
+    if (path !== null) seeds.push(path);
+  }
+
+  const top: { path: string; score: number }[] = [];
+  for (const entry of trace.top) {
+    const path = resolve(entry.label);
+    if (path !== null) top.push({ path, score: entry.score });
+  }
+
+  return { seeds, top, unresolved };
 }
 
 function parseLinks(value: string): string[] {

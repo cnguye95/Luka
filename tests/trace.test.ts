@@ -2,7 +2,15 @@
 // round-trip"; §9's pane replays a trace it did not write, so recovering
 // exactly what was rendered is the property that matters.
 import { describe, expect, it } from "vitest";
-import { parseTrace, stripTrace, withTrace, writeTrace, type Trace } from "../src/core/answer/trace";
+import {
+  parseTrace,
+  resolveTraceNodes,
+  stripTrace,
+  withTrace,
+  writeTrace,
+  type Trace,
+} from "../src/core/answer/trace";
+import type { GraphSnapshot } from "../src/core/types";
 
 // §8.3, from the spec rather than from the code under test.
 const SPEC_TOP_LIMIT = 10;
@@ -172,5 +180,84 @@ describe("§8.4's filing strips the trace and nothing else", () => {
     expect(filed).toContain("[[Alpha]]");
     expect(filed).not.toContain("Retrieval trace");
     expect(filed).not.toContain("trace:start");
+  });
+});
+
+describe("resolving a trace's labels back onto graph nodes (§9's replay)", () => {
+  // `labelFor` writes §4's link form — a wiki page by title, anything else by
+  // path — so replay has to reverse exactly that, against whatever graph exists
+  // when the pane runs rather than the one the answer saw.
+  const node = (path: string, title: string, kind: "concept" | "raw") => ({
+    path,
+    title,
+    kind,
+    degree: 1,
+    summary: "",
+  });
+
+  const graph: GraphSnapshot = {
+    nodes: [
+      node("wiki/concepts/Alpha.md", "Alpha", "concept"),
+      node("wiki/concepts/Beta.md", "Beta", "concept"),
+      node("wiki/concepts/Xylem.md", "Xylem", "concept"),
+      node("raw/paper.md", "paper.md", "raw"),
+    ],
+    edges: [],
+  };
+
+  it("round-trips what writeTrace put down, wiki by title and raw by path", () => {
+    const written = writeTrace(
+      trace({
+        seeds: ["Alpha", "Beta"],
+        top: [
+          { label: "Xylem", score: 0.0812 },
+          { label: "raw/paper.md", score: 0.0631 },
+        ],
+      }),
+    );
+    const parsed = parseTrace(written).trace as Trace;
+
+    const resolved = resolveTraceNodes(parsed, graph);
+
+    expect(resolved.seeds).toEqual(["wiki/concepts/Alpha.md", "wiki/concepts/Beta.md"]);
+    expect(resolved.top).toEqual([
+      { path: "wiki/concepts/Xylem.md", score: 0.0812 },
+      { path: "raw/paper.md", score: 0.0631 },
+    ]);
+    expect(resolved.unresolved).toEqual([]);
+  });
+
+  it("reports a label naming a page that has since gone, rather than dropping it", () => {
+    // The ordinary case: the pane replays against the current graph, and the
+    // answer may name a page a later compile deleted. Lighting fewer nodes than
+    // the note lists without saying so is the failure this prevents.
+    const parsed = trace({ seeds: ["Alpha", "Departed"], top: [] });
+
+    const resolved = resolveTraceNodes(parsed, graph);
+
+    expect(resolved.seeds).toEqual(["wiki/concepts/Alpha.md"]);
+    expect(resolved.unresolved).toEqual(["Departed"]);
+  });
+
+  it("resolves a title whose case has changed since the answer was written", () => {
+    // `handleOf` is §4's own normalization, so replay agrees with the identity
+    // rules that decided the page's name in the first place.
+    const resolved = resolveTraceNodes(trace({ seeds: ["ALPHA"], top: [] }), graph);
+
+    expect(resolved.seeds).toEqual(["wiki/concepts/Alpha.md"]);
+    expect(resolved.unresolved).toEqual([]);
+  });
+
+  it("prefers an exact node path over a title that normalizes to the same handle", () => {
+    // A raw node's title is its basename, so `raw/paper.md` is both a path and
+    // a title. The path is the unambiguous name and must win.
+    const collide: GraphSnapshot = {
+      nodes: [node("wiki/concepts/paper.md", "paper.md", "concept"), node("raw/paper.md", "paper.md", "raw")],
+      edges: [],
+    };
+
+    const resolved = resolveTraceNodes(trace({ seeds: ["raw/paper.md"], top: [] }), collide);
+
+    expect(resolved.seeds).toEqual(["raw/paper.md"]);
   });
 });
