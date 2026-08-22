@@ -7,12 +7,12 @@ import { ObsidianFs } from "./fs-obsidian";
 import { ObsidianHttp } from "./http-obsidian";
 import { notify, progressNotice, reportAnswer, reportCompile } from "./notices";
 import { confirmScope } from "./scope-modal";
-import { GRAPH_VIEW_TYPE, LukaGraphView } from "./graph-view/view";
+import { GRAPH_VIEW_TYPE, LukaGraphView, type GraphHost } from "./graph-view/view";
 import { LukaSettingTab } from "./settings";
 
 const FALLBACK_PLUGIN_DIR = ".obsidian/plugins/luka";
 
-export default class LukaPlugin extends Plugin {
+export default class LukaPlugin extends Plugin implements GraphHost {
   override settings: LukaSettings = { ...DEFAULT_SETTINGS };
   private core!: Core;
 
@@ -28,7 +28,10 @@ export default class LukaPlugin extends Plugin {
     });
 
     this.addSettingTab(new LukaSettingTab(this.app, this));
-    this.registerView(GRAPH_VIEW_TYPE, (leaf) => new LukaGraphView(leaf, this.core, this.settings));
+    this.registerView(
+      GRAPH_VIEW_TYPE,
+      (leaf) => new LukaGraphView(leaf, this.core, this.settings, this),
+    );
     // §8.1: "One ribbon icon: the graph pane." The only one Luka adds.
     this.addRibbonIcon("git-fork", "Luka: Open graph", () => {
       void this.openGraph();
@@ -116,6 +119,32 @@ export default class LukaPlugin extends Plugin {
     if (leaf === null) return;
     if (existing.length === 0) await leaf.setViewState({ type: GRAPH_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * §9's "Show retrieval on graph": open the pane, then hand it the note.
+   *
+   * The parse and the overlay are the view's — this only routes, so the command
+   * and the pane's own button reach the same code by the same path.
+   */
+  async showRetrievalOnGraph(answerPath: string): Promise<void> {
+    await this.openGraph();
+    const view = this.app.workspace
+      .getLeavesOfType(GRAPH_VIEW_TYPE)
+      .map((leaf) => leaf.view)
+      .find((candidate): candidate is LukaGraphView => candidate instanceof LukaGraphView);
+    if (view === undefined) {
+      notify("could not open the graph pane.");
+      return;
+    }
+    await view.showRetrieval(answerPath);
+  }
+
+  /** `GraphHost`: the pane reads notes through the host, holding no adapter. */
+  async readNote(path: string): Promise<string> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error(`${path} is not a file`);
+    return this.app.vault.read(file);
   }
 
   /** §8.4's "File this answer", on the active answer note. */

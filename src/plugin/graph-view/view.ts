@@ -11,8 +11,15 @@
 // simulation, from a reheat until it cools past `alphaMin` — and every frame is
 // scheduled by an event, never by a standing `requestAnimationFrame` chain.
 import { ItemView, Notice, type WorkspaceLeaf } from "obsidian";
-import { normalizeSettings, type Core, type GraphSnapshot, type LukaSettings } from "../../core/index";
-import { fromClickPPR, type Overlay } from "./overlay";
+import {
+  normalizeSettings,
+  parseTrace,
+  resolveTraceNodes,
+  type Core,
+  type GraphSnapshot,
+  type LukaSettings,
+} from "../../core/index";
+import { fromClickPPR, fromTrace, type Overlay } from "./overlay";
 import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
 import { createSim, type Sim, type SimNode } from "./sim";
 
@@ -35,9 +42,20 @@ const CLICK_SLOP = 4;
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
+/**
+ * What the pane needs from the plugin, as two functions rather than the plugin
+ * itself — `main.ts` imports this module, so importing it back would be a cycle.
+ */
+export interface GraphHost {
+  /** §9 gates the replay button on "an answer note is active". */
+  activeAnswerPath(): string | null;
+  readNote(path: string): Promise<string>;
+}
+
 export class LukaGraphView extends ItemView {
   private readonly core: Core;
   private readonly settings: LukaSettings;
+  private readonly host: GraphHost;
   /** `onGraphRebuilt`'s unsubscribe, held so `onClose` can stop listening. */
   private unsubscribe: (() => void) | null = null;
   private graph: GraphSnapshot | null = null;
@@ -61,12 +79,15 @@ export class LukaGraphView extends ItemView {
   /** Where a background pan started, in canvas space. */
   private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
-  constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings) {
+  private replayEl: HTMLButtonElement | null = null;
+
+  constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings, host: GraphHost) {
     super(leaf);
     this.core = core;
     // The plugin's live object, not a copy: §17's numbers are read when they
     // are used, so a change in the settings tab reaches the next overlay.
     this.settings = settings;
+    this.host = host;
   }
 
   override getViewType(): string {
@@ -103,6 +124,18 @@ export class LukaGraphView extends ItemView {
       this.filter = filter.value;
       this.schedule();
     });
+
+    // §9: "'Show retrieval on graph' (command + button when an answer note is
+    // active)". The command lives in `commands.ts`; this is the button half.
+    this.replayEl = toolbar.createEl("button", { text: "Show retrieval" });
+    this.registerDomEvent(this.replayEl, "click", () => {
+      const path = this.host.activeAnswerPath();
+      if (path !== null) void this.showRetrieval(path);
+    });
+    // A workspace event, not a vault one: it changes which button is visible
+    // and runs no operation, so invariant 1's "no watchers" is untouched.
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncReplayButton()));
+    this.syncReplayButton();
 
     // §9: "Esc clears overlay". On the container rather than the canvas so it
     // works wherever focus sits inside the pane.
@@ -328,6 +361,47 @@ export class LukaGraphView extends ItemView {
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
+  }
+
+  /** §9 shows the replay button only while an answer note is active. */
+  private syncReplayButton(): void {
+    const button = this.replayEl;
+    if (button === null) return;
+    if (this.host.activeAnswerPath() === null) button.hide();
+    else button.show();
+  }
+
+  /**
+   * §9's trace replay: "parses the trace and overlays, zero calls, graceful
+   * notice if the note has no trace".
+   *
+   * Recorded data only. The graph on screen may not be the graph the answer was
+   * written against, so re-ranking would show what retrieval *would* reach now
+   * — a different claim from the one the note is making.
+   */
+  async showRetrieval(answerPath: string): Promise<void> {
+    let trace;
+    try {
+      trace = parseTrace(await this.host.readNote(answerPath)).trace;
+    } catch (error) {
+      new Notice(`Luka: could not read ${answerPath} — ${message(error)}`, 6000);
+      return;
+    }
+    if (trace === null) {
+      // §9 asks for this to be graceful: a note whose block the user deleted,
+      // or an answer from before the trace existed, is not an error.
+      new Notice("Luka: that note has no retrieval trace to show.", 6000);
+      return;
+    }
+
+    const graph = this.graph ?? (await this.core.getGraph().catch(() => null));
+    if (graph === null) {
+      new Notice("Luka: no graph to show the trace on. Run Luka: Compile.", 6000);
+      return;
+    }
+
+    const resolved = resolveTraceNodes(trace, graph);
+    this.setOverlay(fromTrace(resolved, trace.mode, resolved.unresolved.length));
   }
 
   /**

@@ -1967,3 +1967,22 @@ either, and nothing enters the loop body. Found by mutation, not by reading. The
 comment now describes what does the work, and two assertions pin the reachable
 cases — an isolated seed holding only teleport mass (§7.2), and the negative score
 a hand-edited trace can carry, since `parseTop` accepts `-0.5`.
+
+**Trace replay, from the note the user is looking at.** §9 gives this a command
+and a button, both gated on an active answer note, and both reach one method on
+the view so the two entry points cannot drift.
+
+- **S37** — the pane takes a `GraphHost` — `activeAnswerPath` and `readNote` — 
+  rather than the plugin. `main.ts` imports the view, so importing it back would
+  be a cycle, and the pane holds no `FsAdapter` by design: reading a note goes
+  through the host, which is the plugin's vault API.
+- **S38** — the replay button's visibility follows `active-leaf-change`. That is a
+  workspace event rather than a vault one and runs no operation, so invariant 1's
+  "no watchers" is untouched; §16's non-goal is auto-compile on vault events.
+- **S39** — a note with no trace block gets a notice, not an error. §9 asks for it
+  to be graceful, and the case is ordinary: a user deleted the block, or the
+  answer predates the trace.
+- **S40** — replay overlays recorded data and never re-ranks. §9 gives it zero
+  model calls, and the graph on screen may not be the graph the answer was written
+  against — re-running PPR would show what retrieval *would* reach now, which is a
+  different claim from the one the note is making.

@@ -39,6 +39,19 @@ export function registerCommands(plugin: LukaPlugin): void {
   });
 
   plugin.addCommand({
+    id: "show-retrieval",
+    name: "Show retrieval on graph",
+    // §9 scopes this to an active answer note, the same gating §8.1 gives
+    // "File this answer" — so it hides rather than failing on anything else.
+    checkCallback: (checking: boolean) => {
+      const path = plugin.activeAnswerPath();
+      if (path === null) return false;
+      if (!checking) void plugin.showRetrievalOnGraph(path);
+      return true;
+    },
+  });
+
+  plugin.addCommand({
     id: "file-answer",
     name: "File this answer",
     // §8.1 scopes this to "active answer note", so the command hides itself

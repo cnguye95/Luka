@@ -326,3 +326,15 @@ unless a step says otherwise.
       blocked by the lock.
 - [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
       without movement does.
+- [ ] Ask a question on the demo vault, then run **Luka: Show retrieval on
+      graph** from the answer note. The pane opens and lights exactly the pages
+      the note's own trace block lists as seeds and top entries.
+- [ ] The command does not appear in the palette while a non-answer note is
+      active, and the pane's "Show retrieval" button is hidden then too.
+- [ ] Delete the `<!-- trace:start -->` block from an answer note by hand and
+      run the command: a notice says there is no trace, and the pane is left
+      exactly as it was.
+- [ ] Replay a trace, then compile after deleting one of the pages it names.
+      Replay again: the remaining pages light and the status line reports how
+      many labels it could not resolve.
+- [ ] Trace replay makes no network request. (§9's "zero calls".)
