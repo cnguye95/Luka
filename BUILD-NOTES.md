@@ -2102,3 +2102,56 @@ are not a claim about the demo vault, a different machine, or the paint that
 follows. What they bound is the part §15's criterion depends on that can be
 measured without a host; the criterion itself is a stopwatch item on the README
 checklist.
+
+### M4 closeout — the review-wave record
+
+Seventeen commits from `3ac1d40`. Twelve build steps, one testing pass, four
+review waves, four fix rounds. 910 passed / 4 skipped; build, boundary, lint and
+eval green.
+
+| wave | scope | outcome |
+|---|---|---|
+| step 14 | the whole milestone, three reviewers, disjoint scopes | 25 findings |
+| step 16 | the step-15 fix diff | 8 findings, 4 of 9 fixes wrong |
+| step 16b | the step-16 fix diff | 10 findings, stop-rule fired |
+| step 16c | the step-16b fix diff | 4 findings, no test defect |
+
+**The stop-rule fired and was answered by a decision, not a patch.** Three
+consecutive fix rounds were faulted. The subject each time was the trace list
+parser, and the third review named why: `writeTrace` emits a comma-separated
+list of `[[label]]` in which both the delimiter and the brackets are legal label
+content, so `[[a]], [[b]]` is ambiguous and no parser over that grammar is
+correct for every input. Three attempts each closed one side by opening the
+other. The user's decision was to revert to the reading that fails on the rarer
+input, record the limitation, and stop — which is what the register above holds.
+
+**Findings by wave: 25 → 8 → 10 → 4.** The last wave found no self-satisfying
+assertion, the first round in two milestones where that was true.
+
+**Nine self-satisfying assertions were found across M3 and M4**, four of them in
+tests written as the fix for an earlier one. Every single one was caught by
+mutating the code the assertion covered, and none by reading. The recurring
+shape is specific enough to name: the test gets built from the same example that
+motivated the fix, so it confirms the fix rather than discriminating against its
+absence. The examples that catch it are the ones chosen to break the claim — a
+lit set larger than the slice limit, a peak that is not already 1, two lost
+labels rather than one, a label ending in a digit.
+
+**Eight false claims were found in this log and in code comments**, including
+one that survived seven review rounds before anyone executed it (a `parseTop`
+greediness mutation that is a no-op, because the anchors do that work), and two
+corrections that were themselves wrong. Prose about mechanism remains where this
+project's defects live; the numbers and the behaviour have been consistently
+sound beside them.
+
+**The M1/M2 evidence set holds at closeout.** Removing the float branch in
+`renames.ts` fails exactly 7; removing `chooseTarget`'s recorded-path fallback
+fails exactly 1. Instruments at review scale: churn 1500 both fault modes,
+fuzz-compile 1500, fuzz-localize 1500, fuzz-ppr 2000, demo corpus and demo ask —
+all green.
+
+**What §14 leaves to the user:** 36 README checklist items for §9's pane, of
+which one needs a real API key (the Inspect call count). The pane's pure halves
+— `sim.ts`, `render.ts`, `overlay.ts` — carry 43 automated assertions the plan
+did not expect to exist, because both were written with no Obsidian import and
+what is readable in isolation is testable in isolation.
