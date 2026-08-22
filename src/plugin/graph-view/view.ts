@@ -42,6 +42,8 @@ const MAX_SCALE = 6;
 const TOOLTIP_OFFSET = 12;
 /** Pointer travel, in CSS pixels, that turns a click into a drag. */
 const CLICK_SLOP = 4;
+/** Device ratio the exported PNG is rendered at, independent of the display. */
+const PNG_SCALE = 2;
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
@@ -141,6 +143,12 @@ export class LukaGraphView extends ItemView {
     // and runs no operation, so invariant 1's "no watchers" is untouched.
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncReplayButton()));
     this.syncReplayButton();
+
+    // §9's "PNG export button".
+    const exportEl = toolbar.createEl("button", { text: "Export PNG" });
+    this.registerDomEvent(exportEl, "click", () => {
+      this.exportPng();
+    });
 
     // §9: "Esc clears overlay". On the container rather than the canvas so it
     // works wherever focus sits inside the pane.
@@ -375,6 +383,56 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
+   * §9's PNG export.
+   *
+   * Rendered again at `PNG_SCALE` rather than lifted off the on-screen canvas,
+   * so the file is crisp rather than whatever the display's pixel ratio
+   * happened to be. `draw` fills the theme background before anything else,
+   * which is what keeps the file opaque — an exported canvas inherits nothing
+   * from the page, and a transparent PNG reads as broken on a dark backdrop.
+   *
+   * The file goes to the OS download path, not into the vault. §9 asks for an
+   * export button and says nothing about where; a vault write would put a
+   * binary the user did not ask for inside the tree compile walks, and §0 takes
+   * the smaller option.
+   */
+  private exportPng(): void {
+    const frame = this.currentFrame();
+    if (frame === null || frame.width === 0 || frame.height === 0) {
+      new Notice("Luka: nothing to export yet.", 6000);
+      return;
+    }
+
+    const offscreen = document.createElement("canvas");
+    offscreen.width = Math.round(frame.width * PNG_SCALE);
+    offscreen.height = Math.round(frame.height * PNG_SCALE);
+    const ctx = offscreen.getContext("2d");
+    if (ctx === null) {
+      new Notice("Luka: this platform gave no canvas to export with.", 6000);
+      return;
+    }
+
+    // Same frame, different device ratio: the camera and the overlay are
+    // whatever is on screen, so the file matches what the user is looking at.
+    draw(ctx, { ...frame, dpr: PNG_SCALE });
+
+    offscreen.toBlob((blob) => {
+      if (blob === null) {
+        new Notice("Luka: could not encode the image.", 6000);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `luka-graph-${stamp(new Date())}.png`;
+      link.click();
+      // The blob is held alive by the URL until this runs; without it the
+      // export leaks a copy of every image for the life of the window.
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }
+
+  /**
    * §9's maturity banner: below §7.3's predicate, say so, with live counts.
    *
    * The predicate comes from `modeOf` on the façade rather than a copy of "≥ 20
@@ -565,4 +623,19 @@ export class LukaGraphView extends ItemView {
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** `YYYY-MM-DD-HHmm`, UTC — `answerNotePath`'s convention, for the same reason. */
+function stamp(now: Date): string {
+  const two = (value: number) => String(value).padStart(2, "0");
+  return [
+    now.getUTCFullYear(),
+    "-",
+    two(now.getUTCMonth() + 1),
+    "-",
+    two(now.getUTCDate()),
+    "-",
+    two(now.getUTCHours()),
+    two(now.getUTCMinutes()),
+  ].join("");
 }

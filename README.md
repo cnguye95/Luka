@@ -345,3 +345,8 @@ unless a step says otherwise.
       pairs per node). After the refresh, the banner disappears.
 - [ ] On an empty vault the Compile pointer shows and the banner does not —
       the two states never appear together.
+- [ ] **Export PNG** downloads a file through the browser/OS download path. It
+      matches what is on screen — same camera, same overlay if one is active.
+- [ ] The exported image has an opaque background in both dark and light
+      themes, not a transparent one.
+- [ ] Nothing new appears anywhere in the vault after an export.

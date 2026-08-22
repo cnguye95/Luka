@@ -2001,3 +2001,16 @@ the thing it exists to report.
   ratio to two decimals. §9 says "with live counts" without naming them; these are
   the three the predicate is computed from, so a user can see how far off the
   threshold the vault is rather than only that it is.
+
+**PNG export goes to the OS, not the vault.** §9 asks for an export button and
+says nothing about where the file lands. A vault write would put a binary the user
+did not ask for inside the tree compile walks, so §0 takes the smaller option: a
+blob URL and an anchor download, revoked immediately after the click.
+
+- **S43** — the export re-renders at `PNG_SCALE` (2) rather than lifting the
+  on-screen canvas, so the file does not inherit whatever pixel ratio the display
+  happened to have. Same frame otherwise, so the camera and any active overlay are
+  what the user is looking at.
+- **S44** — the filename is `luka-graph-<YYYY-MM-DD-HHmm>.png` in UTC, following
+  `answerNotePath`'s convention for the same reason: a vault synced between zones
+  should not name two exports by the same local minute.
