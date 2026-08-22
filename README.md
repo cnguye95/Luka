@@ -281,3 +281,21 @@ unless a step says otherwise.
       one a directory, or lock it). The pane shows a notice naming the problem
       and falls back to the empty state — it does not throw into the console or
       render a blank surface with no explanation.
+- [ ] The graph draws: nodes appear, spread out, and the layout comes to rest
+      within a few seconds rather than jittering forever. (§9's "simulation
+      cools to a stop".)
+- [ ] Once it has settled, the pane is idle — Obsidian's CPU use drops back to
+      baseline and stays there with the pane open and untouched. (Invariant 1:
+      the only sanctioned loop is the simulation, and it must end.)
+- [ ] Close and reopen the pane on the same vault: the layout starts from the
+      same arrangement both times. (§9's "initial positions seeded by hashing
+      page path".)
+- [ ] Concepts, entities, sources and raw files are four distinguishable muted
+      colours, and they are theme colours — not fixed hues.
+- [ ] Switch Obsidian between dark and light with the pane open. The graph
+      recolours itself without needing to be reopened. (§15's AC.)
+- [ ] Well-connected nodes are visibly larger than leaf nodes.
+- [ ] At rest, about ten labels are shown — the highest-degree nodes — not one
+      per node.
+- [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
+      smooth. (§9's "drop labels first".)

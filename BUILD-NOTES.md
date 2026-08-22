@@ -1847,3 +1847,33 @@ assertions.
   Obsidian loads it from the plugin directory on its own, so it has to travel with
   the build; every colour is still sampled from CSS variables at render time, which
   is what §15's theme-switch criterion needs.
+
+**The graph appears and settles.** Plan steps 5 and 6 landed as one commit: a
+simulation with nothing drawing it and a renderer with nothing positioned are each
+half a subject, and splitting them would have meant a commit whose behaviour no
+checklist item could observe.
+
+- **S7** — initial positions come from FNV-1a over the node path, module-local in
+  `sim.ts`. §9 asks for positions "seeded by hashing page path" so a reopened pane
+  starts from the same shape; `core/hash.ts` is SHA-256 and async, and a layout seed
+  needs neither cryptographic strength nor a promise the first frame would wait on.
+  The high and low halves of the hash drive radius and angle separately, with a
+  square root on the radius so points spread over the disc instead of crowding its
+  centre.
+- **S8** — force parameters (link distance 60, charge −160, centre 0.05, collide
+  radius 14, alphaMin at d3's own 0.001, drag target 0.3, reheat 0.3) are
+  module-local constants. §17 names none of them.
+- **S9** — render constants: `RADIUS_BASE` 3 and `RADIUS_SCALE` 2.6 over §9's
+  log(degree+1), `EDGE_ALPHA` 0.25, `LABEL_OFFSET` 4. `LABEL_LIMIT` 10 and
+  `LABEL_DROP_THRESHOLD` 500 are §9's own figures, not choices.
+- **S24** — every frame is scheduled, and at most one is ever outstanding. There is
+  no standing `requestAnimationFrame` chain: a tick storm, a resize and a theme
+  change together cost one paint, and when the simulation cools past `alphaMin` no
+  ticks arrive and nothing schedules anything. That is what makes §9's sanctioned
+  loop end rather than idle forever, which invariant 1 would not permit.
+- **S25** — the theme is sampled per redraw rather than cached at open, and
+  `css-change` schedules a repaint and no data work. §15's dark/light criterion
+  asks for the switch to be picked up without reopening the pane.
+- **S26** — a refresh keeps surviving nodes at their current positions and their
+  pins, hash-seeding only the new ones. Re-hashing everything on each compile would
+  discard the arrangement the user has been reading.
