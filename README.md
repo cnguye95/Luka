@@ -110,20 +110,40 @@ move the floors.
 
 ## Manual checklist
 
-Automated tests cover `src/core` only; the Obsidian surface is checked by hand.
+Automated tests cover `src/core` only; the Obsidian surface is checked by hand
+(§14). 93 items, ordered so that stopping anywhere leaves the most valuable
+ground covered: setup first, then the graph pane — the newest code and the only
+part with no automated coverage whatsoever — then the older flows, then the
+destructive and paid checks, then edge cases. Work top to bottom.
 
-### M0
+### 1. Start here — does it load at all
+
+If any of these fail, nothing below is worth running.
 
 - [ ] Plugin appears under Community plugins and enables without console errors.
 - [ ] Settings tab shows an API key field (masked) and one model id per task.
 - [ ] Values survive a reload of Obsidian (they are stored in
       `.obsidian/plugins/luka/data.json`).
 
-### M1
+### 2. Before you compile — the empty-vault states
 
-With `demo/raw/` copied to `raw/` in the test vault:
+Do these while the vault is still empty; after the first compile you cannot
+get back to this state without deleting `wiki/` and the manifest.
+
+- [ ] On an empty vault — no `wiki/`, no manifest — the pane shows
+      "No graph yet. Run Luka: Compile to build one." rather than a blank area.
+- [ ] On an empty vault the Compile pointer shows and the banner does not —
+      the two states never appear together.
+
+### 3. The first compile
+
+Copy `demo/raw/` to `raw/` in the test vault. Needs a real API key: this
+compile costs a few cents and takes a minute or two.
 
 - [ ] **Luka: Compile** reports seven new sources and nothing skipped.
+- [ ] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the seven
+      sources.
+- [ ] A second **Luka: Compile** reports "nothing to do" and modifies no files.
 - [ ] `raw/note.md` and `raw/notes.txt` gained an `ingested` / `source-format`
       block at the top and are otherwise unchanged.
 - [ ] `raw/note.md` shows
@@ -133,31 +153,27 @@ With `demo/raw/` copied to `raw/` in the test vault:
       each carrying `derived-from`.
 - [ ] `raw/paper.md` contains the PDF's text, confirming pdf.js works inside the
       Electron renderer.
-- [ ] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the seven
-      sources.
-- [ ] A second **Luka: Compile** reports "nothing to do" and modifies no files.
 - [ ] Editing `raw/note.md` and compiling again reports one changed source.
 - [ ] Triggering Compile twice in quick succession shows
       "Luka is busy: compile" rather than running twice.
 
-### M2c
+### 4. What compile wrote
 
-Needs a real API key in settings. The first compile of `demo/raw/` costs a few
-cents and takes a minute or two.
+Reading the vault the compile above produced. No further calls.
 
-- [ ] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
 - [ ] `wiki/sources/` holds one page per source, each with a
       `source: "[[raw/...]]"` key and a citation block naming its own raw file.
 - [ ] `wiki/entities/` and `wiki/concepts/` hold pages whose bodies are prose
       with `[[wikilinks]]`, and whose citation blocks name the sources they came
       from.
-- [ ] No wiki page contains frontmatter, a citation list, or a heading written
-      by the model — code writes all four (invariant 5).
 - [ ] `wiki/_index.md` opens with `# Index` and lists every page under
       *Sources*, *Entities* or *Concepts*.
 - [ ] Ctrl/Cmd-clicking a `[[link]]` in a generated page opens the page it
       names, or offers to create it (an unresolved link is a future-article
       signal, not a bug).
+- [ ] No wiki page contains frontmatter, a citation list, or a heading written
+      by the model — code writes all four (invariant 5).
+- [ ] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
 - [ ] A second **Luka: Compile** reports "nothing to do" and makes no API calls
       (watch the console or your Anthropic usage page).
 - [ ] Editing one source and recompiling regenerates only the pages that cite
@@ -166,27 +182,97 @@ cents and takes a minute or two.
       notice per source and leaves the manifest untouched, so the next compile
       with a key restored picks them up again.
 
-### M2d
+### 5. The graph pane opens
 
-Continues from the compiled vault above.
+Everything from here to "Export" is §9's pane, which has no automated
+coverage at all — §14 puts it here instead. This is the largest unverified
+surface in the project, so it comes before the older flows.
 
-- [ ] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
-      modal first, showing the diff counts and both lists — pages to regenerate,
-      and pages that may be deleted.
-- [ ] Pressing **Cancel** (or Esc) closes it, reports "compile cancelled", and
-      changes nothing: `wiki/sources/page.md` and `raw/page.md` are still there.
-- [ ] Running Compile again and pressing **Compile** removes `wiki/sources/page.md`
-      and `raw/page.md`, drops the page from `wiki/_index.md`, and regenerates
-      any page that cited it from its remaining sources.
-- [ ] Triggering Compile a second time while the modal is open shows
-      "Luka is busy: compile" — the lock is held across the confirm.
-- [ ] Editing a source rather than deleting it also opens the modal, and its
-      "may be deleted" list is empty.
-- [ ] A compile whose diff is only additions opens no modal at all.
+- [ ] **Luka: Open graph** in the command palette opens the pane, and the ribbon
+      icon opens the same one. Pressing the ribbon again *reveals* that pane
+      rather than opening a second copy.
+- [ ] On the compiled demo vault the pane opens in under a second (§15's AC —
+      wall-clock it from the click to the node/edge counts appearing).
+- [ ] On a small vault (a handful of pages), the pane shows the banner
+      "Mode A (lexical) active — graph ranking off" followed by live node, link
+      pair and ratio counts, and the counts match what `wiki/_index.md` implies.
+- [ ] With the pane open, run **Luka: Compile**. When it finishes, the pane's
+      counts update on their own, with no click. (§7.1's rebuild event.)
+- [ ] The **Refresh** button updates the counts after a compile run from another
+      window or a vault sync.
+- [ ] Close the pane and reopen it: it works, and the developer console shows no
+      error logged at close. (Invariant 1 — nothing of the view outlives it.)
+- [ ] The graph draws: nodes appear, spread out, and the layout comes to rest
+      within a few seconds rather than jittering forever. (§9's "simulation
+      cools to a stop".)
+- [ ] Once it has settled, the pane is idle — Obsidian's CPU use drops back to
+      baseline and stays there with the pane open and untouched. (Invariant 1:
+      the only sanctioned loop is the simulation, and it must end.)
 
-### M3 — Ask, answers, filing
+### 6. The graph draws correctly
 
-Needs a real API key and a compiled vault. One question costs a few cents.
+- [ ] Close and reopen the pane on the same vault: the layout starts from the
+      same arrangement both times. (§9's "initial positions seeded by hashing
+      page path".)
+- [ ] Concepts, entities, sources and raw files are four distinguishable muted
+      colours, and they are theme colours — not fixed hues.
+- [ ] Switch Obsidian between dark and light with the pane open. The graph
+      recolours itself without needing to be reopened. (§15's AC.)
+- [ ] Well-connected nodes are visibly larger than leaf nodes.
+- [ ] At rest, about ten labels are shown — the highest-degree nodes — not one
+      per node.
+- [ ] Hovering a node shows a tooltip with its title, kind and summary. A raw
+      source shows its filename and "raw" with no summary line.
+
+### 7. The graph responds to the pointer
+
+- [ ] Dragging on empty space pans the graph; the scroll wheel zooms, and the
+      point under the cursor stays under it rather than sliding away.
+- [ ] Hovering costs no vault reads — the tooltip appears instantly even on a
+      large vault, because the summary travels on the node.
+- [ ] Dragging a node moves it, and it stays where it is dropped while its
+      neighbours resettle around it. (§9's drag-to-pin.)
+- [ ] Double-clicking a node opens that page in the current tab. Double-clicking
+      a raw source opens its readable markdown.
+- [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
+      label.
+- [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
+      without movement does.
+
+### 8. Overlays and the filter
+
+All of these are free — §9 gives click-PPR, the filter and replay zero model
+calls, and the network panel is how you check that.
+
+- [ ] Clicking a node recolours the graph instantly: the clicked node gains a
+      ring, the top-K gain a stroke, reached nodes take a heat ramp, and
+      everything unreached dims. No network request appears in the developer
+      tools. (§9's "no model call".)
+- [ ] The status line names the overlay while one is active.
+- [ ] Pressing Esc clears the overlay and restores the plain graph.
+- [ ] Typing in the filter box dims non-matching nodes as you type, matching on
+      both title and path, case-insensitively. Clearing it restores everything.
+      Again, no network request.
+- [ ] Filter and overlay compose: with both active, a node outside both is
+      dimmer than one outside only one of them.
+- [ ] Click-PPR still works while a compile is running — the pane is never
+      blocked by the lock.
+- [ ] Open the pane on a vault where one file under `wiki/` is unreadable (make
+      one a directory, or lock it). The pane shows a notice naming the problem
+      and falls back to the empty state — it does not throw into the console or
+      render a blank surface with no explanation.
+
+### 9. Export
+
+- [ ] **Export PNG** downloads a file through the browser/OS download path. It
+      matches what is on screen — same camera, same overlay if one is active.
+- [ ] The exported image has an opaque background in both dark and light
+      themes, not a transparent one.
+- [ ] Nothing new appears anywhere in the vault after an export.
+
+### 10. Ask, answers, filing
+
+Needs a real API key. One question costs a few cents.
 
 - [ ] **Luka: Ask the wiki** opens a modal with a single question field, already
       focused. Enter submits; Esc and Cancel both close it and do nothing.
@@ -211,121 +297,10 @@ Needs a real API key and a compiled vault. One question costs a few cents.
       it gains a `wiki/sources/` page, and the answer's own links now connect it
       into the graph.
 
-### M3 — Health check
+### 11. Trace replay on the graph
 
-- [ ] **Luka: Health check** writes `wiki/_health.md` and opens it, with no
-      notice about model calls because it makes none.
-- [ ] It lists article candidates (links that resolve to nothing), orphan pages,
-      citations naming files the manifest does not know, filed answers with
-      their ages, and counts.
-- [ ] Running it twice in a row produces the same file; resolving a link by
-      writing the page it wanted removes it from the candidates on the next run.
-- [ ] Running it while a compile is in flight shows "Luka is busy: compile".
+Continues from the answer note the section above wrote.
 
-### M3 — Settings
-
-- [ ] The settings tab shows a **Retrieval** section: context budget, pages per
-      answer, both graph-mode thresholds, and a follow-up toggle.
-- [ ] **Advanced (PageRank)** is collapsed by default and expands to damping,
-      maximum iterations, and a convergence threshold that is visible but not
-      editable.
-- [ ] Editing a numeric field and reloading Obsidian keeps the new value;
-      typing nonsense into one and reloading falls back to the documented
-      default rather than breaking compile.
-
-### Deletion is recoverable
-
-The core is tested against in-memory and Node filesystems; only Obsidian's own
-adapter can show this.
-
-- [ ] After the deletion above, `wiki/sources/page.md` and `raw/page.md` are in
-      the system trash (or the vault's `.trash/` folder, if the platform has no
-      usable system trash) — **not** gone. This is what makes a mistaken
-      confirmation at the scope modal survivable, and it is the one thing the
-      modal's "pages that *may* be deleted" wording promises but code cannot
-      assert.
-- [ ] `.trash/`, if it appears, is not picked up as a source by a later
-      compile: the next **Luka: Compile** still reports "nothing to do".
-
-### Concurrency and settings
-
-- [ ] A markdown source with **two or more** reachable remote images localizes
-      all of them on its *first* compile, with no source failing. (§6.3 fetches
-      four at a time into a `raw/assets/` folder none of them has created yet.)
-- [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
-      `"contextBudgetTokens": 0`, `"compileConcurrency": "two"` or
-      `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
-      pages keep their grounding, and nothing is rewritten from an empty
-      context. Restore the file afterwards.
-
-### M4 — Graph pane
-
-§14 puts the pane under this checklist rather than automated tests, so these are
-the only evidence that §9's view works. Run them on the compiled demo vault
-unless a step says otherwise.
-
-- [ ] **Luka: Open graph** in the command palette opens the pane, and the ribbon
-      icon opens the same one. Pressing the ribbon again *reveals* that pane
-      rather than opening a second copy.
-- [ ] On the compiled demo vault the pane opens in under a second (§15's AC —
-      wall-clock it from the click to the node/edge counts appearing).
-- [ ] On an empty vault — no `wiki/`, no manifest — the pane shows
-      "No graph yet. Run Luka: Compile to build one." rather than a blank area.
-- [ ] With the pane open, run **Luka: Compile**. When it finishes, the pane's
-      counts update on their own, with no click. (§7.1's rebuild event.)
-- [ ] The **Refresh** button updates the counts after a compile run from another
-      window or a vault sync.
-- [ ] Close the pane and reopen it: it works, and the developer console shows no
-      error logged at close. (Invariant 1 — nothing of the view outlives it.)
-- [ ] Open the pane on a vault where one file under `wiki/` is unreadable (make
-      one a directory, or lock it). The pane shows a notice naming the problem
-      and falls back to the empty state — it does not throw into the console or
-      render a blank surface with no explanation.
-- [ ] The graph draws: nodes appear, spread out, and the layout comes to rest
-      within a few seconds rather than jittering forever. (§9's "simulation
-      cools to a stop".)
-- [ ] Once it has settled, the pane is idle — Obsidian's CPU use drops back to
-      baseline and stays there with the pane open and untouched. (Invariant 1:
-      the only sanctioned loop is the simulation, and it must end.)
-- [ ] Close and reopen the pane on the same vault: the layout starts from the
-      same arrangement both times. (§9's "initial positions seeded by hashing
-      page path".)
-- [ ] Concepts, entities, sources and raw files are four distinguishable muted
-      colours, and they are theme colours — not fixed hues.
-- [ ] Switch Obsidian between dark and light with the pane open. The graph
-      recolours itself without needing to be reopened. (§15's AC.)
-- [ ] Well-connected nodes are visibly larger than leaf nodes.
-- [ ] At rest, about ten labels are shown — the highest-degree nodes — not one
-      per node.
-- [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
-      smooth. (§9's "drop labels first".)
-- [ ] Dragging on empty space pans the graph; the scroll wheel zooms, and the
-      point under the cursor stays under it rather than sliding away.
-- [ ] Hovering a node shows a tooltip with its title, kind and summary. A raw
-      source shows its filename and "raw" with no summary line.
-- [ ] Hovering costs no vault reads — the tooltip appears instantly even on a
-      large vault, because the summary travels on the node.
-- [ ] Dragging a node moves it, and it stays where it is dropped while its
-      neighbours resettle around it. (§9's drag-to-pin.)
-- [ ] Double-clicking a node opens that page in the current tab. Double-clicking
-      a raw source opens its readable markdown.
-- [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
-      label.
-- [ ] Clicking a node recolours the graph instantly: the clicked node gains a
-      ring, the top-K gain a stroke, reached nodes take a heat ramp, and
-      everything unreached dims. No network request appears in the developer
-      tools. (§9's "no model call".)
-- [ ] The status line names the overlay while one is active.
-- [ ] Pressing Esc clears the overlay and restores the plain graph.
-- [ ] Typing in the filter box dims non-matching nodes as you type, matching on
-      both title and path, case-insensitively. Clearing it restores everything.
-      Again, no network request.
-- [ ] Filter and overlay compose: with both active, a node outside both is
-      dimmer than one outside only one of them.
-- [ ] Click-PPR still works while a compile is running — the pane is never
-      blocked by the lock.
-- [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
-      without movement does.
 - [ ] Ask a question on the demo vault, then run **Luka: Show retrieval on
       graph** from the answer note. The pane opens and lights exactly the pages
       the note's own trace block lists as seeds and top entries.
@@ -338,18 +313,12 @@ unless a step says otherwise.
       Replay again: the remaining pages light and the status line reports how
       many labels it could not resolve.
 - [ ] Trace replay makes no network request. (§9's "zero calls".)
-- [ ] On a small vault (a handful of pages), the pane shows the banner
-      "Mode A (lexical) active — graph ranking off" followed by live node, link
-      pair and ratio counts, and the counts match what `wiki/_index.md` implies.
-- [ ] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
-      pairs per node). After the refresh, the banner disappears.
-- [ ] On an empty vault the Compile pointer shows and the banner does not —
-      the two states never appear together.
-- [ ] **Export PNG** downloads a file through the browser/OS download path. It
-      matches what is on screen — same camera, same overlay if one is active.
-- [ ] The exported image has an opaque background in both dark and light
-      themes, not a transparent one.
-- [ ] Nothing new appears anywhere in the vault after an export.
+
+### 12. Query inspection — one model call per press
+
+The only paid items in the pane. Skip if you would rather not spend the calls;
+nothing below depends on them.
+
 - [ ] With a real API key set, type a question into the graph's query box and
       press **Inspect (1 model call)**. Exactly one request appears in the
       developer tools network panel — not two, not three.
@@ -364,3 +333,71 @@ unless a step says otherwise.
       the query box does the same thing as clicking it.
 - [ ] Inspect works while a compile is running (the pane is never blocked), and
       Esc clears the resulting overlay.
+
+### 13. Deletion is recoverable — destructive, deliberately late
+
+These delete pages, so they come after everything that reads the vault. The
+core is tested against in-memory and Node filesystems; only Obsidian's own
+adapter can show that a delete reaches the system trash, which makes the last
+two items here the highest-value pair in the list.
+
+- [ ] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
+      modal first, showing the diff counts and both lists — pages to regenerate,
+      and pages that may be deleted.
+- [ ] Pressing **Cancel** (or Esc) closes it, reports "compile cancelled", and
+      changes nothing: `wiki/sources/page.md` and `raw/page.md` are still there.
+- [ ] Triggering Compile a second time while the modal is open shows
+      "Luka is busy: compile" — the lock is held across the confirm.
+- [ ] Running Compile again and pressing **Compile** removes `wiki/sources/page.md`
+      and `raw/page.md`, drops the page from `wiki/_index.md`, and regenerates
+      any page that cited it from its remaining sources.
+- [ ] After the deletion above, `wiki/sources/page.md` and `raw/page.md` are in
+      the system trash (or the vault's `.trash/` folder, if the platform has no
+      usable system trash) — **not** gone. This is what makes a mistaken
+      confirmation at the scope modal survivable, and it is the one thing the
+      modal's "pages that *may* be deleted" wording promises but code cannot
+      assert.
+- [ ] `.trash/`, if it appears, is not picked up as a source by a later
+      compile: the next **Luka: Compile** still reports "nothing to do".
+- [ ] Editing a source rather than deleting it also opens the modal, and its
+      "may be deleted" list is empty.
+- [ ] A compile whose diff is only additions opens no modal at all.
+
+### 14. Health check
+
+- [ ] **Luka: Health check** writes `wiki/_health.md` and opens it, with no
+      notice about model calls because it makes none.
+- [ ] It lists article candidates (links that resolve to nothing), orphan pages,
+      citations naming files the manifest does not know, filed answers with
+      their ages, and counts.
+- [ ] Running it twice in a row produces the same file; resolving a link by
+      writing the page it wanted removes it from the candidates on the next run.
+- [ ] Running it while a compile is in flight shows "Luka is busy: compile".
+
+### 15. Settings detail
+
+- [ ] The settings tab shows a **Retrieval** section: context budget, pages per
+      answer, both graph-mode thresholds, and a follow-up toggle.
+- [ ] **Advanced (PageRank)** is collapsed by default and expands to damping,
+      maximum iterations, and a convergence threshold that is visible but not
+      editable.
+- [ ] Editing a numeric field and reloading Obsidian keeps the new value;
+      typing nonsense into one and reloading falls back to the documented
+      default rather than breaking compile.
+
+### 16. Bigger vaults and edge cases
+
+Least likely to matter, and the 500-node item needs a vault you may not have.
+
+- [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
+      smooth. (§9's "drop labels first".)
+- [ ] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
+      pairs per node). After the refresh, the banner disappears.
+- [ ] A markdown source with **two or more** reachable remote images localizes
+      all of them on its *first* compile, with no source failing. (§6.3 fetches
+      four at a time into a `raw/assets/` folder none of them has created yet.)
+- [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
+      `"contextBudgetTokens": 0`, `"compileConcurrency": "two"` or
+      `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
+      pages keep their grounding, and nothing is rewritten from an empty
+      context. Restore the file afterwards.
