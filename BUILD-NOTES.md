@@ -1934,3 +1934,36 @@ what is drawn and what a pointer resolves against cannot be two different things
 The inverse transform is mutation-validated in both the ways it can plausibly be
 written wrong — offset applied in the wrong order, and multiplying where it should
 divide — and each fails both the round-trip and the zoom-about-cursor assertions.
+
+**§9's overlay: one shape, three producers.** Click-PPR, query inspection and trace
+replay light the graph from different data for different reasons, but §9 describes
+one visual language for all three — ring, stroke, ramp, dim. They converge on one
+model in `overlay.ts` rather than each teaching the renderer a new vocabulary.
+
+- **S31** — `scores: null` is a distinct state from an empty map. §9 gives Mode-A
+  inspection "seeds and lexical top-K without a PPR heat ramp"; an empty map is
+  still a ramp, just one painting every node at zero.
+- **S32** — the ramp is normalized against the strongest node. PPR scores on a real
+  graph are small absolute numbers and a ramp keyed to raw values is flat
+  everywhere; relative is also the honest reading, since the overlay answers "what
+  did this reach" rather than "how much mass".
+- **S33** — filter and overlay dim independently and compose by multiplication. §9
+  describes them as separate controls, so a node outside both is dimmer than one
+  outside either. A minimum would make whichever was applied second invisible.
+- **S34** — a press that travels more than four pixels is a drag, not a click. §9
+  gives the two gestures different jobs on the same button, and without a distance
+  test every drag-to-pin would also re-run PPR.
+- **S35** — `DIM_OPACITY` 0.15, `TOP_K_STROKE` 2, `SEED_RING_WIDTH` 2,
+  `SEED_RING_GAP` 3, `CLICK_SLOP` 4: module-local, none named by §9 or §17.
+- **S36** — top-K stroke uses §17's existing `assemblyCap`. M4 introduces no
+  tunable, and `normalizeSettings` is now on the façade so the pane reads the same
+  clamped value an operation would.
+
+**A dead guard that claimed to prevent a division.** `normalize` opened with
+`if (peak <= 0) return out`, commented as the divide-by-zero protection. Removing
+it left all 36 assertions green, because the `value > 0` filter is what actually
+prevents the division: if no score is positive then the peak is not positive
+either, and nothing enters the loop body. Found by mutation, not by reading. The
+comment now describes what does the work, and two assertions pin the reachable
+cases — an isolated seed holding only teleport mass (§7.2), and the negative score
+a hand-edited trace can carry, since `parseTop` accepts `-0.5`.

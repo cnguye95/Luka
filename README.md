@@ -311,3 +311,18 @@ unless a step says otherwise.
       a raw source opens its readable markdown.
 - [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
       label.
+- [ ] Clicking a node recolours the graph instantly: the clicked node gains a
+      ring, the top-K gain a stroke, reached nodes take a heat ramp, and
+      everything unreached dims. No network request appears in the developer
+      tools. (§9's "no model call".)
+- [ ] The status line names the overlay while one is active.
+- [ ] Pressing Esc clears the overlay and restores the plain graph.
+- [ ] Typing in the filter box dims non-matching nodes as you type, matching on
+      both title and path, case-insensitively. Clearing it restores everything.
+      Again, no network request.
+- [ ] Filter and overlay compose: with both active, a node outside both is
+      dimmer than one outside only one of them.
+- [ ] Click-PPR still works while a compile is running — the pane is never
+      blocked by the lock.
+- [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
+      without movement does.

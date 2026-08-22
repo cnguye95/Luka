@@ -66,3 +66,8 @@
   margin-top: var(--size-4-1);
   color: var(--text-muted);
 }
+
+.luka-graph-filter {
+  flex: 1 1 8em;
+  min-width: 6em;
+}

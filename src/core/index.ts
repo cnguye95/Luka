@@ -87,7 +87,9 @@ export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
 export type { ScopePreview } from "./compile/cascade";
 export type { SkippedSource } from "./compile/discover";
-export { DEFAULT_SETTINGS } from "./types";
+// §17's clamps are core's, so a consumer reading a settings number gets the
+// same value the operation would — the pane's top-K is §17's own K.
+export { DEFAULT_SETTINGS, normalizeSettings } from "./types";
 export type { IngestManifest, LukaSettings, ManifestEntry, ProviderTask } from "./types";
 export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types";
 // §7.1's node set — "every manifest source's readable markdown" — is exactly

@@ -6,6 +6,7 @@
 // Pure: `draw` takes a frame and paints it, `hitTest` reverses the same camera
 // transform. Nothing here reads the vault, the core, or the clock, so what the
 // pane shows is a function of what it was handed.
+import { heatOf, isLit, matchesFilter, type Overlay } from "./overlay";
 import type { SimNode } from "./sim";
 
 /**
@@ -20,6 +21,11 @@ const LABEL_LIMIT = 10;
 const LABEL_DROP_THRESHOLD = 500;
 const LABEL_OFFSET = 4;
 const EDGE_ALPHA = 0.25;
+/** §9's "non-neighborhood dimmed", and the filter's "dims non-matches". */
+const DIM_OPACITY = 0.15;
+const TOP_K_STROKE = 2;
+const SEED_RING_WIDTH = 2;
+const SEED_RING_GAP = 3;
 
 export interface Theme {
   background: string;
@@ -30,6 +36,9 @@ export interface Theme {
   raw: string;
   label: string;
   edge: string;
+  /** The hot end of §9's heat ramp, and the seed ring / top-K stroke. */
+  accent: string;
+  heat: string;
   font: string;
 }
 
@@ -50,6 +59,10 @@ export interface Frame {
   width: number;
   height: number;
   hovered: string | null;
+  /** §9's overlay, or `null` for the baseline view. */
+  overlay: Overlay | null;
+  /** §9's filter box text. Empty matches everything. */
+  filter: string;
 }
 
 /**
@@ -74,6 +87,8 @@ export function sampleTheme(el: HTMLElement): Theme {
     raw: read("--text-faint", "#6b6b6b"),
     label: read("--text-muted", "#9a9a9a"),
     edge: read("--background-modifier-border", "#3a3a3a"),
+    accent: read("--interactive-accent", "#7f6df2"),
+    heat: read("--color-red", "#e05252"),
     font: read("--font-interface", "sans-serif"),
   };
 }
@@ -94,6 +109,38 @@ export function colorFor(kind: string, theme: Theme): string {
 /** §9: "baseline radius ∝ log(degree+1)". */
 export function radiusFor(degree: number): number {
   return RADIUS_BASE + RADIUS_SCALE * Math.log(degree + 1);
+}
+
+/**
+ * How visible a node is: the overlay and the filter dim independently.
+ *
+ * §9 describes them as separate controls — the filter "dims non-matches" with
+ * no mention of the overlay, and the overlay dims "non-neighborhood" with no
+ * mention of the filter — so a node outside both is dimmer than one outside
+ * either. Multiplying is what makes the two readable at once; taking a minimum
+ * would make the second one applied invisible.
+ */
+export function opacityOf(node: SimNode, frame: Frame): number {
+  const byOverlay = frame.overlay === null || isLit(frame.overlay, node.path) ? 1 : DIM_OPACITY;
+  const byFilter = matchesFilter(node, frame.filter) ? 1 : DIM_OPACITY;
+  return byOverlay * byFilter;
+}
+
+/** Mixes two `#rrggbb` colours; anything else falls back to the destination. */
+function rampBetween(from: string, to: string, position: number): string {
+  const a = parseHex(from);
+  const b = parseHex(to);
+  if (a === null || b === null) return position > 0 ? to : from;
+  const at = Math.min(1, Math.max(0, position));
+  const mix = (low: number, high: number) => Math.round(low + (high - low) * at);
+  return `rgb(${String(mix(a[0], b[0]))}, ${String(mix(a[1], b[1]))}, ${String(mix(a[2], b[2]))})`;
+}
+
+function parseHex(colour: string): [number, number, number] | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(colour.trim());
+  if (match === null) return null;
+  const value = parseInt(match[1] as string, 16);
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
 /** Graph space → canvas space, the transform `hitTest` reverses. */
@@ -156,11 +203,39 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
 
   for (const node of nodes) {
     const at = toScreen(node, camera);
-    ctx.fillStyle = colorFor(node.kind, theme);
+    const radius = radiusFor(node.degree) * camera.scale;
+
+    ctx.globalAlpha = opacityOf(node, frame);
+    // §9's heat ramp replaces the kind colour where a score reaches the node;
+    // without an overlay, or where it does not reach, the kind colour stands.
+    ctx.fillStyle =
+      frame.overlay === null || frame.overlay.scores === null
+        ? colorFor(node.kind, theme)
+        : rampBetween(colorFor(node.kind, theme), theme.heat, heatOf(frame.overlay, node.path));
     ctx.beginPath();
-    ctx.arc(at.x, at.y, radiusFor(node.degree) * camera.scale, 0, Math.PI * 2);
+    ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
     ctx.fill();
+
+    if (frame.overlay !== null) {
+      // §9: "ring = seeds, stroke = top-K". A node can be both, and then it
+      // carries both marks — the ring sits outside the stroke.
+      if (frame.overlay.topK.has(node.path)) {
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = TOP_K_STROKE;
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (frame.overlay.seeds.has(node.path)) {
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = SEED_RING_WIDTH;
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, radius + SEED_RING_GAP, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
   }
+  ctx.globalAlpha = 1;
 
   // §9's degradation: "drop labels first". The hovered node keeps its label —
   // it is the answer to a gesture the user just made, and it is one string.

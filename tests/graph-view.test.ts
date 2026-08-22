@@ -13,11 +13,20 @@ import {
   colorFor,
   draw,
   hitTest,
+  opacityOf,
   radiusFor,
   toGraph,
   type Frame,
   type Theme,
 } from "../src/plugin/graph-view/render";
+import {
+  fromClickPPR,
+  fromInspect,
+  fromTrace,
+  heatOf,
+  isLit,
+  matchesFilter,
+} from "../src/plugin/graph-view/overlay";
 import { createSim, type SimNode } from "../src/plugin/graph-view/sim";
 import type { GraphSnapshot } from "../src/core/types";
 
@@ -29,6 +38,8 @@ const THEME: Theme = {
   raw: "#808080",
   label: "#aaa",
   edge: "#333",
+  accent: "#ff00ff",
+  heat: "#ff0000",
   font: "sans-serif",
 };
 
@@ -52,6 +63,8 @@ const frameOf = (nodes: SimNode[], over: Partial<Frame> = {}): Frame => ({
   width: 800,
   height: 600,
   hovered: null,
+  overlay: null,
+  filter: "",
   ...over,
 });
 
@@ -379,5 +392,151 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
 
     expect(sim.nodes.map((n) => n.path)).toEqual(["a.md"]);
     sim.stop();
+  });
+});
+
+describe("§9's overlay: ring, stroke, ramp, dim", () => {
+  const scores = new Map([
+    ["a.md", 1.0],
+    ["b.md", 0.5],
+    ["c.md", 0.25],
+    ["cold.md", 0],
+  ]);
+
+  it("rings the seed and strokes the top K", () => {
+    const overlay = fromClickPPR(scores, "a.md", 2);
+
+    expect([...overlay.seeds]).toEqual(["a.md"]);
+    expect(overlay.topK).toEqual(new Set(["a.md", "b.md"]));
+  });
+
+  it("normalizes the ramp against the strongest node", () => {
+    // PPR scores are small absolute numbers; a ramp keyed to raw values is flat
+    // everywhere. The overlay answers "what did this reach", which is relative.
+    const overlay = fromClickPPR(scores, "a.md", 2);
+
+    expect(overlay.scores?.get("a.md")).toBe(1);
+    expect(overlay.scores?.get("b.md")).toBe(0.5);
+  });
+
+  it("survives an isolated seed, whose every score is zero", () => {
+    // §7.2 gives a degree-0 seed the teleport mass and everything else zero, so
+    // the peak is zero and no ratio is defined. The ramp comes back empty —
+    // never NaN, which would paint as a colour nobody chose.
+    const overlay = fromClickPPR(new Map([["lonely.md", 0]]), "lonely.md", 5);
+
+    expect(overlay.scores?.size).toBe(0);
+    for (const value of overlay.scores?.values() ?? []) expect(Number.isNaN(value)).toBe(false);
+    // It is still the seed, so it is still lit and still ringed.
+    expect(isLit(overlay, "lonely.md")).toBe(true);
+  });
+
+  it("ignores a negative score a hand-edited trace could carry", () => {
+    // `parseTop` accepts `-0.5`, so this reaches `normalize` from a note the
+    // user has edited. It must not produce a negative ramp position, which
+    // would mix the heat colour backwards past the kind colour.
+    const overlay = fromTrace({ seeds: [], top: [{ path: "odd.md", score: -0.5 }] }, "B", 0);
+
+    expect(overlay.scores?.size).toBe(0);
+    expect(heatOf(overlay, "odd.md")).toBe(0);
+  });
+
+  it("dims a node the walk never reached", () => {
+    // §9: "non-neighborhood dimmed".
+    const overlay = fromClickPPR(scores, "a.md", 2);
+
+    expect(isLit(overlay, "c.md")).toBe(true);
+    expect(isLit(overlay, "cold.md")).toBe(false);
+    expect(isLit(overlay, "absent.md")).toBe(false);
+  });
+
+  it("breaks top-K ties by path, so two runs agree", () => {
+    // §7.2's rule for ranking, applied to the same data the ranking produced.
+    const tied = new Map([
+      ["z.md", 0.4],
+      ["a.md", 0.4],
+      ["m.md", 0.4],
+    ]);
+
+    expect([...fromClickPPR(tied, "a.md", 2).topK].sort()).toEqual(["a.md", "m.md"]);
+  });
+
+  it("carries no ramp for a Mode-A inspection, and one for Mode B", () => {
+    // §9: Mode A overlays "seeds and lexical top-K without a PPR heat ramp".
+    // Null rather than an empty map — an empty map paints every node at zero
+    // heat, which is a ramp, just a flat one.
+    const ranked = [
+      { path: "a.md", score: 4 },
+      { path: "b.md", score: 2 },
+    ];
+
+    expect(fromInspect({ mode: "A", seeds: ["a.md"], ranked }, 2, "q").scores).toBeNull();
+    expect(fromInspect({ mode: "B", seeds: ["a.md"], ranked }, 2, "q").scores).not.toBeNull();
+  });
+
+  it("lights a Mode-A overlay by seeds and top-K alone", () => {
+    const overlay = fromInspect(
+      { mode: "A", seeds: ["seed.md"], ranked: [{ path: "top.md", score: 3 }] },
+      5,
+      "q",
+    );
+
+    expect(isLit(overlay, "seed.md")).toBe(true);
+    expect(isLit(overlay, "top.md")).toBe(true);
+    expect(isLit(overlay, "other.md")).toBe(false);
+  });
+
+  it("replays a trace from its recorded scores, and counts what it could not find", () => {
+    const overlay = fromTrace(
+      { seeds: ["s.md"], top: [{ path: "t.md", score: 0.08 }] },
+      "B",
+      2,
+    );
+
+    expect(overlay.scores?.get("t.md")).toBe(1);
+    expect(overlay.label).toContain("2 unresolved");
+    expect(fromTrace({ seeds: [], top: [] }, "B", 0).label).not.toContain("unresolved");
+  });
+});
+
+describe("§9's filter, and how it composes with the overlay", () => {
+  it("matches on title or path, case-insensitively", () => {
+    const target = node("wiki/concepts/PageRank.md", { title: "PageRank" });
+
+    expect(matchesFilter(target, "pagerank")).toBe(true);
+    expect(matchesFilter(target, "CONCEPTS")).toBe(true);
+    expect(matchesFilter(target, "photosynthesis")).toBe(false);
+  });
+
+  it("matches everything when empty or blank", () => {
+    const target = node("a.md");
+
+    expect(matchesFilter(target, "")).toBe(true);
+    expect(matchesFilter(target, "   ")).toBe(true);
+  });
+
+  it("dims for the overlay and the filter independently", () => {
+    // §9 describes them as separate controls. A node outside both is dimmer
+    // than one outside either, so both remain readable at once.
+    const overlay = fromClickPPR(new Map([["lit.md", 1]]), "lit.md", 1);
+    const lit = node("lit.md", { title: "lit" });
+    const dark = node("dark.md", { title: "dark" });
+
+    const both = frameOf([lit, dark], { overlay, filter: "lit" });
+
+    const litOpacity = opacityOf(lit, both);
+    const oneMiss = opacityOf(dark, frameOf([dark], { overlay, filter: "" }));
+    const twoMiss = opacityOf(dark, both);
+
+    expect(litOpacity).toBe(1);
+    expect(oneMiss).toBeLessThan(litOpacity);
+    expect(twoMiss).toBeLessThan(oneMiss);
+  });
+
+  it("dims a filter non-match with no overlay at all", () => {
+    const target = node("a.md", { title: "alpha" });
+
+    expect(opacityOf(target, frameOf([target], { filter: "zzz" }))).toBeLessThan(1);
+    expect(opacityOf(target, frameOf([target], { filter: "alp" }))).toBe(1);
   });
 });

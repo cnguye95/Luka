@@ -11,7 +11,8 @@
 // simulation, from a reheat until it cools past `alphaMin` — and every frame is
 // scheduled by an event, never by a standing `requestAnimationFrame` chain.
 import { ItemView, Notice, type WorkspaceLeaf } from "obsidian";
-import type { Core, GraphSnapshot } from "../../core/index";
+import { normalizeSettings, type Core, type GraphSnapshot, type LukaSettings } from "../../core/index";
+import { fromClickPPR, type Overlay } from "./overlay";
 import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
 import { createSim, type Sim, type SimNode } from "./sim";
 
@@ -28,12 +29,15 @@ const ZOOM_SENSITIVITY = 0.002;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 6;
 const TOOLTIP_OFFSET = 12;
+/** Pointer travel, in CSS pixels, that turns a click into a drag. */
+const CLICK_SLOP = 4;
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
 export class LukaGraphView extends ItemView {
   private readonly core: Core;
+  private readonly settings: LukaSettings;
   /** `onGraphRebuilt`'s unsubscribe, held so `onClose` can stop listening. */
   private unsubscribe: (() => void) | null = null;
   private graph: GraphSnapshot | null = null;
@@ -48,14 +52,21 @@ export class LukaGraphView extends ItemView {
   private tooltipEl: HTMLElement | null = null;
   private camera: Camera = { x: 0, y: 0, scale: 1 };
   private hovered: string | null = null;
+  private overlay: Overlay | null = null;
+  private filter = "";
+  /** Where a pointer went down, so a drag is not mistaken for a click. */
+  private pressedAt: { x: number; y: number } | null = null;
   /** The node under an active drag, or `null` when panning or idle. */
   private dragging: SimNode | null = null;
   /** Where a background pan started, in canvas space. */
   private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
-  constructor(leaf: WorkspaceLeaf, core: Core) {
+  constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings) {
     super(leaf);
     this.core = core;
+    // The plugin's live object, not a copy: §17's numbers are read when they
+    // are used, so a change in the settings tab reaches the next overlay.
+    this.settings = settings;
   }
 
   override getViewType(): string {
@@ -80,6 +91,28 @@ export class LukaGraphView extends ItemView {
     refresh.addEventListener("click", () => {
       void this.reload();
     });
+
+    // §9: "lexical filter box dims non-matches (no model call)". Nothing here
+    // touches the provider, and the handler is a plain substring test.
+    const filter = toolbar.createEl("input", {
+      type: "search",
+      cls: "luka-graph-filter",
+      placeholder: "Filter…",
+    });
+    this.registerDomEvent(filter, "input", () => {
+      this.filter = filter.value;
+      this.schedule();
+    });
+
+    // §9: "Esc clears overlay". On the container rather than the canvas so it
+    // works wherever focus sits inside the pane.
+    this.registerDomEvent(root, "keydown", (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || this.overlay === null) return;
+      event.preventDefault();
+      this.setOverlay(null);
+    });
+    // Focusable, or the container never receives the key at all.
+    root.tabIndex = -1;
 
     this.statusEl = root.createDiv({ cls: "luka-graph-status" });
     this.bodyEl = root.createDiv({ cls: "luka-graph-body" });
@@ -115,6 +148,8 @@ export class LukaGraphView extends ItemView {
     this.dragging = null;
     this.panFrom = null;
     this.hovered = null;
+    this.overlay = null;
+    this.filter = "";
     this.graph = null;
     this.contentEl.empty();
   }
@@ -154,9 +189,7 @@ export class LukaGraphView extends ItemView {
       return;
     }
 
-    this.statusEl.setText(
-      `${String(graph.nodes.length)} nodes, ${String(graph.edges.length)} edges`,
-    );
+    this.statusEl.setText(this.statusText());
 
     if (this.canvas === null) {
       this.bodyEl.empty();
@@ -206,6 +239,7 @@ export class LukaGraphView extends ItemView {
         return;
       }
       this.dragging = node;
+      this.pressedAt = point;
       this.sim?.dragStart(node);
     });
 
@@ -242,11 +276,22 @@ export class LukaGraphView extends ItemView {
 
     const endGesture = (event: PointerEvent) => {
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      const node = this.dragging;
+      const from = this.pressedAt;
       // §9's drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
       // so the node stays where it was dropped.
-      if (this.dragging !== null) this.sim?.dragEnd();
+      if (node !== null) this.sim?.dragEnd();
       this.dragging = null;
       this.panFrom = null;
+      this.pressedAt = null;
+
+      // A press that did not travel is a click, not a drag. §9 gives the two
+      // gestures different jobs on the same button, and distance is what tells
+      // them apart — a pin that also re-ran PPR would fire on every drag.
+      if (node === null || from === null) return;
+      const point = at(event);
+      if (Math.hypot(point.x - from.x, point.y - from.y) > CLICK_SLOP) return;
+      void this.runClickPPR(node.path);
     };
     this.registerDomEvent(canvas, "pointerup", endGesture);
     this.registerDomEvent(canvas, "pointercancel", endGesture);
@@ -283,6 +328,42 @@ export class LukaGraphView extends ItemView {
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
+  }
+
+  /**
+   * §9: "click a node → instant PPR from that node (no model call)".
+   *
+   * `computePPR` takes no lock, so this works while a compile runs — and makes
+   * no provider call, which is why §9 calls it instant.
+   */
+  private async runClickPPR(path: string): Promise<void> {
+    try {
+      const result = await this.core.computePPR([path]);
+      // Never `snapshots: true`: the per-iteration vectors are the M5
+      // scrubber's, and retaining up to 100 of them costs memory for a feature
+      // this milestone does not ship.
+      this.setOverlay(fromClickPPR(result.scores, path, this.topK()));
+    } catch (error) {
+      new Notice(`Luka: could not rank from that node — ${message(error)}`, 6000);
+    }
+  }
+
+  /** §9's top-K stroke uses §17's existing K; M4 adds no tunable. */
+  private topK(): number {
+    return normalizeSettings(this.settings).assemblyCap;
+  }
+
+  private setOverlay(overlay: Overlay | null): void {
+    this.overlay = overlay;
+    this.statusEl.setText(this.statusText());
+    this.schedule();
+  }
+
+  private statusText(): string {
+    const graph = this.graph;
+    if (graph === null) return "";
+    const counts = `${String(graph.nodes.length)} nodes, ${String(graph.edges.length)} edges`;
+    return this.overlay === null ? counts : `${counts} — ${this.overlay.label}`;
   }
 
   /** §9's hover tooltip: "title, kind, summary" — from the node, never the vault. */
@@ -324,6 +405,8 @@ export class LukaGraphView extends ItemView {
       width: this.bodyEl.clientWidth,
       height: this.bodyEl.clientHeight,
       hovered: this.hovered,
+      overlay: this.overlay,
+      filter: this.filter,
     };
   }
 

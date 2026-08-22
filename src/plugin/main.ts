@@ -28,7 +28,7 @@ export default class LukaPlugin extends Plugin {
     });
 
     this.addSettingTab(new LukaSettingTab(this.app, this));
-    this.registerView(GRAPH_VIEW_TYPE, (leaf) => new LukaGraphView(leaf, this.core));
+    this.registerView(GRAPH_VIEW_TYPE, (leaf) => new LukaGraphView(leaf, this.core, this.settings));
     // §8.1: "One ribbon icon: the graph pane." The only one Luka adds.
     this.addRibbonIcon("git-fork", "Luka: Open graph", () => {
       void this.openGraph();
