@@ -267,20 +267,36 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     );
   });
 
-  it("truncates on an even cycle and settles on an odd one of the same density", () => {
-    // Sparsity is not the variable either — two comments in a row said it was.
-    // Both cycles carry exactly one edge per node. The even one is bipartite,
-    // so its walk matrix has an eigenvalue of -1 and that error component
-    // decays at exactly α; the odd one has no such eigenvalue and mixes.
+  it("does not truncate by density: cycles of one edge per node fall both ways", () => {
+    // An earlier version of this test used cycles of 3 and 5 against 4 and 6
+    // and read the split as odd-versus-even. It is not: the odd ones climb
+    // 24, 53, 73, 87, 96 and then cross the cap, so 3 and 5 settling was a
+    // size coincidence inside a test written to disprove a size claim.
+    // Every graph here carries exactly one edge per node.
     const options = { alpha: 0.85, maxIterations: 100 };
+    const settles = (size: number) => computePPR(cycle(size), [N("n00")], options).converged;
 
-    expect(computePPR(cycle(4), [N("n00")], options).converged).toBe(false);
-    expect(computePPR(cycle(6), [N("n00")], options).converged).toBe(false);
-    expect(computePPR(cycle(3), [N("n00")], options).converged).toBe(true);
-    expect(computePPR(cycle(5), [N("n00")], options).converged).toBe(true);
-    // Same edges per node on both sides of that split.
-    expect(cycle(4).edges.length / cycle(4).nodes.length).toBe(1);
     expect(cycle(5).edges.length / cycle(5).nodes.length).toBe(1);
+    expect(cycle(13).edges.length / cycle(13).nodes.length).toBe(1);
+
+    expect(settles(5)).toBe(true);
+    expect(settles(11)).toBe(true);
+    // Same density, odd, larger — and over the cap.
+    expect(settles(13)).toBe(false);
+    expect(settles(51)).toBe(false);
+  });
+
+  it("truncates or not by seed set, on one unchanged graph", () => {
+    // The graph is held fixed and only the seeds move, so nothing about the
+    // topology can explain this one. Mode B seeds several nodes, so the
+    // converging case is the normal one.
+    const options = { alpha: 0.85, maxIterations: 100 };
+    const ends = computePPR(chain(4), [N("n00")], options);
+    const every = computePPR(chain(4), ["n00", "n01", "n02", "n03"].map(N), options);
+
+    expect(ends.converged).toBe(false);
+    expect(every.converged).toBe(true);
+    expect(every.iterations).toBe(22);
   });
 
   it("reports convergence for an empty seed set rather than truncation", () => {

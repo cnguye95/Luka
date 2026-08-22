@@ -1535,6 +1535,27 @@ faster, giving 118 at α = 0.85 whatever the size. Paths, stars and even cycles
 are bipartite; the shipped fixture is not, and converges in 69–82. Having now
 been wrong twice in prose, the odd/even cycle pair is pinned by a test instead.
 
+**And that was wrong too — the third time at the same docstring.** Bipartiteness
+is neither sufficient nor necessary, and both counterexamples were two lines
+away from the ones that were run. Odd cycles are not bipartite and truncate as
+soon as they are big enough: 3, 5, 7, 9, 11 settle in 24, 53, 73, 87, 96 — a
+climb toward the cap, not a plateau — and 13, 31, 51, 101 need 101, 116, 118,
+118. So the odd cycles chosen as evidence were simply small enough to settle,
+which is the size confound the test was written to disprove. In the other
+direction, bipartite graphs converge fast on more than one seed: a 4-chain
+seeded at one end truncates, and seeded at all four nodes converges in 22;
+`cycle(6)` seeded everywhere converges in 1. Mode B seeds several nodes, so the
+converging case is the ordinary one.
+
+The lesson taken is not "find the right mechanism". Three attempts produced
+three confident wrong ones, each surviving because the test was built from the
+same examples as the claim. The docstring now records measured numbers and
+attaches no mechanism at all, and the tests were rebuilt to discriminate: one
+holds density fixed and lets size decide, one holds the graph fixed and lets the
+seed set decide. The removed assertion — `cycle(4).edges.length /
+cycle(4).nodes.length === 1` — was a fixture self-check that could only fail if
+the test file's own helper were edited.
+
 **The `scope` label had no test that could see it inverted.** `scope` is the
 whole mechanism that stops `--live` being held to floors calibrated from a
 subset it does not measure, and `run.ts` is its only consumer — one CI never
@@ -1550,10 +1571,17 @@ the numbers, not that `ranking:` held anything — a bare `ranking:` key parses 
 `null`, slipped `=== undefined`, and threw `TypeError: Cannot read properties of
 null` mid-run, with mode B never measured. Rather than add a third guard beside
 the other two, `validateFloors` now checks the whole shape once when the file is
-read, names the offending key, and runs before any mode is measured — which also
-removes two `--live` ordering bugs the reviewer found in the same area, where
-the scope skip ran ahead of the non-finite check and where the container guard
-failed a run for a floor `--live` would not have applied.
+read, names the offending key, and runs before any mode is measured. That fixes
+one of the two `--live` ordering bugs found in the same area outright: the
+container guard no longer fails a run for a floor `--live` would not have
+applied. It does *not* fix the other. The scope skip still precedes the
+non-finite check in `run.ts`, in that order, unchanged — what changed is that
+`belowFloor` can no longer be reached from `run.ts` with a non-finite floor, so
+the `NO FLOOR:` branch beneath it is now unreachable. It is kept, like
+`health.ts`'s `Object.hasOwn` guard, as the correct thing for a function that is
+also called directly by its unit tests — which do exercise it. Saying it was
+removed, when it was only made unreachable, is the kind of claim this log has
+already been wrong about three times.
 
 Left open, logged not fixed: `buildTitleTable` (title order, titles-then-aliases
 in two passes) and `buildGraph`'s `claim` loop (path order, titles and aliases
@@ -1608,16 +1636,24 @@ more care.
 Two standing conventions come out of this milestone's review waves, both earned
 the hard way:
 
-- **No causal claim in a comment unless it is measured and pinned.** Two
-  consecutive rewrites of `converged`'s documentation asserted a mechanism
-  (node count, then sparsity) that had never been measured, while the numbers
-  beside them were correct both times. The odd/even cycle test exists because
-  prose was wrong twice.
+- **No causal claim in a comment unless it is measured and pinned by a test
+  that could contradict it.** `converged`'s documentation asserted a mechanism
+  three times — node count, then sparsity, then bipartiteness — and all three
+  were wrong, while the numbers beside them were correct every time. The third
+  attempt shipped *with* a test, and the test still did not help: it was built
+  from the same examples as the claim, so it agreed by construction. The
+  standing rule is therefore stronger than "measure it". Either state measured
+  numbers and attach no mechanism, which is what the docstring now does, or
+  pin the claim with a case chosen to break it rather than to confirm it.
 - **Validate a shape at its boundary, once, not one guard at a time.** The
   floor guard was written three times, each a level deeper — existence, then
   leaf types, then container null — and each round's guard was correct about
   what it checked. `validateFloors` checks the whole shape where the file is
-  read.
+  read. One deliberate gap: an unrecognized mode key is accepted rather than
+  refused. A mistyped *real* mode is already caught downstream by `floor ===
+  undefined`, so refusing extras would buy nothing, and §0 takes the smaller
+  option — but the convention above is stated as "the whole shape", and this is
+  the part of the shape it does not check.
 
 ### M3 closeout — the review-wave record
 
@@ -1635,7 +1671,14 @@ the wave.** The finding was that the eval cannot catch a PPR regression,
 evidenced by quartering the damping factor and watching CI stay green. Both
 halves fail on measurement: quartering α *raises* Mode B recall@5 from 0.7604 to
 0.8229, so it is not a regression on this fixture and no floor can fire on it,
-and it already fails six tests in `ppr.test.ts`/`fuzz-ppr.test.ts`. Four
+and it already fails eight tests — six in `ppr.test.ts`, two in
+`fuzz-ppr.test.ts` — when α is quartered *inside* `computePPR`. Worth separating
+the two mutations, because the sentence above ran them together: quartering
+`DEFAULT_SETTINGS.pprAlpha` instead, which is what produces the 0.8229 figure,
+fails **zero** tests in those two files, since both redeclare `SPEC_ALPHA`
+locally rather than reading the setting. The rebuttal stands either way — CI
+would not have stayed green — but the count belonged to one mutation and the
+recall figure to the other. Four
 mutations that do degrade ranking were all caught by the existing overall
 floors. The real weakness — dilution, 8 of 16 queries scoring for free — was
 worth fixing, but it buys headroom, not detection, and no demonstrated

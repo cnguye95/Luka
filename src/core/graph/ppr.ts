@@ -35,23 +35,29 @@ export interface PPRResult {
    * limit with the vector still moving.
    *
    * Worth reporting because the spec's own defaults truncate on ordinary
-   * topologies. Neither size nor sparsity is the variable — *bipartiteness* is.
-   * A bipartite walk matrix carries an eigenvalue of −1, so that component of
-   * the error decays at exactly α per step and never faster; at α = 0.85 that
-   * is 118 iterations to reach §7.2's 1e-8, whatever the graph's size, and
-   * §7.2 caps at 100. Measured: chains of 2 through 16, stars of 3, 5 and 10,
-   * and cycles of 4 and 6 all need exactly 118 and all truncate. Cycles of 3,
-   * 5 and 7 — the same edges per node, but odd, so not bipartite — settle in
-   * 24, 53 and 73. The 65-node fixture this repo ships converges from every
-   * single seed in 69–82, inside the cap but by less than a fifth of it.
+   * topologies. No mechanism is claimed here, deliberately: three earlier
+   * versions of this comment blamed node count, then sparsity, then
+   * bipartiteness, and all three were falsified by a two-line experiment
+   * against the helpers in `ppr.test.ts`. What is recorded instead is what was
+   * measured, at α = 0.85 against §7.2's cap of 100 and threshold of 1e-8.
    *
-   * Two earlier versions of this comment blamed node count and then sparsity.
-   * Both were wrong, which is why the odd/even cycle pair is now pinned by a
-   * test rather than described here.
+   * - Chains of 2 through 16 and stars of 3, 5 and 10 all need 118 and truncate
+   *   — so size does not predict it.
+   * - Cycles of 3, 5, 7, 9 and 11 settle in 24, 53, 73, 87 and 96; cycles of
+   *   13, 31, 51 and 101 need 101, 116, 118 and 118 and truncate. Identical
+   *   edges per node throughout — so density does not predict it either, and
+   *   the settling ones are a climb toward the cap, not a plateau.
+   * - The seed set moves it as much as the graph does: a 4-chain seeded at one
+   *   end truncates, and the same chain seeded at all four nodes converges in
+   *   22. Mode B seeds several nodes, so this is the normal case.
+   * - The 65-node fixture this repo ships converges from every single seed in
+   *   69–82, inside the cap but by less than a fifth of it.
    *
    * All of it is spec-compliant ("max 100") and the residual is small, but a
    * caller that could not tell a settled answer from a truncated one has no
-   * way to notice a change that made convergence worse.
+   * way to notice a change that made convergence worse. That is what this flag
+   * is for, and it is why the numbers above are pinned by tests that can
+   * discriminate rather than restated as a rule.
    */
   converged: boolean;
   snapshots?: ReadonlyMap<string, number>[];

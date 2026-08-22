@@ -414,13 +414,31 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
   //
   // Redeclared locally rather than imported: a test that imports the pattern it
   // checks agrees with the code by construction.
-  const SPEC_PARSER_SENTINELS = ["<!-- trace:start -->", "<!-- trace:end -->"];
+  // All three block parsers: `trace.ts`'s BLOCK, this module's sources block,
+  // and `compile/citations.ts`'s BLOCK — the last reachable because §8.4 files
+  // an answer into raw/answers/, which the next compile reads as a source.
+  const SPEC_PARSER_SENTINELS = [
+    "<!-- trace:start -->",
+    "<!-- trace:end -->",
+    "<!-- sources:start -->",
+    "<!-- sources:end -->",
+    "<!-- citations:start -->",
+    "<!-- citations:end -->",
+  ];
 
   /**
    * Every complete line of `text`. An empty result is zero lines, not one
    * blank one — removing the only line of a body leaves "".
    */
-  const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+  const linesOf = (text: string) => {
+    // One trailing newline is a line *terminator*, not an empty line after it.
+    // Without this, stripping a sentinel that ended the body leaves "before\n",
+    // which splits to ["before", ""] and reports "" as a line the original
+    // never had — a false failure on exactly the end-of-file boundary the
+    // anchor is about.
+    const body = text.endsWith("\n") ? text.slice(0, -1) : text;
+    return body === "" ? [] : body.split("\n");
+  };
 
   it("removes only whole lines, never part of one", () => {
     // The property the `$` anchor carries. `BLOCK` requires a sentinel to be
@@ -435,6 +453,10 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
       "```md\n<!-- trace:start -->   <- annotated\n```",
       "no sentinels here at all",
       "<!-- trace:end -->",
+      // Sentinel as the last line, no trailing newline — the end-of-file
+      // boundary the `$` half of the anchor exists for.
+      "before\n<!-- trace:end -->",
+      "a\n<!-- trace:start -->\nb\n<!-- trace:end -->",
     ];
 
     for (const body of bodies) {
