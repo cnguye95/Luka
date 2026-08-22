@@ -1618,3 +1618,56 @@ the hard way:
   leaf types, then container null — and each round's guard was correct about
   what it checked. `validateFloors` checks the whole shape where the file is
   read.
+
+### M3 closeout — the review-wave record
+
+Four review waves over the milestone, 28 commits from `f3d6e95`.
+
+| wave | scope | outcome |
+|---|---|---|
+| step 19 | the M3 build (steps 1–18 + H) | three reviewers, disjoint scope |
+| step 20 | fixes for that wave | R1 and R2 batches, then S-2 |
+| step 21 | the step-20 diff, one reviewer | 9 confirmed; **faulted the fixes** |
+| step 21b | the step-20b diff, one reviewer | 6 confirmed; **faulted them again** → stop-rule |
+
+**S-2's premise did not survive checking, and this is the most useful thing in
+the wave.** The finding was that the eval cannot catch a PPR regression,
+evidenced by quartering the damping factor and watching CI stay green. Both
+halves fail on measurement: quartering α *raises* Mode B recall@5 from 0.7604 to
+0.8229, so it is not a regression on this fixture and no floor can fire on it,
+and it already fails six tests in `ppr.test.ts`/`fuzz-ppr.test.ts`. Four
+mutations that do degrade ranking were all caught by the existing overall
+floors. The real weakness — dilution, 8 of 16 queries scoring for free — was
+worth fixing, but it buys headroom, not detection, and no demonstrated
+regression is caught by the subset that the overall means miss.
+
+**Two of step 21's nine confirmed findings were mis-diagnosed, and applying them
+would have introduced defects.** Both concerned the synthesize seam. The claim
+that a forged block's links become graph edges is false — rendered and filed,
+the distinct link targets are exactly code's own, because `validateAnswerLinks`
+runs over the whole body first; verified at `30101d7` too, so it was never true.
+The claim that the stripper should spare code fences is worse than false: every
+consumer downstream is fence-blind, so sparing sentinels hands `stripTrace` a
+block to delete at filing, which empties the fence entirely, and sparing links
+would let a model smuggle an edge to a never-retrieved page past §8.3. Measured
+both ways before deciding.
+
+That is the standing lesson for reading a reviewer: **verify a finding before
+acting on it, including — especially — a confident one.** Seven of nine held and
+two did not, and the two that did not were argued as fluently as the seven.
+
+**The scoreboard on my own work is worse than on anyone else's.** Of step 21b's
+six findings, five were mine from the round immediately before: a regex whose
+anchor I dropped while fixing something else, two explanatory comments asserting
+mechanisms I had not measured, a test asserting a symmetric count that could not
+see its subject inverted, and a guard written one level too shallow. All five
+held. The two prose failures are the ones worth remembering, because both were
+written *while correcting a false explanation* — the failure mode reproduced
+itself inside its own fix twice.
+
+**Evidence set, re-run at HEAD.** Churn 1500 both modes, fuzz-compile 1500,
+fuzz-localize 1500, PPR 2000, demo corpus and demo ask: all green. Removing the
+float branch in `renames.ts` fails exactly 7; removing `chooseTarget`'s
+recorded-path fallback fails exactly 1. Both numbers unchanged from the M1/M2
+campaign, which is the strongest available statement that M3 left the rename
+subsystem intact. 841 passed, 4 skipped; build, boundary, lint and eval green.
