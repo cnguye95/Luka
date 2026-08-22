@@ -41,6 +41,14 @@ interface QuerySpec {
 
 interface QueryFile {
   floors: Record<string, Floor>;
+  /**
+   * How many queries are expected to land in the ranking-only subset under CI
+   * seeding. Recorded so that a break in the harness's own `seeded` wiring
+   * fails loudly: if every query were marked unseeded the subset would quietly
+   * become the whole set, the ranking floors would stop measuring anything
+   * they were set from, and the run would still pass.
+   */
+  rankingQueries: number;
   queries: QuerySpec[];
 }
 
@@ -52,7 +60,10 @@ async function readQueries(): Promise<QueryFile> {
     throw new Error("queries.yaml has no queries");
   }
   if (file.floors === undefined) throw new Error("queries.yaml records no floors");
-  return { floors: file.floors, queries: file.queries };
+  if (typeof file.rankingQueries !== "number") {
+    throw new Error("queries.yaml records no rankingQueries count");
+  }
+  return { floors: file.floors, rankingQueries: file.rankingQueries, queries: file.queries };
 }
 
 /**
@@ -72,7 +83,7 @@ function seedWithoutModel(question: string, pages: Parameters<typeof forceInclud
 
 async function main(): Promise<void> {
   const live = process.argv.includes("--live");
-  const { floors, queries } = await readQueries();
+  const { floors, rankingQueries, queries } = await readQueries();
   const fs = new NodeFs(VAULT);
 
   const settings = normalizeSettings({
@@ -122,10 +133,16 @@ async function main(): Promise<void> {
           ? rankModeB(graph, seeds, settings)
           : await rankModeA(fs, pages, seeds, chosen.keywords);
 
+      // A query whose expected pages are all seeds already had its answer
+      // handed to the ranker by §7.4 step 2; it scores the same however the
+      // ranker behaves. `metrics.ts` keeps those out of the `ranking*` means.
+      const seeded = new Set(seeds);
+
       outcomes.push({
         query: spec.query,
         ranked: ranked.map((node) => node.path),
         expected: spec.expect,
+        seeded: spec.expect.every((path) => seeded.has(path)),
       });
     }
 
@@ -135,16 +152,39 @@ async function main(): Promise<void> {
     for (const entry of summary.perQuery) {
       console.log(
         `  ${entry.recallAt5.toFixed(2)}  ${entry.recallAt10.toFixed(2)}  ` +
-          `${entry.reciprocalRank.toFixed(3)}   ${entry.query}`,
+          `${entry.reciprocalRank.toFixed(3)}  ${entry.seeded ? " " : "*"}  ${entry.query}`,
       );
     }
     console.log(
       `  mean: recall@5 ${summary.meanRecallAt5.toFixed(4)}, ` +
         `recall@10 ${summary.meanRecallAt10.toFixed(4)}, MRR ${summary.mrr.toFixed(4)}`,
     );
+    console.log(
+      `  ranking-only (${String(summary.rankingQueries)} of ${String(queries.length)} queries, ` +
+        `marked *): recall@5 ${summary.rankingRecallAt5.toFixed(4)}, ` +
+        `recall@10 ${summary.rankingRecallAt10.toFixed(4)}, ` +
+        `MRR ${summary.rankingMrr.toFixed(4)}`,
+    );
+
+    // Only under CI seeding: `--live` lets the model add seeds, so the size of
+    // the subset legitimately moves.
+    if (!live && summary.rankingQueries !== rankingQueries) {
+      console.error(
+        `  ranking subset is ${String(summary.rankingQueries)} queries, ` +
+          `queries.yaml records ${String(rankingQueries)}`,
+      );
+      failed = true;
+    }
 
     if (floor === undefined) {
       console.error(`  no floor recorded for mode ${mode}`);
+      failed = true;
+      continue;
+    }
+    if (floor.ranking === undefined) {
+      // Without this the ranking floors silently pass, which is the whole
+      // failure this subset exists to catch.
+      console.error(`  no ranking floor recorded for mode ${mode}`);
       failed = true;
       continue;
     }
@@ -157,7 +197,7 @@ async function main(): Promise<void> {
   }
 
   if (failed) {
-    console.error("\neval failed: a metric came in under the floor recorded in queries.yaml.");
+    console.error("\neval failed: the run did not match what queries.yaml records.");
     process.exit(1);
   }
   console.log("\neval ok.");

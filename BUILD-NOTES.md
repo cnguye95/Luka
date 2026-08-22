@@ -1375,3 +1375,41 @@ separator. Git classified the file as binary, so no change to it could be
 reviewed as a diff. The M1/M2 campaign found exactly this in a test file and
 fixed it the same way — an escape is the identical string to the compiler — and
 it was reintroduced here in new code.
+
+**S-2's premise was wrong, and the weakness underneath it was real but smaller.**
+The finding said the eval cannot catch a PPR regression, evidenced by quartering
+the damping factor in `computePPR` and watching `npm run eval` stay green. Both
+halves of that inference fail on measurement. Quartering α is not a regression on
+this fixture: it *raises* Mode B recall@5 from 0.7604 to 0.8229 and leaves MRR
+untouched, so no floor could catch it — a floor only fires downward. And it is
+already caught, loudly, by six tests in `ppr.test.ts`/`fuzz-ppr.test.ts`, which
+compare `computePPR` against a dense solver at the same α; pinning α is the unit
+suite's job, not the eval's. Four mutations that do degrade ranking — α to 0,
+teleport dropped, propagation to one neighbour, a single iteration — were all
+caught by the existing overall floors.
+
+What is real is dilution. 8 of the 16 queries have every expected page
+force-included as a seed by §7.4 step 2, so they score 1.00/1.00/1.000 whatever
+the ranker does; §13 says the harness measures ranking, and for those queries it
+measures seeding. Averaging them in halves the amplitude of any ranking change:
+the one-neighbour mutation moves the overall recall@5 by 0.0625 and the
+ranking-only recall@5 by 0.1250, against the same fixed 0.05 margin. So the
+harness now reports and floors a second mean over just the queries whose expected
+pages were not all seeded — marked `*` in the output — while keeping the overall
+numbers unchanged for continuity. The `ranking` floor is required, not optional:
+a mode that recorded only the overall floors would skip the new check silently,
+which is the failure it exists to prevent.
+
+**The fix was a no-op in one direction until the subset size was pinned.**
+Mutating `run.ts` so `seeded` is always false widens the subset back to all 16
+queries; every ranking floor then measures the overall means, which clear them
+comfortably, and the eval stays green. That is the shape this project keeps
+hitting — a fix that closes one direction of a two-way defect. `queries.yaml`
+now records `rankingQueries: 8` and the harness fails if the measured subset
+differs, checked under CI seeding only, since `--live` lets the model add seeds
+and legitimately move the count. Both wiring mutations now fail: always-false by
+the count, and `every` → `some` by the count and two floors.
+
+**The eval's closing line claimed a floor failure for every failure.** With the
+subset-size check added it can now fail without any metric being under a floor,
+so the summary says the run did not match what `queries.yaml` records.

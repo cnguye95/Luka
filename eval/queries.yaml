@@ -13,18 +13,38 @@
 # Floors are the first measured means, less 0.05. The metrics are deterministic,
 # so the margin absorbs a deliberate edit to the fixture rather than run-to-run
 # noise — and a regression that costs more than 5 points fails CI.
+#
+# Each mode carries two sets. The outer three are the mean over all 16 queries.
+# The `ranking` three are the mean over only the queries marked `*` in the
+# harness's output: the ones whose expected pages are not all force-included as
+# seeds by §7.4 step 2. For the other 8 the answer is already a seed before
+# ranking begins, so they score 1.00/1.00/1.000 whatever the ranker does, and
+# carrying them in the only mean with a floor is what let a PPR regression pass.
+
+# How many of the queries below land in the ranking-only subset. Pinned so a
+# break in the harness's own seeding wiring fails rather than silently
+# widening the subset back to every query.
+rankingQueries: 8
 
 floors:
-  # Measured 0.9375 / 1.0000 / 0.7109
+  # Measured 0.9375 / 1.0000 / 0.7109; ranking 0.8750 / 1.0000 / 0.4844
   A:
     recallAt5: 0.8875
     recallAt10: 0.9500
     mrr: 0.6609
-  # Measured 0.7604 / 1.0000 / 0.7277
+    ranking:
+      recallAt5: 0.8250
+      recallAt10: 0.9500
+      mrr: 0.4343
+  # Measured 0.7604 / 1.0000 / 0.7277; ranking 0.5208 / 1.0000 / 0.4554
   B:
     recallAt5: 0.7104
     recallAt10: 0.9500
     mrr: 0.6777
+    ranking:
+      recallAt5: 0.4708
+      recallAt10: 0.9500
+      mrr: 0.4053
 
 queries:
   # Names a page outright.

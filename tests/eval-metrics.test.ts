@@ -1,9 +1,17 @@
 // The eval harness's arithmetic (handoff.md §13), against hand-computed
 // numbers. Kept out of `run.ts` so it can be checked without running a process.
 import { describe, expect, it } from "vitest";
-import { belowFloor, recallAt, reciprocalRank, summarize } from "../eval/metrics";
+import { belowFloor, recallAt, reciprocalRank, summarize, type Floor } from "../eval/metrics";
 
 const ranked = (n: number) => Array.from({ length: n }, (_unused, at) => `p${at + 1}`);
+
+/** Floors that never fire, so a test can name the one metric it is about. */
+const NO_FLOOR: Floor = {
+  recallAt5: 0,
+  recallAt10: 0,
+  mrr: 0,
+  ranking: { recallAt5: 0, recallAt10: 0, mrr: 0 },
+};
 
 describe("recall@k", () => {
   it("is the fraction of expected pages inside the top k", () => {
@@ -58,8 +66,8 @@ describe("reciprocal rank", () => {
 describe("the summary means", () => {
   it("averages each metric across queries", () => {
     const summary = summarize([
-      { query: "a", ranked: ranked(10), expected: ["p1"] },
-      { query: "b", ranked: ranked(10), expected: ["p3"] },
+      { query: "a", ranked: ranked(10), expected: ["p1"], seeded: false },
+      { query: "b", ranked: ranked(10), expected: ["p3"], seeded: false },
     ]);
 
     expect(summary.meanRecallAt5).toBe(1);
@@ -76,32 +84,107 @@ describe("the summary means", () => {
   });
 });
 
+describe("the ranking-only means", () => {
+  // §7.4 step 2 force-includes every page the question names, so a query whose
+  // expected pages are all seeds scores the same however the ranker behaves.
+  // Half of queries.yaml is that shape; averaging it in halves the amplitude
+  // of any ranking change in the floored means.
+  const mixed = () =>
+    summarize([
+      // Perfect, and perfect for free: the answer was a seed.
+      { query: "seeded", ranked: ranked(10), expected: ["p1"], seeded: true },
+      // The ranker actually had to place this one, and put it fourth.
+      { query: "ranked", ranked: ranked(10), expected: ["p4"], seeded: false },
+    ]);
+
+  it("counts only the queries that were not fully seeded", () => {
+    expect(mixed().rankingQueries).toBe(1);
+    expect(mixed().perQuery).toHaveLength(2);
+  });
+
+  it("averages over that subset alone, not over every query", () => {
+    const summary = mixed();
+
+    // Overall MRR is dragged up by the free 1.0: (1 + 0.25) / 2.
+    expect(summary.mrr).toBeCloseTo(0.625, 12);
+    // The ranking-only mean is just the query the ranker placed.
+    expect(summary.rankingMrr).toBeCloseTo(0.25, 12);
+    expect(summary.rankingRecallAt5).toBe(1);
+    // p4 is inside the top 5, so recall@5 cannot separate these; MRR can.
+    expect(summary.rankingRecallAt10).toBe(1);
+  });
+
+  it("carries the seeded flag through to each per-query score", () => {
+    expect(mixed().perQuery.map((entry) => entry.seeded)).toEqual([true, false]);
+  });
+
+  it("reports zero when every query was fully seeded", () => {
+    // Nothing measured ranking at all. Zero — rather than a vacuous 1 — means
+    // any positive floor fails, which is the right noise for a query set that
+    // has stopped exercising the ranker.
+    const summary = summarize([
+      { query: "a", ranked: ranked(10), expected: ["p1"], seeded: true },
+    ]);
+
+    expect(summary.rankingQueries).toBe(0);
+    expect(summary.rankingMrr).toBe(0);
+    expect(summary.rankingRecallAt5).toBe(0);
+    expect(summary.mrr).toBe(1);
+  });
+});
+
 describe("the floor check", () => {
-  const summary = summarize([{ query: "a", ranked: ranked(10), expected: ["p2"] }]);
+  const summary = summarize([{ query: "a", ranked: ranked(10), expected: ["p2"], seeded: false }]);
 
   it("names every metric under its floor", () => {
-    const under = belowFloor(summary, { recallAt5: 0.9, recallAt10: 0.9, mrr: 0.9 });
+    const under = belowFloor(summary, { ...NO_FLOOR, recallAt5: 0.9, recallAt10: 0.9, mrr: 0.9 });
 
     expect(under.map((check) => check.metric)).toEqual(["MRR"]);
     expect(under[0]?.measured).toBe(0.5);
   });
 
   it("passes when everything meets its floor", () => {
-    expect(belowFloor(summary, { recallAt5: 1, recallAt10: 1, mrr: 0.5 })).toEqual([]);
+    expect(belowFloor(summary, { ...NO_FLOOR, recallAt5: 1, recallAt10: 1, mrr: 0.5 })).toEqual([]);
   });
 
   it("does not fail a floor recorded as its own measurement", () => {
-    expect(belowFloor(summary, { recallAt5: 1, recallAt10: 1, mrr: summary.mrr })).toEqual([]);
+    const floor = { ...NO_FLOOR, recallAt5: 1, recallAt10: 1, mrr: summary.mrr };
+
+    expect(belowFloor(summary, floor)).toEqual([]);
   });
 
   it("tolerates a floor a hair above the measurement", () => {
     // A floor is written down from a previous run of the same code. Rounding
     // on the way through YAML can leave it a fraction above what the next run
     // computes, and failing CI on the last bit of a float would be noise.
-    const floor = { recallAt5: 1, recallAt10: 1, mrr: summary.mrr + 5e-10 };
+    const floor = { ...NO_FLOOR, recallAt5: 1, recallAt10: 1, mrr: summary.mrr + 5e-10 };
 
     expect(belowFloor(summary, floor)).toEqual([]);
     // Far enough above and it must still fail.
     expect(belowFloor(summary, { ...floor, mrr: summary.mrr + 1e-6 })).toHaveLength(1);
+  });
+
+  it("fails a ranking floor while every overall mean still passes", () => {
+    // The point of the subset. One seeded query scoring 1.0 holds the overall
+    // MRR at 0.625 — above its floor — while the query the ranker actually
+    // placed sits at 0.25, under a ranking floor of 0.5.
+    const diluted = summarize([
+      { query: "seeded", ranked: ranked(10), expected: ["p1"], seeded: true },
+      { query: "ranked", ranked: ranked(10), expected: ["p4"], seeded: false },
+    ]);
+    const floor: Floor = {
+      recallAt5: 0.9,
+      recallAt10: 0.9,
+      mrr: 0.6,
+      ranking: { recallAt5: 0.9, recallAt10: 0.9, mrr: 0.5 },
+    };
+
+    const under = belowFloor(diluted, floor);
+
+    expect(under.map((check) => check.metric)).toEqual(["ranking MRR"]);
+    expect(under[0]?.measured).toBeCloseTo(0.25, 12);
+    // And the overall MRR genuinely did clear its floor — the failure came
+    // only from the subset, not from a floor both means were under.
+    expect(diluted.mrr).toBeGreaterThan(floor.mrr);
   });
 });
