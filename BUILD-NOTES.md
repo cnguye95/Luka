@@ -1802,3 +1802,23 @@ real graph, expect no unresolved labels.
   pane replays against the current graph and a page deleted since the answer was
   written is ordinary; lighting fewer nodes than the note lists without saying so is
   the failure this prevents.
+
+**`Core.inspect` runs §7.4 steps 1–3 and stops.** §9's button is labeled "Inspect
+(1 model call)", which is a promise, and nothing on §5's contract could keep it:
+`ask` runs steps 1–5 and writes a note. The first three stanzas are `runAsk`'s in
+the same order reading the same settings, so the overlay shows what an ask *would*
+retrieve rather than an approximation of it.
+
+- **S2** — §5's contract gains `inspect`, plus `resolveTraceNodes`, `modeOf` and the
+  `RankedNode`/`InspectResult`/`ResolvedTrace` types. §5 lists a contract without
+  saying it is closed; the pane needs these and duplicating any of them in the
+  plugin would put a second copy of a §7 rule outside the boundary check.
+- **S3** — `inspect` takes no lock. It writes nothing, and §9 says the pane is never
+  blocked by the lock. Pinned by a test that parks a compile on its first model call
+  and inspects while `busyWith === "compile"`.
+- **S4** — it ranks over the snapshot it is handed, not a fresh build. §9 has the
+  pane render the last-built snapshot, and an overlay ranked over a graph the user
+  cannot see would light nodes that are not on screen.
+- **S4b** — stopping after ranking is what makes the label true. Assembly reads every
+  candidate page to fill a context budget nothing here spends, and step 5's
+  ungrounded branch is a property of an answer, not of a ranking.

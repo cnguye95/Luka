@@ -1,0 +1,158 @@
+// §9's "Inspect (1 model call)" — §7.4 steps 1–3 and nothing after them.
+//
+// The button's label is a promise to the user, so the count is the property
+// under test here, alongside invariant 2's other half: the pane is never
+// blocked by the lock, so this has to answer while a compile holds it.
+import { describe, expect, it } from "vitest";
+import { createCore, type CompletionRequest, type CoreDeps } from "../src/core/index";
+import { modeOf } from "../src/core/retrieve/pipeline";
+import { DEFAULT_SETTINGS, normalizeSettings } from "../src/core/types";
+import { StubHttp } from "./helpers/http";
+import { MemFs } from "./helpers/memfs";
+import { StubProvider, inventoryReply } from "./helpers/provider";
+
+const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
+
+function replyFor(request: CompletionRequest): unknown {
+  if (request.task === "seed-selection") {
+    return { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+  }
+  if (request.task === "page-generation") return "Prose about [[PageRank]].";
+  return inventoryReply("A note about ranking.", [
+    { title: "PageRank", kind: "concept", aliases: ["PPR"], summary: "A walk." },
+  ]);
+}
+
+function core(fs: MemFs, provider: StubProvider, overrides: Partial<CoreDeps> = {}) {
+  return createCore({
+    fs,
+    http: new StubHttp({}),
+    manifestPath: MANIFEST,
+    settings: { ...DEFAULT_SETTINGS, apiKey: "sk-ant-secret-key" },
+    provider,
+    ...overrides,
+  });
+}
+
+/** A compiled vault, ready to be inspected. */
+async function compiled(): Promise<{ fs: MemFs; provider: StubProvider }> {
+  const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+  const provider = new StubProvider(replyFor);
+  await core(fs, provider).compile();
+  return { fs, provider };
+}
+
+describe("invariant 12: the label says one call, so it makes one call", () => {
+  it("makes exactly one seed-selection call and no other kind", async () => {
+    const { fs, provider } = await compiled();
+    const before = provider.stats().byTask;
+
+    await core(fs, provider).inspect("What ranks pages?");
+
+    const after = provider.stats().byTask;
+    expect((after["seed-selection"] ?? 0) - (before["seed-selection"] ?? 0)).toBe(1);
+    // Steps 4 and 5 are what the other two of invariant 12's three calls buy.
+    expect((after["synthesis"] ?? 0) - (before["synthesis"] ?? 0)).toBe(0);
+    expect((after["inventory"] ?? 0) - (before["inventory"] ?? 0)).toBe(0);
+    expect((after["page-generation"] ?? 0) - (before["page-generation"] ?? 0)).toBe(0);
+    expect((after["vision"] ?? 0) - (before["vision"] ?? 0)).toBe(0);
+  });
+
+  it("writes nothing to the vault", async () => {
+    // §9's pane is read-only. `ask` writes a note; inspection is the same
+    // retrieval with none of the consequences.
+    const { fs, provider } = await compiled();
+    fs.resetCounters();
+
+    await core(fs, provider).inspect("What ranks pages?");
+
+    expect(fs.writes).toBe(0);
+    expect(fs.moves).toBe(0);
+    expect(fs.deletes).toBe(0);
+  });
+});
+
+describe("invariant 2: the pane is never blocked by the lock (§9)", () => {
+  it("answers while a compile holds the lock", async () => {
+    const { fs } = await compiled();
+
+    // A provider that parks the compile's first call until we let it go, so the
+    // lock is provably held while inspect runs.
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parkedOnce = false;
+    const stalling = new StubProvider(async (request: CompletionRequest) => {
+      if (request.task === "inventory" && !parkedOnce) {
+        parkedOnce = true;
+        await parked;
+      }
+      return replyFor(request);
+    });
+
+    const held = core(fs, stalling);
+    await fs.write("raw/second.md", "Another source about ranking.\n");
+    const compiling = held.compile();
+    // Let the compile reach its first model call and park there.
+    while (held.busyWith === null) await new Promise((r) => setTimeout(r, 0));
+    expect(held.busyWith).toBe("compile");
+
+    const result = await held.inspect("What ranks pages?");
+
+    expect(held.busyWith).toBe("compile");
+    expect(result.ranked.length).toBeGreaterThan(0);
+    release();
+    await compiling;
+  });
+});
+
+describe("§7.4 steps 1–3, as retrieval runs them", () => {
+  it("force-includes a page the question names, even when the model returns none", async () => {
+    // §7.4 step 2 is additive to the model's choices, and this proves it is the
+    // force-include rule doing the work rather than the reply.
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const provider = new StubProvider((request: CompletionRequest) =>
+      request.task === "seed-selection" ? { seeds: [], keywords: [] } : replyFor(request),
+    );
+    await core(fs, provider).compile();
+
+    const result = await core(fs, provider).inspect("Tell me about PageRank.");
+
+    expect(result.seeds).toContain("wiki/concepts/PageRank.md");
+  });
+
+  it("reports the mode §7.3's predicate gives for the graph it ranked against", async () => {
+    const { fs, provider } = await compiled();
+    const instance = core(fs, provider);
+    const graph = await instance.getGraph();
+
+    const result = await instance.inspect("What ranks pages?");
+
+    // Read from the predicate, not hardcoded: this vault is small, so it is
+    // Mode A, and the assertion still holds if the fixture grows.
+    expect(result.mode).toBe(modeOf(graph, normalizeSettings(DEFAULT_SETTINGS)));
+  });
+
+  it("ranks wiki pages only in Mode A", async () => {
+    // §7.4 step 3: "Mode A: wiki pages only". A raw node appearing here would
+    // mean the graph ranker ran under the lexical mode's banner.
+    const { fs, provider } = await compiled();
+    const instance = core(fs, provider);
+    expect(await instance.getGraph().then((g) => modeOf(g, normalizeSettings(DEFAULT_SETTINGS)))).toBe(
+      "A",
+    );
+
+    const result = await instance.inspect("What ranks pages?");
+
+    for (const node of result.ranked) expect(node.path.startsWith("wiki/")).toBe(true);
+  });
+
+  it("returns the keywords the seed call chose, which Mode A ranks with", async () => {
+    const { fs, provider } = await compiled();
+
+    const result = await core(fs, provider).inspect("What ranks pages?");
+
+    expect(result.keywords).toEqual(["ranking"]);
+  });
+});

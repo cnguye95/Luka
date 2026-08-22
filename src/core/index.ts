@@ -66,6 +66,7 @@ import {
   rankModeA,
   rankModeB,
   selectSeeds,
+  type RankedNode,
 } from "./retrieve/pipeline";
 import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
 import { fileBack } from "./answer/fileback";
@@ -103,6 +104,9 @@ export {
   type Trace,
 } from "./answer/trace";
 export type { PPROptions, PPRResult } from "./graph/ppr";
+// §9's maturity banner is §7.3's predicate, and a second copy of it in the
+// plugin would be a copy that could disagree with the one retrieval uses.
+export { modeOf, type RankedNode } from "./retrieve/pipeline";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
 // invariant 10 requires every provider call to pass through the wrapper, and
 // keeping the transport module-internal makes a bypass structurally awkward.
@@ -185,6 +189,18 @@ export interface CompileOptions {
   confirm?: (preview: ScopePreview) => Promise<boolean> | boolean;
 }
 
+/** What §9's query inspection overlays: §7.4 steps 1–3, with nothing assembled. */
+export interface InspectResult {
+  /** §7.3's predicate over the graph this ranked against. */
+  mode: RetrievalMode;
+  /** Seed page paths: the model's choices union §7.4 step 2's force-includes. */
+  seeds: string[];
+  /** The keywords the seed call returned, which Mode A ranks with. */
+  keywords: string[];
+  /** §7.4 step 3's ranking, best first. */
+  ranked: RankedNode[];
+}
+
 export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
   /** §5's read-only scope preview: no lock, no model call, no write. */
@@ -219,6 +235,18 @@ export interface Core {
     seedPaths: readonly string[],
     options?: { snapshots?: boolean },
   ): Promise<PPRResult>;
+  /**
+   * §9's "Inspect (1 model call)": §7.4 steps 1–3 and nothing after them.
+   *
+   * Steps 4 and 5 — assembly and the ungrounded skip — belong to answering,
+   * not to showing what retrieval selected, and they are what the second and
+   * third of invariant 12's three calls pay for. Stopping at ranking is what
+   * makes the button's label true.
+   *
+   * Takes no lock and writes nothing, so it answers while a compile runs —
+   * §9's pane is never blocked by the lock.
+   */
+  inspect(question: string): Promise<InspectResult>;
   /**
    * §7.1: "Built in memory at plugin load and after compile." Returns an
    * unsubscribe, so a view that closes stops hearing about rebuilds.
@@ -281,6 +309,10 @@ export function createCore(deps: CoreDeps): Core {
         ...(options.snapshots === true ? { snapshots: true } : {}),
       });
     },
+    // Outside the lock, like `computePPR` and for the same reason: it writes
+    // nothing, and §9's pane is never blocked by the lock.
+    inspect: async (question: string) =>
+      runInspect(deps, await (graph === null ? rebuildGraph() : Promise.resolve(graph)), question),
     onGraphRebuilt: (callback: (graph: GraphSnapshot) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);
@@ -294,6 +326,54 @@ export function createCore(deps: CoreDeps): Core {
       return lock.busyWith;
     },
   };
+}
+
+/**
+ * §9's query inspection: §7.4 steps 1–3 over the graph the pane is showing.
+ *
+ * The first three stanzas are `runAsk`'s, deliberately in the same order and
+ * reading the same settings, because the overlay claims to show what an ask
+ * *would* retrieve. Two differences, both forced by what the pane is:
+ *
+ * It ranks against the snapshot it is handed rather than building a fresh one.
+ * §9 says the pane "renders the last-built snapshot", and an overlay ranked
+ * over a graph the user cannot see would light nodes that are not on screen.
+ *
+ * It stops after ranking. Assembly reads every candidate page off disk to fill
+ * a context budget nothing here will spend, and §7.4 step 5's ungrounded branch
+ * is a property of an answer, not of a ranking.
+ */
+async function runInspect(
+  input: CoreDeps,
+  graph: GraphSnapshot,
+  question: string,
+): Promise<InspectResult> {
+  const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
+  const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
+
+  const pages = await loadPageTable(deps.fs);
+
+  // §7.4 step 1: the renderer that writes `wiki/_index.md`, so the seed call
+  // sees the same text the user does.
+  const indexText = renderIndex(pages);
+  // Step 2, and invariant 12's one call. Everything after this is arithmetic.
+  const chosen = await selectSeeds(provider, question, indexText, pages, {
+    seeds: deps.settings.seedsCap,
+    keywords: deps.settings.keywordsCap,
+  });
+
+  const seeds = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
+    comparePaths,
+  );
+
+  // §7.3: the seed call runs in both modes; the mode governs ranking only.
+  const mode = modeOf(graph, deps.settings);
+  const ranked =
+    mode === "B"
+      ? rankModeB(graph, seeds, deps.settings)
+      : await rankModeA(deps.fs, pages, seeds, chosen.keywords);
+
+  return { mode, seeds, keywords: chosen.keywords, ranked };
 }
 
 /** §5's `previewCompile`. Every step here reads; none of them writes. */
