@@ -1768,3 +1768,20 @@ shipped correct numbers and correct behaviour beside a wrong explanation, and
 each round's test agreed with its explanation because it was built from the same
 example. The standing rule at the end of this section is written accordingly —
 a claim needs a case chosen to break it, or it needs to not be a claim.
+
+## M4 — Graph pane
+
+§15: "Everything in §9 except the scrubber." §14 puts the pane itself under a README
+manual checklist rather than automated tests, so the testable work is the core
+surface the pane consumes — and that is where the §0 decisions below concentrate.
+
+**A graph node carries its page's summary.** §9's hover tooltip is "title, kind,
+summary", and the pane has no `FsAdapter`: it holds a `GraphSnapshot` and nothing
+else. Reading frontmatter at hover time would mean either handing the view an
+adapter or duplicating §4's parser in the plugin, and both cross the seam §3 draws.
+`GraphNode` gains `summary`, filled from the `PageMeta` `loadPageTable` already
+parsed — no new parsing anywhere.
+
+- **S1** — a raw source node carries `summary: ""`. It is a file, not a §4 page, so
+  there is no frontmatter to read one from, and deriving one from the body would be
+  a model call §9 does not permit the pane to make.

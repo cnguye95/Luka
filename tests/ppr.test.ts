@@ -29,6 +29,7 @@ function fixture(): GraphSnapshot {
       title: name,
       kind: "concept" as const,
       degree: degree[name] as number,
+      summary: "",
     })),
     edges,
   };
@@ -45,6 +46,7 @@ function chain(size: number): GraphSnapshot {
       title: `n${at}`,
       kind: "concept" as const,
       degree: at === 0 || at === size - 1 ? 1 : 2,
+      summary: "",
     })),
     edges,
   };
@@ -65,6 +67,7 @@ function cycle(size: number): GraphSnapshot {
       title: `n${at}`,
       kind: "concept" as const,
       degree: 2,
+      summary: "",
     })),
     edges: Array.from({ length: size }, (_unused, at) => ({
       a: name(at),
@@ -164,6 +167,7 @@ describe("determinism (§7.2)", () => {
         title: name,
         kind: "concept" as const,
         degree: 1,
+        summary: "",
       })),
       edges: names.slice(1).map((name) => ({ a: N(names[0] as string), b: N(name) })),
     };

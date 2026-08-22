@@ -101,6 +101,7 @@ function generate(seed: number): Generated {
         title: `n${at}`,
         kind: "concept" as const,
         degree: degree[at] as number,
+        summary: "",
       })),
       edges,
     },
@@ -287,6 +288,7 @@ describe("the convergence threshold is the one §7.2 names", () => {
         title: `n${at}`,
         kind: "concept" as const,
         degree: at === 0 || at === size - 1 ? 1 : 2,
+        summary: "",
       })),
       edges,
     };

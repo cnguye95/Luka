@@ -89,6 +89,38 @@ describe("the node set (§7.1)", () => {
   });
 });
 
+describe("a node carries its summary (§9's tooltip)", () => {
+  // §9's hover tooltip is "title, kind, summary". Carrying §4's summary on the
+  // node is what lets the pane draw it without a second read of the vault —
+  // the pane has no `FsAdapter` and hovering must cost no IO.
+  const summarized = (kind: string, summary: string) =>
+    `---\nkind: ${kind}\nsummary: ${summary}\nupdated: '2026-08-20'\n---\nBody.\n`;
+
+  it("carries a wiki page's summary verbatim", async () => {
+    const fs = new MemFs({
+      "wiki/concepts/PageRank.md": summarized("concept", "A link-analysis ranking algorithm."),
+      [MANIFEST]: "{}",
+    });
+
+    const graph = await build(fs);
+
+    expect(graph.nodes[0]?.summary).toBe("A link-analysis ranking algorithm.");
+  });
+
+  it("gives a raw source node an empty summary, having no frontmatter to read", async () => {
+    const fs = new MemFs({
+      "raw/note.md": "A passthrough source with no frontmatter at all.\n",
+      [MANIFEST]: JSON.stringify({ "raw/note.md": { hash: "a" } }),
+    });
+
+    const graph = await build(fs);
+
+    const raw = graph.nodes.find((node) => node.kind === "raw");
+    expect(raw?.path).toBe("raw/note.md");
+    expect(raw?.summary).toBe("");
+  });
+});
+
 describe("edges (§7.1)", () => {
   it("draws them from the body, the citation block and frontmatter source:", async () => {
     const fs = new MemFs({

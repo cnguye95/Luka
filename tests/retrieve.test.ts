@@ -44,6 +44,7 @@ function graphOf(nodes: number, edges: number): GraphSnapshot {
       title: `n${at}`,
       kind: "concept" as const,
       degree: 0,
+      summary: "",
     })),
     edges: list,
   };
@@ -172,8 +173,8 @@ describe("§7.4 step 3: ranking", () => {
   it("Mode B ranks raw source nodes alongside wiki pages", async () => {
     const graph: GraphSnapshot = {
       nodes: [
-        { path: "raw/paper.md", title: "paper.md", kind: "raw", degree: 1 },
-        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 1 },
+        { path: "raw/paper.md", title: "paper.md", kind: "raw", degree: 1, summary: "" },
+        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 1, summary: "" },
       ],
       edges: [{ a: "raw/paper.md", b: "wiki/concepts/A.md" }],
     };
@@ -187,8 +188,8 @@ describe("§7.4 step 3: ranking", () => {
   it("Mode B drops a node the walk never reached", () => {
     const graph: GraphSnapshot = {
       nodes: [
-        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 0 },
-        { path: "wiki/concepts/Z.md", title: "Z", kind: "concept", degree: 0 },
+        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 0, summary: "" },
+        { path: "wiki/concepts/Z.md", title: "Z", kind: "concept", degree: 0, summary: "" },
       ],
       edges: [],
     };

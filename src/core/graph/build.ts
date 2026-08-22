@@ -43,7 +43,13 @@ export async function buildGraph(input: BuildGraphInput): Promise<GraphSnapshot>
   const byHandle = new Map<string, string>();
 
   for (const page of pages) {
-    nodes.set(page.path, { path: page.path, title: page.title, kind: page.kind, degree: 0 });
+    nodes.set(page.path, {
+      path: page.path,
+      title: page.title,
+      kind: page.kind,
+      degree: 0,
+      summary: page.summary,
+    });
     claim(byHandle, page.title, page.path);
     for (const alias of page.aliases) claim(byHandle, alias, page.path);
   }
@@ -63,6 +69,10 @@ export async function buildGraph(input: BuildGraphInput): Promise<GraphSnapshot>
       title: basename(readable),
       kind: "raw",
       degree: 0,
+      // A raw source is a file, not a §4 page: there is no frontmatter to read a
+      // summary from, and inventing one from the body would be a model call the
+      // pane is not allowed to make.
+      summary: "",
     });
     // §4 writes links into sources as full paths, and the path a citation block
     // or a `source:` key names is the *manifest* path — the PDF, not the

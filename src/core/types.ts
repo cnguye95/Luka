@@ -46,6 +46,12 @@ export interface GraphNode {
   /** `raw` marks a manifest source node rather than a wiki page (handoff.md §7.1). */
   kind: PageKind | "raw";
   degree: number;
+  /**
+   * §4's one-line summary, carried so §9's hover tooltip (title, kind, summary)
+   * needs no second read of the vault. A raw source node has no frontmatter to
+   * summarize and carries `""`.
+   */
+  summary: string;
 }
 
 export interface GraphEdge {
