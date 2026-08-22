@@ -47,6 +47,15 @@ const TOOLTIP_OFFSET = 12;
 const CLICK_SLOP = 4;
 /** Device ratio the exported PNG is rendered at, independent of the display. */
 const PNG_SCALE = 2;
+/**
+ * How long a click waits to see whether it is half of a double-click.
+ *
+ * A timer, and invariant 1 forbids those — but the invariant is about work
+ * starting on its own. This one is armed by a user gesture, fires once, and
+ * runs no operation if the gesture turned out to be something else. The
+ * alternative is what shipped: PPR twice on every double-click.
+ */
+const DOUBLE_CLICK_GRACE = 250;
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
@@ -105,6 +114,10 @@ export class LukaGraphView extends ItemView {
    * teardown that would have released them already run.
    */
   private closed = false;
+  /** A click waiting to see whether a second one turns it into a double. */
+  private pendingClick: { path: string; at: number } | null = null;
+  /** When a double-click last opened a page, so its second press is ignored. */
+  private openedAt = -Infinity;
   /**
    * True while an inspect call is in flight. The disabled button covers the
    * mouse; nothing covered the Enter key, which called the same handler
@@ -225,6 +238,7 @@ export class LukaGraphView extends ItemView {
 
   override async onClose(): Promise<void> {
     this.closed = true;
+    this.pendingClick = null;
     // Invariant 1: nothing of this view outlives it. The simulation is stopped
     // and detached from its tick handler, the pending frame is cancelled, and
     // the rebuild subscription is dropped.
@@ -268,9 +282,11 @@ export class LukaGraphView extends ItemView {
     // The view may have closed while that walk ran.
     if (this.closed) return;
     this.graph = next;
-    // §9's refresh redraws a snapshot the overlay may predate: its paths can be
+    // A refresh redraws a snapshot the overlay may predate: its paths can be
     // gone and its scores were computed against a different edge set. The
-    // filter is a separate channel and survives, which is what §9 describes.
+    // filter survives because it is a predicate over whatever is on screen
+    // rather than a result computed from a particular graph — §9 says only
+    // that Esc clears the overlay, so this pairing is ours.
     this.overlay = null;
     this.render();
   }
@@ -406,11 +422,23 @@ export class LukaGraphView extends ItemView {
       if (draggedPath === null || from === null) return;
       const point = at(event);
       if (Math.hypot(point.x - from.x, point.y - from.y) > CLICK_SLOP) return;
-      // `detail` counts the presses in this click sequence. A double-click
-      // opens the page (§9), and running PPR twice on the way there would
-      // leave an overlay the user never asked for on top of it.
-      if (event.detail > 1) return;
-      void this.runClickPPR(draggedPath);
+      // A double-click opens the page (§9); running PPR on the way there would
+      // leave an overlay nobody asked for on top of it. `event.detail` looked
+      // like the way to spot the second press and is not — it is 0 on
+      // `pointerup` by spec, so the guard it replaced never fired once. The
+      // `dblclick` handler sets this instead, and it arrives after the second
+      // `pointerup`, so the flag is read on the *next* gesture rather than
+      // this one — hence the timestamp rather than a bare boolean.
+      const now = event.timeStamp;
+      if (now - this.openedAt < DOUBLE_CLICK_GRACE) return;
+      this.pendingClick = { path: draggedPath, at: now };
+      window.setTimeout(() => {
+        const pending = this.pendingClick;
+        if (pending === null || pending.path !== draggedPath || pending.at !== now) return;
+        this.pendingClick = null;
+        if (this.closed) return;
+        void this.runClickPPR(draggedPath);
+      }, DOUBLE_CLICK_GRACE);
     };
     this.registerDomEvent(canvas, "pointerup", endGesture);
     this.registerDomEvent(canvas, "pointercancel", endGesture);
@@ -444,6 +472,10 @@ export class LukaGraphView extends ItemView {
       const point = at(event);
       const node = hitTest(frame, point.x, point.y);
       if (node === null) return;
+      // Cancel the single-click that is still waiting: this gesture was a
+      // double-click all along.
+      this.pendingClick = null;
+      this.openedAt = event.timeStamp;
       // The active leaf: §8.3 asks for a new one, and only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
@@ -471,6 +503,7 @@ export class LukaGraphView extends ItemView {
     if (button !== null) button.disabled = true;
     try {
       const result = await this.core.inspect(asked);
+      if (this.closed) return;
       this.setOverlay(fromInspect(result, this.topK(), asked));
       if (result.ranked.length === 0) {
         new Notice("Luka: that question reached nothing in this graph.", 6000);
@@ -596,6 +629,7 @@ export class LukaGraphView extends ItemView {
       return;
     }
 
+    if (this.closed) return;
     const resolved = resolveTraceNodes(trace, graph);
     this.setOverlay(fromTrace(resolved, trace.mode, resolved.unresolved.length));
   }
@@ -609,6 +643,7 @@ export class LukaGraphView extends ItemView {
   private async runClickPPR(path: string): Promise<void> {
     try {
       const result = await this.core.computePPR([path]);
+      if (this.closed) return;
       // Never `snapshots: true`: the per-iteration vectors are the M5
       // scrubber's, and retaining up to 100 of them costs memory for a feature
       // this milestone does not ship.

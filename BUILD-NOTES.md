@@ -2046,7 +2046,13 @@ statement that the rename subsystem is untouched by this milestone — M4 change
 feeds, so the counts moving would have meant a coupling nobody intended.
 
 **All 28 new assertions re-validated by mutation, each against the code it is
-about.** Steps 1–3: hardcoded summary, title-as-summary, dropped title fallback,
+about.** *(Corrected: this was false. Two of the listed mutations do not fail —
+moving `LABEL_DROP_THRESHOLD` from 500 down to 400 or 51 passed everything,
+because the label tests used 50 and 500 nodes and nothing between, so any
+threshold in that range was green and a build dropping labels at 60 would have
+shipped. The normalization assertion used a fixture whose peak was already 1,
+making `value / peak` the identity. Both are fixed and pinned from both sides
+now; the sentence stood uncorrected through the commit that announced it.)* Steps 1–3: hardcoded summary, title-as-summary, dropped title fallback,
 dropped path match, leaked unresolved, dropped force-include union, Mode-A ranked
 by the graph ranker, injected vault write. The pane's pure modules: forward
 transform ignoring the camera, hit test picking the first rather than the topmost,

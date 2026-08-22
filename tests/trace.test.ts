@@ -262,44 +262,53 @@ describe("resolving a trace's labels back onto graph nodes (§9's replay)", () =
   });
 });
 
-describe("a label carrying a comma survives the round trip", () => {
-  // `,` is not in pagetable's FORBIDDEN set, so Luka can name a page
-  // `Newton, Isaac`. The lists are comma-separated, so splitting on the
-  // separator before matching the brackets destroyed exactly those labels —
-  // and destroyed them before `resolveTraceNodes` could report them, so replay
-  // lit fewer nodes than the note listed and called nothing unresolved.
-  const comma = "Newton, Isaac";
+describe("the trace list grammar is ambiguous, and the parser picks a side", () => {
+  // Both the comma delimiter and the brackets are legal inside a label, so
+  // `[[a]], [[b]]` cannot be disambiguated. These pin which way the parser
+  // reads it, so a future change has to choose deliberately rather than drift.
+  const bracketed = "raw/[draft] notes.md";
+  const doubled = "raw/[[WIP]] paper.md";
 
-  it("recovers a comma-bearing seed alongside its neighbours", () => {
-    const written = writeTrace(trace({ seeds: ["Alpha", comma, "Beta"], top: [] }));
+  it("round-trips a raw path containing brackets", () => {
+    // Both shapes: single brackets, and a path whose own `]]` is what a lazy
+    // match would stop at. Only the second distinguishes the two readings —
+    // with single brackets the first `]]` is the real terminator either way.
+    const written = writeTrace(trace({ seeds: [bracketed, doubled], top: [] }));
 
-    expect(parseTrace(written).trace?.seeds).toEqual(["Alpha", comma, "Beta"]);
+    expect(parseTrace(written).trace?.seeds).toEqual([bracketed, doubled]);
   });
 
-  it("recovers a comma-bearing top entry with its score", () => {
-    const written = writeTrace(
-      trace({
-        seeds: [],
-        top: [
-          { label: comma, score: 0.0812 },
-          { label: "Beta", score: 0.0631 },
-        ],
-      }),
-    );
+  it("round-trips a bracketed path with its score intact", () => {
+    // The score is what the heat ramp draws. A parser that truncates the label
+    // here also reads `3` out of `[[raw/[[Fig]] 3.md]] 0.5000` — a wrong number
+    // rendered as though it were right, which is worse than a missing one.
+    const written = writeTrace(trace({ seeds: [], top: [{ label: doubled, score: 0.5 }] }));
 
-    expect(parseTrace(written).trace?.top).toEqual([
-      { label: comma, score: 0.0812 },
-      { label: "Beta", score: 0.0631 },
-    ]);
+    expect(parseTrace(written).trace?.top).toEqual([{ label: doubled, score: 0.5 }]);
   });
 
-  it("reports such a label as unresolved rather than dropping it silently", () => {
-    // S5b's guarantee, which the split defeated: a label naming no node is
-    // counted, not lost.
-    const parsed = trace({ seeds: [comma], top: [] });
+  it("rejects a top entry that is prose rather than a list item", () => {
+    // The anchors do this. Unanchored, the score regex backtracks across the
+    // separator and invents a label out of any sentence containing a number.
+    const hand = [
+      "<!-- trace:start -->",
+      "## Retrieval trace",
+      "- mode: B",
+      "- seeds: (none)",
+      "- round2: no",
+      "- top: see [[A]] 0.5000 for it",
+      "<!-- trace:end -->",
+    ].join("\n");
 
-    const resolved = resolveTraceNodes(parsed, { nodes: [], edges: [] });
+    expect(parseTrace(hand).trace?.top).toEqual([]);
+  });
 
-    expect(resolved.unresolved).toEqual([comma]);
+  it("loses a comma-bearing label, which is the accepted side of the trade", () => {
+    // `,` is not forbidden in a title, so Luka can name a page `Newton, Isaac`
+    // and this parser will not recover it. Recorded rather than fixed: the fix
+    // is to change what `writeTrace` emits, and §8.3 fixes that shape.
+    const written = writeTrace(trace({ seeds: ["Newton, Isaac"], top: [] }));
+
+    expect(parseTrace(written).trace?.seeds).not.toContain("Newton, Isaac");
   });
 });

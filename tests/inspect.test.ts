@@ -211,3 +211,62 @@ describe("§9: the overlay is over the snapshot the pane is drawing", () => {
     expect(result.mode).toBe("A");
   });
 });
+
+describe("a rebuild racing a compile does not hand back a stale graph", () => {
+  it("gives a caller the newer snapshot when its own build was superseded", async () => {
+    // The defect this pins: the pane calls `getGraph` outside the lock, so a
+    // walk it started before a compile's writes was still in flight when the
+    // compile finished. The compile adopted it, cached it, and broadcast it —
+    // a snapshot missing every page that compile had just written. Fixing only
+    // the cache left the other half: the pane's own await still resolved with
+    // the stale snapshot and it assigned that over the fresh one.
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const provider = new StubProvider(replyFor);
+    const instance = core(fs, provider);
+    await instance.compile();
+
+    // Park the pane's rebuild *after* it has read the wiki and before it reads
+    // the manifest, so the pages it is holding are genuinely the old ones.
+    // Parking on the first read instead would just delay a walk that then sees
+    // the new state — and an assertion against that passes however the code
+    // behaves, which is the shape this milestone keeps producing.
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parkedOnce = false;
+    const originalRead = fs.read.bind(fs);
+    fs.read = async (path: string) => {
+      if (!parkedOnce && path === MANIFEST) {
+        parkedOnce = true;
+        await parked;
+      }
+      return originalRead(path);
+    };
+
+    // Force a cold read so the pane's call actually walks.
+    const cold = createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "sk-ant-secret-key" },
+      provider,
+    });
+    const paneRead = cold.getGraph();
+    while (!parkedOnce) await new Promise((r) => setTimeout(r, 0));
+
+    // A second source lands and compiles while that walk is parked.
+    await fs.write("raw/second.md", "Eigenvector centrality ranks nodes.\n");
+    await cold.compile();
+    const afterCompile = await cold.getGraph();
+
+    release();
+    const paneGot = await paneRead;
+
+    // The pane must not be handed something older than what is cached.
+    expect(paneGot.nodes.length).toBe(afterCompile.nodes.length);
+    expect(paneGot.nodes.map((node) => node.path)).toEqual(
+      afterCompile.nodes.map((node) => node.path),
+    );
+  });
+});

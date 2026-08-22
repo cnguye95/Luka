@@ -172,27 +172,49 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
   return { seeds, top, unresolved };
 }
 
-// Both lists are comma-separated, and a label may itself contain a comma:
-// `,` is not in `pagetable.ts`'s FORBIDDEN set, so Luka will happily name a
-// page `Newton, Isaac`. Splitting on the separator first therefore destroys
-// exactly the labels a reader would most notice missing — and destroys them
-// *before* `resolveTraceNodes` can count them, so §9's replay reported nothing
-// unresolved while lighting fewer nodes than the note listed.
-//
-// Matching the brackets instead makes the comma a separator only where it is
-// one. Lazy, so a label containing `]` still ends at its own `]]`.
-const LINK_IN_LIST = /\[\[(.+?)\]\]/g;
-const TOP_IN_LIST = /\[\[(.+?)\]\]\s+(-?\d+(?:\.\d+)?)/g;
+/**
+ * Greedy, so a path containing `]` round-trips — `citations.ts`'s reasoning.
+ *
+ * These two lists are comma-separated and both the comma *and* the brackets are
+ * legal inside a label: `,` is not in `pagetable.ts`'s FORBIDDEN set, and while
+ * that set keeps brackets out of wiki *titles*, `labelFor` emits a raw source's
+ * path verbatim, and `raw/[draft] notes.md` is a shape `citations.ts` names as
+ * real. So `[[a]], [[b]]` is genuinely ambiguous — one label `a]], [[b`, or two
+ * labels — and no parser over this grammar is correct for every input.
+ *
+ * Splitting on the comma first is the reading that fails on the rarer input.
+ * It loses a comma-bearing title; matching brackets lazily instead was tried
+ * and is worse, because it truncates bracketed paths *and* fabricates a score
+ * for them — `[[raw/[[Fig]] 3.md]] 0.5000` parsed as label `raw/[[Fig` with
+ * score 3, a wrong number drawn on the heat ramp as if it were right. A label
+ * lost is visible as an unresolved count; a label corrupted is not.
+ *
+ * The comma case is therefore accepted and recorded, not fixed here. Fixing it
+ * means changing what `writeTrace` emits — §8.3 fixes that shape — which is a
+ * format decision rather than a parser one.
+ */
+const LINK = /\[\[(.+)\]\]/;
 
 function parseLinks(value: string): string[] {
   if (value === "" || value === "(none)") return [];
-  return [...value.matchAll(LINK_IN_LIST)].map((match) => (match[1] as string).trim());
+  const out: string[] = [];
+  for (const part of value.split(",")) {
+    const link = LINK.exec(part.trim());
+    if (link) out.push((link[1] as string).trim());
+  }
+  return out;
 }
 
 function parseTop(value: string): { label: string; score: number }[] {
   if (value === "" || value === "(none)") return [];
-  return [...value.matchAll(TOP_IN_LIST)].map((match) => ({
-    label: (match[1] as string).trim(),
-    score: Number(match[2]),
-  }));
+  const out: { label: string; score: number }[] = [];
+  for (const part of value.split(",")) {
+    // Anchored: the score sits after the closing brackets, so the link stays
+    // greedy and a label containing `]` still round-trips. Without `^`/`$` this
+    // backtracks across the separator and invents labels out of prose.
+    const entry = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/.exec(part.trim());
+    if (!entry) continue;
+    out.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
+  }
+  return out;
 }

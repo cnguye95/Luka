@@ -195,7 +195,16 @@ export interface CompileOptions {
 export interface InspectResult {
   /** §7.3's predicate over the graph this ranked against. */
   mode: RetrievalMode;
-  /** Seed page paths: the model's choices union §7.4 step 2's force-includes. */
+  /**
+   * Seed page paths: the model's choices union §7.4 step 2's force-includes,
+   * narrowed to nodes that are on the snapshot this ranked against.
+   *
+   * The narrowing can drop a page the question named outright, which §7.4
+   * step 2 calls "not a guess that needs rationing" — but a page absent from
+   * the snapshot cannot be lit on a pane drawing that snapshot, and showing
+   * it as a seed the overlay then ignores would be the worse lie. Refresh is
+   * the control §9 gives the user for it.
+   */
   seeds: string[];
   /** The keywords the seed call returned, which Mode A ranks with. */
   keywords: string[];
@@ -282,21 +291,31 @@ export function createCore(deps: CoreDeps): Core {
   let generation = 0;
 
   function rebuildGraph(): Promise<GraphSnapshot> {
+    if (building !== null) return building;
+
     const mine = generation;
-    building ??= buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
+    // A handle on this build's own promise, so the cleanup below can tell
+    // whether it still owns the slot.
+    const own: { promise: Promise<GraphSnapshot> | null } = { promise: null };
+
+    own.promise = buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
       .then((built) => {
-        // A newer generation means the vault moved while this walked. The
-        // caller still gets what was read — it asked for a graph and this is
-        // one — but it does not become the cached answer for everyone else.
+        // A newer generation means the vault moved while this walked, so this
+        // is not the cached answer for anyone.
         if (mine === generation) {
           graph = built;
           for (const listener of listeners) listener(built);
         }
-        return built;
+        return currentOrNewer(built, mine);
       })
       .finally(() => {
-        building = null;
+        // Only if this build still owns the slot. `invalidateGraph` may have
+        // cleared it and a newer build installed itself since; clobbering that
+        // one sends the next reader off on a third redundant walk.
+        if (building === own.promise) building = null;
       });
+
+    building = own.promise;
     return building;
   }
 
@@ -304,6 +323,20 @@ export function createCore(deps: CoreDeps): Core {
   function invalidateGraph(): void {
     generation += 1;
     building = null;
+  }
+
+  /**
+   * The snapshot a reader should act on: the cached one when this build was
+   * superseded while it walked.
+   *
+   * A build that loses its generation publishes nothing, which keeps the cache
+   * right — but its caller was still handed the stale snapshot it had asked
+   * for, and the pane assigns whatever it is given. So a refresh racing a
+   * compile overwrote the fresh graph it had just been notified of with the
+   * older one it was awaiting, and stayed stale until the next compile.
+   */
+  function currentOrNewer(built: GraphSnapshot, mine: number): GraphSnapshot {
+    return mine === generation || graph === null ? built : graph;
   }
 
   // `deps` is passed through, not copied. The plugin mutates its settings

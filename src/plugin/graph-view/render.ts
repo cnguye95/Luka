@@ -164,7 +164,7 @@ export function toGraph(camera: Camera, x: number, y: number): { x: number; y: n
 }
 
 /**
- * The nodes that get a standing label: the top ten by degree.
+ * The nodes that get a standing label: the top ten by the current metric.
  *
  * §9's "current metric" is degree until an overlay supplies scores; the overlay
  * steps replace this selection rather than adding a second one.
