@@ -105,6 +105,18 @@ function toScreen(node: SimNode, camera: Camera): { x: number; y: number } {
 }
 
 /**
+ * Canvas space → graph space: `toScreen`'s inverse.
+ *
+ * Lives beside it deliberately. Zoom-about-cursor and drag both need to undo
+ * the transform, and a second copy of the arithmetic in the view is a copy that
+ * can drift from the one the drawing uses — which is the same coupling
+ * `hitTest` exists to keep honest.
+ */
+export function toGraph(camera: Camera, x: number, y: number): { x: number; y: number } {
+  return { x: (x - camera.x) / camera.scale, y: (y - camera.y) / camera.scale };
+}
+
+/**
  * The nodes that get a standing label: the top ten by degree.
  *
  * §9's "current metric" is degree until an overlay supplies scores; the overlay

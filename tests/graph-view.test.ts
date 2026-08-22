@@ -9,7 +9,15 @@
 // interaction resolves a pointer through it, so a defect there is a defect in
 // hover, drag, double-click and every overlay at once.
 import { describe, expect, it } from "vitest";
-import { colorFor, draw, hitTest, radiusFor, type Frame, type Theme } from "../src/plugin/graph-view/render";
+import {
+  colorFor,
+  draw,
+  hitTest,
+  radiusFor,
+  toGraph,
+  type Frame,
+  type Theme,
+} from "../src/plugin/graph-view/render";
 import { createSim, type SimNode } from "../src/plugin/graph-view/sim";
 import type { GraphSnapshot } from "../src/core/types";
 
@@ -90,6 +98,48 @@ describe("the camera transform, which every interaction resolves through", () =>
 
   it("answers null when nothing is under the point", () => {
     expect(hitTest(frameOf([node("a.md", { x: 0, y: 0 })]), 900, 900)).toBeNull();
+  });
+});
+
+describe("the inverse transform, which drag and zoom-about-cursor need", () => {
+  it("undoes the forward transform for any camera", () => {
+    // `toGraph` is `toScreen` backwards. A drag reads a pointer through it and
+    // writes the result straight into a node's position, so an inverse that is
+    // off by the camera puts the node somewhere the user did not drop it.
+    for (const camera of [
+      { x: 0, y: 0, scale: 1 },
+      { x: 100, y: 50, scale: 2 },
+      { x: -30, y: 12, scale: 0.35 },
+    ]) {
+      const target = node("a.md", { x: 17, y: -23 });
+      const frame = frameOf([target], { camera });
+      // Find where the forward transform put it, by asking the hit test.
+      const screen = {
+        x: 17 * camera.scale + camera.x,
+        y: -23 * camera.scale + camera.y,
+      };
+      expect(hitTest(frame, screen.x, screen.y)?.path).toBe("a.md");
+
+      const back = toGraph(camera, screen.x, screen.y);
+      expect(back.x).toBeCloseTo(17, 10);
+      expect(back.y).toBeCloseTo(-23, 10);
+    }
+  });
+
+  it("keeps the point under the cursor fixed when the scale changes", () => {
+    // What zoom-about-cursor is: the graph point beneath the pointer must be
+    // the same before and after. The view recomputes the camera offset from
+    // this, so if the inverse were wrong the graph would slide under the mouse.
+    const camera = { x: 40, y: 90, scale: 1.4 };
+    const cursor = { x: 220, y: 160 };
+
+    const before = toGraph(camera, cursor.x, cursor.y);
+    const scale = camera.scale * 1.8;
+    const moved = { scale, x: cursor.x - before.x * scale, y: cursor.y - before.y * scale };
+    const after = toGraph(moved, cursor.x, cursor.y);
+
+    expect(after.x).toBeCloseTo(before.x, 10);
+    expect(after.y).toBeCloseTo(before.y, 10);
   });
 });
 

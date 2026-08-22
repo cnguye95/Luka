@@ -1907,3 +1907,30 @@ only the file it had mutated, so an earlier render mutation persisted into the s
 runs and showed up as four phantom failures. Worth recording because the phantom
 looked exactly like a real cross-module coupling, and the fix was to re-run rather
 than to explain it.
+
+**§9's interactions, all resolved through one transform.** Pan, zoom, hover, drag
+and double-click each turn a pointer position into a node or a graph coordinate,
+and every one of them goes through `render.ts` — `hitTest` for what is under the
+cursor, `toGraph` for where a drag is putting something. The inverse lives beside
+the forward transform rather than in the view, because a second copy of the
+arithmetic is a copy that can drift from the one the drawing uses.
+
+`paint` now builds its frame from the same `currentFrame()` the hit tests read, so
+what is drawn and what a pointer resolves against cannot be two different things.
+
+- **S27** — interaction constants (`ZOOM_SENSITIVITY` 0.002, scale clamped to
+  0.15–6, `TOOLTIP_OFFSET` 12) are module-local. §9 and §17 fix none of them.
+- **S28** — the tooltip is a DOM element rather than canvas text: it themes itself
+  from the same variables the rest of the pane uses, wraps without measuring, and
+  needs no hit-testing of its own. Its content comes from the node — §9's "title,
+  kind, summary" — so hovering costs no vault read. A raw source has no summary and
+  the row is omitted rather than rendered blank.
+- **S29** — double-click opens in the active leaf. §8.3 asks for a new leaf, and
+  only for answer notes; §9 says only "opens the page".
+- **S30** — listeners are registered through `registerDomEvent`, so Obsidian
+  detaches them with the view. Invariant 1 leaves nothing listening after
+  `onClose`, and the drag and pan state is cleared there too.
+
+The inverse transform is mutation-validated in both the ways it can plausibly be
+written wrong — offset applied in the wrong order, and multiplying where it should
+divide — and each fails both the round-trip and the zoom-about-cursor assertions.

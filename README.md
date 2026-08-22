@@ -299,3 +299,15 @@ unless a step says otherwise.
       per node.
 - [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
       smooth. (§9's "drop labels first".)
+- [ ] Dragging on empty space pans the graph; the scroll wheel zooms, and the
+      point under the cursor stays under it rather than sliding away.
+- [ ] Hovering a node shows a tooltip with its title, kind and summary. A raw
+      source shows its filename and "raw" with no summary line.
+- [ ] Hovering costs no vault reads — the tooltip appears instantly even on a
+      large vault, because the summary travels on the node.
+- [ ] Dragging a node moves it, and it stays where it is dropped while its
+      neighbours resettle around it. (§9's drag-to-pin.)
+- [ ] Double-clicking a node opens that page in the current tab. Double-clicking
+      a raw source opens its readable markdown.
+- [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
+      label.

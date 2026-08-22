@@ -12,13 +12,25 @@
 // scheduled by an event, never by a standing `requestAnimationFrame` chain.
 import { ItemView, Notice, type WorkspaceLeaf } from "obsidian";
 import type { Core, GraphSnapshot } from "../../core/index";
-import { draw, sampleTheme, type Camera, type Frame } from "./render";
-import { createSim, type Sim } from "./sim";
+import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
+import { createSim, type Sim, type SimNode } from "./sim";
 
 export const GRAPH_VIEW_TYPE = "luka-graph";
 
 /** §9: "empty vault → pointer at Compile." */
 const EMPTY_VAULT_MESSAGE = "No graph yet. Run Luka: Compile to build one.";
+
+/**
+ * Interaction constants. §9 and §17 fix none of these, so §0 takes the smallest
+ * option: module-local, not settings fields.
+ */
+const ZOOM_SENSITIVITY = 0.002;
+const MIN_SCALE = 0.15;
+const MAX_SCALE = 6;
+const TOOLTIP_OFFSET = 12;
+
+const clamp = (value: number, low: number, high: number): number =>
+  Math.min(high, Math.max(low, value));
 
 export class LukaGraphView extends ItemView {
   private readonly core: Core;
@@ -33,7 +45,13 @@ export class LukaGraphView extends ItemView {
   private statusEl!: HTMLElement;
   private bodyEl!: HTMLElement;
   private canvas: HTMLCanvasElement | null = null;
+  private tooltipEl: HTMLElement | null = null;
   private camera: Camera = { x: 0, y: 0, scale: 1 };
+  private hovered: string | null = null;
+  /** The node under an active drag, or `null` when panning or idle. */
+  private dragging: SimNode | null = null;
+  /** Where a background pan started, in canvas space. */
+  private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
   constructor(leaf: WorkspaceLeaf, core: Core) {
     super(leaf);
@@ -93,6 +111,10 @@ export class LukaGraphView extends ItemView {
     this.resize?.disconnect();
     this.resize = null;
     this.canvas = null;
+    this.tooltipEl = null;
+    this.dragging = null;
+    this.panFrom = null;
+    this.hovered = null;
     this.graph = null;
     this.contentEl.empty();
   }
@@ -139,10 +161,13 @@ export class LukaGraphView extends ItemView {
     if (this.canvas === null) {
       this.bodyEl.empty();
       this.canvas = this.bodyEl.createEl("canvas", { cls: "luka-graph-canvas" });
+      this.tooltipEl = this.bodyEl.createDiv({ cls: "luka-graph-tooltip" });
+      this.tooltipEl.hide();
       this.resize = new ResizeObserver(() => this.schedule());
       this.resize.observe(this.bodyEl);
       // Centre the origin: `sim.ts` seeds positions on a disc around (0, 0).
       this.camera = { x: this.bodyEl.clientWidth / 2, y: this.bodyEl.clientHeight / 2, scale: 1 };
+      this.attachPointer(this.canvas);
     }
 
     // §9's refresh keeps surviving nodes where they are and hash-seeds the new
@@ -151,6 +176,155 @@ export class LukaGraphView extends ItemView {
     else this.sim.replace(graph);
 
     this.schedule();
+  }
+
+  /**
+   * §9's interactions: pan/zoom, hover, drag-to-pin, double-click.
+   *
+   * All of them resolve a pointer through `render.ts`'s camera transform —
+   * `hitTest` for what is under the cursor, `toGraph` for where a drag is
+   * putting a node — rather than a second copy of the arithmetic here, so the
+   * pane cannot disagree with the picture it drew.
+   *
+   * Registered through `registerDomEvent`, so Obsidian detaches them with the
+   * view: invariant 1 leaves nothing listening after `onClose`.
+   */
+  private attachPointer(canvas: HTMLCanvasElement): void {
+    const at = (event: PointerEvent | MouseEvent | WheelEvent) => {
+      const box = canvas.getBoundingClientRect();
+      return { x: event.clientX - box.left, y: event.clientY - box.top };
+    };
+
+    this.registerDomEvent(canvas, "pointerdown", (event: PointerEvent) => {
+      const frame = this.currentFrame();
+      if (frame === null) return;
+      const point = at(event);
+      const node = hitTest(frame, point.x, point.y);
+      canvas.setPointerCapture(event.pointerId);
+      if (node === null) {
+        this.panFrom = { x: point.x, y: point.y, camX: this.camera.x, camY: this.camera.y };
+        return;
+      }
+      this.dragging = node;
+      this.sim?.dragStart(node);
+    });
+
+    this.registerDomEvent(canvas, "pointermove", (event: PointerEvent) => {
+      const frame = this.currentFrame();
+      if (frame === null) return;
+      const point = at(event);
+
+      if (this.dragging !== null) {
+        const graphPoint = toGraph(this.camera, point.x, point.y);
+        this.sim?.dragTo(this.dragging, graphPoint.x, graphPoint.y);
+        this.schedule();
+        return;
+      }
+
+      if (this.panFrom !== null) {
+        this.camera = {
+          ...this.camera,
+          x: this.panFrom.camX + (point.x - this.panFrom.x),
+          y: this.panFrom.camY + (point.y - this.panFrom.y),
+        };
+        this.schedule();
+        return;
+      }
+
+      const node = hitTest(frame, point.x, point.y);
+      const path = node?.path ?? null;
+      if (path !== this.hovered) {
+        this.hovered = path;
+        this.schedule();
+      }
+      this.showTooltip(node, point.x, point.y);
+    });
+
+    const endGesture = (event: PointerEvent) => {
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      // §9's drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
+      // so the node stays where it was dropped.
+      if (this.dragging !== null) this.sim?.dragEnd();
+      this.dragging = null;
+      this.panFrom = null;
+    };
+    this.registerDomEvent(canvas, "pointerup", endGesture);
+    this.registerDomEvent(canvas, "pointercancel", endGesture);
+
+    this.registerDomEvent(canvas, "pointerleave", () => {
+      this.hovered = null;
+      this.hideTooltip();
+      this.schedule();
+    });
+
+    this.registerDomEvent(canvas, "wheel", (event: WheelEvent) => {
+      // Zoom about the cursor: the graph point under the pointer has to stay
+      // under it, which is why this needs the inverse transform and not just a
+      // scale factor.
+      event.preventDefault();
+      const point = at(event);
+      const before = toGraph(this.camera, point.x, point.y);
+      const factor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY);
+      const scale = clamp(this.camera.scale * factor, MIN_SCALE, MAX_SCALE);
+      this.camera = {
+        scale,
+        x: point.x - before.x * scale,
+        y: point.y - before.y * scale,
+      };
+      this.schedule();
+    });
+
+    this.registerDomEvent(canvas, "dblclick", (event: MouseEvent) => {
+      const frame = this.currentFrame();
+      if (frame === null) return;
+      const point = at(event);
+      const node = hitTest(frame, point.x, point.y);
+      if (node === null) return;
+      // The active leaf: §8.3 asks for a new one, and only for answer notes.
+      void this.app.workspace.openLinkText(node.path, "", false);
+    });
+  }
+
+  /** §9's hover tooltip: "title, kind, summary" — from the node, never the vault. */
+  private showTooltip(node: SimNode | null, x: number, y: number): void {
+    const tooltip = this.tooltipEl;
+    if (tooltip === null) return;
+    if (node === null) {
+      this.hideTooltip();
+      return;
+    }
+    tooltip.empty();
+    tooltip.createDiv({ cls: "luka-graph-tooltip-title", text: node.title });
+    tooltip.createDiv({ cls: "luka-graph-tooltip-kind", text: node.kind });
+    // A raw source has no frontmatter, so it has no summary; the row is left
+    // out rather than rendered blank.
+    if (node.summary !== "") {
+      tooltip.createDiv({ cls: "luka-graph-tooltip-summary", text: node.summary });
+    }
+    tooltip.style.left = `${String(x + TOOLTIP_OFFSET)}px`;
+    tooltip.style.top = `${String(y + TOOLTIP_OFFSET)}px`;
+    tooltip.show();
+  }
+
+  private hideTooltip(): void {
+    this.tooltipEl?.hide();
+  }
+
+  /** The frame as it currently stands, or `null` when there is nothing drawn. */
+  private currentFrame(): Frame | null {
+    const sim = this.sim;
+    const graph = this.graph;
+    if (sim === null || graph === null) return null;
+    return {
+      nodes: sim.nodes,
+      edges: graph.edges,
+      camera: this.camera,
+      theme: sampleTheme(this.contentEl),
+      dpr: window.devicePixelRatio || 1,
+      width: this.bodyEl.clientWidth,
+      height: this.bodyEl.clientHeight,
+      hovered: this.hovered,
+    };
   }
 
   /**
@@ -190,17 +364,10 @@ export class LukaGraphView extends ItemView {
     const ctx = canvas.getContext("2d");
     if (ctx === null) return;
 
-    const frame: Frame = {
-      nodes: sim.nodes,
-      edges: graph.edges,
-      camera: this.camera,
-      theme: sampleTheme(this.contentEl),
-      dpr,
-      width,
-      height,
-      hovered: null,
-    };
-    draw(ctx, frame);
+    // One frame description, shared with every hit test, so what is drawn and
+    // what a pointer resolves against can never be two different things.
+    const frame = this.currentFrame();
+    if (frame !== null) draw(ctx, frame);
   }
 }
 
