@@ -8,6 +8,15 @@ database, no embeddings, no chunking.
 The full specification is [handoff.md](handoff.md); decisions made where the
 spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 
+## Table of Contents
+
+- [Status](#status)
+- [What compile does today](#what-compile-does-today)
+- [Development](#development)
+- [Running it in Obsidian](#running-it-in-obsidian)
+- [Eval](#eval)
+- [Manual checklist](#manual-checklist)
+
 ## Status
 
 Milestones **M0 (scaffold)** and **M1 (ingest)** are complete, plus the first
@@ -79,14 +88,70 @@ npm run check:boundary # asserts src/core never imports `obsidian`
 npm run lint
 ```
 
-### Trying it in Obsidian
+## Running it in Obsidian
 
-1. `npm run build`
-2. `npm run install:vault` — copies `main.js` and `manifest.json` into
-   `test-vault/.obsidian/plugins/luka/`.
-3. Open `test-vault/` as a vault in Obsidian and enable Luka under
-   *Community plugins*. The vault is gitignored.
-4. Copy `demo/raw/` into the vault as `raw/` to have something to compile.
+Luka is an Obsidian plugin — there is no standalone binary, and no way to
+launch it on its own. Running it means building the bundle, copying it into a
+vault, and enabling it from inside Obsidian.
+
+**1. Install Obsidian.** Desktop only — the manifest sets `isDesktopOnly`.
+Download it from [obsidian.md](https://obsidian.md), or on Windows:
+
+```
+winget install --id Obsidian.Obsidian -e
+```
+
+**2. Build and install the plugin.**
+
+```
+npm install
+npm run build          # typecheck + bundle to main.js
+npm run install:vault  # copies main.js, manifest.json and styles.css into
+                       # test-vault/.obsidian/plugins/luka/
+```
+
+`styles.css` travels with the build because Obsidian loads it from the plugin
+directory — §9's graph pane has no layout without it.
+
+**3. Open the vault.** In Obsidian, *Open folder as vault* → `test-vault/`.
+It is gitignored, and starts out empty apart from the plugin you just copied in.
+
+**4. Enable the plugin.** Settings → *Community plugins* → turn off Restricted
+Mode → enable **Luka**. Keep the developer console open (Ctrl/Cmd-Shift-I): the
+manual checklist asks you to watch it in several places, and a plugin that
+fails to load says so there.
+
+**5. Set the API key.** Paste an Anthropic key into the Luka settings tab.
+Settings are the only source — the plugin has no `ANTHROPIC_API_KEY` fallback,
+and reads the key live on each run, so a freshly typed one takes effect without
+a reload. (The env var is for the optional live tests above and
+`npm run eval:live`, which run outside Obsidian.)
+
+**6. Give it something to compile.**
+
+```
+cp -r demo/raw test-vault/raw
+```
+
+Then run **Luka: Compile** from the command palette. **Luka: Open graph** opens
+the pane; the ribbon icon opens the same one.
+
+### After a rebuild
+
+Obsidian does not pick up a new `main.js` on its own. Re-run
+`npm run build && npm run install:vault`, then either toggle Luka off and on
+under *Community plugins* or run *Reload app without saving* from the command
+palette. `npm run dev` rebuilds on change but still writes only to `main.js` in
+the repo root — the copy into the vault and the reload are both still yours to
+do.
+
+### If you are working the manual checklist
+
+Do step 6 **last**. §2 checks the empty-vault states, and once the first compile
+has run you cannot get back to them without deleting `wiki/` and the manifest.
+If the vault lives inside a synced folder (OneDrive, Dropbox), pause the sync
+first — files changing underneath a run will muddy the "nothing to do" and
+"modifies no files" items.
 
 ## Eval
 
