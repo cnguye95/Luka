@@ -195,22 +195,31 @@ Two of these are **context-sensitive**: *File this answer* and *Show retrieval
 on graph* appear only while an answer note is the active file, and are absent
 from the palette otherwise.
 
+### Binding a hotkey
+
+**Settings → Hotkeys**, search `luka`, and click the `+` beside the command you
+want. That page lists every command Obsidian and its plugins register, with a
+search box, and is the better place to *browse* what exists — the palette is
+for running something whose name you already half-remember.
+
+Worth binding:
+
+- **Luka: Ask the wiki** — the command you reach for most once a wiki exists.
+- **Luka: Compile** — several checklist items ask you to trigger it twice in
+  quick succession, which is fiddly through the palette.
+
 ### Obsidian's own commands
 
-The palette also carries every command Obsidian and its other plugins register,
-and a few of those matter while working on Luka:
+The palette also carries everything Obsidian itself registers. The one that
+comes up constantly while developing the plugin is **Reload app without
+saving**, which is how Obsidian picks up a rebuilt `main.js`.
 
-| Command | Why it comes up |
-|---|---|
-| **Reload app without saving** | Obsidian does not pick up a rebuilt `main.js` on its own — run this after `npm run install:vault`, or toggle the plugin off and on. |
-| **Open developer tools** | The console the manual checklist asks you to watch (Ctrl/Cmd-Shift-I does the same). |
-| **Show file explorer** | When the left sidebar is hidden and you want to see what compile wrote. |
-
-You never need an exact name: the palette is a fuzzy search, so typing `reload`
-or `devtool` finds them. **Settings → Hotkeys** lists every command with a
-search box and is the better place to browse what exists, or to bind a key —
-worth doing for *Luka: Compile*, which several checklist items ask you to
-trigger twice in quick succession.
+**The developer console is the exception to all of this.** It is *not* a
+command — it never appears in the palette or under Hotkeys, and Obsidian's
+Windows title bar has no menu to reach it from. Use **Ctrl/Cmd-Shift-I** (F12
+also works in most Electron builds). The manual checklist asks you to watch it
+in several places, so it is worth knowing that one key combination even though
+everything else here is discoverable.
 
 ## Eval
 
@@ -415,26 +424,26 @@ calls, and the network panel is how you check that.
 
 Needs a real API key. One question costs a few cents.
 
-- [ ] **Luka: Ask the wiki** opens a modal with a single question field, already
+- [x] **Luka: Ask the wiki** opens a modal with a single question field, already
       focused. Enter submits; Esc and Cancel both close it and do nothing.
-- [ ] Asking a question about something in the wiki writes
+- [x] Asking a question about something in the wiki writes
       `answers/YYYY-MM-DD-HHmm <slug>.md` and **opens it in a new leaf**.
-- [ ] The note reads as prose with `[[links]]`, then `## Sources consulted`,
+- [x] The note reads as prose with `[[links]]`, then `## Sources consulted`,
       then `## Retrieval trace` — and its frontmatter carries `kind: answer`,
       `question`, `asked`, `mode` and `grounded`.
-- [ ] Ctrl/Cmd-clicking a link in the answer opens the page it names.
-- [ ] Asking something the wiki says nothing about produces a note whose first
+- [x] Ctrl/Cmd-clicking a link in the answer opens the page it names.
+- [x] Asking something the wiki says nothing about produces a note whose first
       line is the `> [!warning] Not grounded in your wiki` callout, rendered as
       a callout in reading view, with `grounded: false`.
-- [ ] Triggering **Ask the wiki** while a compile is running shows
+- [x] Triggering **Ask the wiki** while a compile is running shows
       "Luka is busy: compile"; triggering **Compile** while an ask is running
       shows "Luka is busy: ask".
-- [ ] **Luka: File this answer** does not appear in the command palette while a
+- [x] **Luka: File this answer** does not appear in the command palette while a
       non-answer note is active, and does appear on an answer note.
-- [ ] Filing moves the note to `raw/answers/`, drops the `## Retrieval trace`
+- [x] Filing moves the note to `raw/answers/`, drops the `## Retrieval trace`
       block, keeps `## Sources consulted`, and shows
       "Filed. Run Compile to integrate." — with no compile starting on its own.
-- [ ] The next **Luka: Compile** ingests the filed answer as an ordinary source:
+- [x] The next **Luka: Compile** ingests the filed answer as an ordinary source:
       it gains a `wiki/sources/` page, and the answer's own links now connect it
       into the graph.
 
@@ -463,12 +472,12 @@ nothing below depends on them.
 - [ ] With a real API key set, type a question into the graph's query box and
       press **Inspect (1 model call)**. Exactly one request appears in the
       developer tools network panel — not two, not three.
-- [ ] The button's label reads exactly "Inspect (1 model call)".
+- [x] The button's label reads exactly "Inspect (1 model call)".
 - [ ] The overlay appears: seeds ringed, top-K stroked, and on a Mode-B vault a
       heat ramp across what the query reached.
 - [ ] On a small Mode-A vault, inspection lights seeds and lexical top-K with
       **no** heat ramp, and the Mode-A banner above explains why.
-- [ ] Nothing is written anywhere in the vault by an inspection — no answer
+- [x] Nothing is written anywhere in the vault by an inspection — no answer
       note, no file at all.
 - [ ] The button is disabled while the call is in flight, and pressing Enter in
       the query box does the same thing as clicking it.
