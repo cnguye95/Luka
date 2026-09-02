@@ -67,18 +67,53 @@ describe("Call A — inventory (§6.5)", () => {
     });
   });
 
-  it("parses a reply the model wrapped in a fenced block via the repair retry (§11)", async () => {
-    // The single most common real failure: a model that answers with prose or
-    // a ```json fence. The wrapper's one repair retry is what rescues it, and
-    // §11 counts that retry as a model call like any other.
+  it("parses a fenced reply directly, without spending the repair retry (§11)", async () => {
+    // The single most common real failure: a model that fences its JSON. The
+    // repair retry was the original answer to it and is not one on its own,
+    // because it re-asks the same model — `claude-haiku-4-5-20251001` fences
+    // the repair reply too, which failed all seven sources of a real compile
+    // and wrote no manifest at all.
+    //
+    // The stub fences *every* reply, which is what discriminates: under the
+    // repair-only reading it exhausts the retry and throws. An earlier version
+    // of this test scripted the stub to comply on the second call, so it
+    // asserted that recovery works when the model cooperates and could not
+    // fail when it does not.
+    const provider = new StubProvider(
+      () => "```json\n" + JSON.stringify(inventoryReply("fenced")) + "\n```",
+    );
+
+    await expect(takeInventory(provider, "Body.")).resolves.toMatchObject({
+      sourceSummary: "fenced",
+    });
+    expect(provider.stats().byTask.inventory).toBe(1);
+  });
+
+  it("still repairs a reply that is neither JSON nor a fence (§11)", async () => {
+    // Stripping must not cost the repair its remaining job: a reply that is
+    // prose has nothing to strip and still gets the one re-ask §11 asks for.
     const provider = new StubProvider((_request, index) =>
-      index === 0
-        ? "```json\n{\"source_summary\": \"s\", \"items\": []}\n```"
-        : inventoryReply("recovered"),
+      index === 0 ? "Here is the inventory you asked for:" : inventoryReply("recovered"),
     );
 
     await expect(takeInventory(provider, "Body.")).resolves.toMatchObject({
       sourceSummary: "recovered",
+    });
+    expect(provider.stats().byTask.inventory).toBe(2);
+  });
+
+  it("strips a fence from the repair reply too (§11)", async () => {
+    // Both parses go through the same unwrapping, or a model that answers with
+    // prose first and a fence second fails for the reason the fence was meant
+    // to stop mattering.
+    const provider = new StubProvider((_request, index) =>
+      index === 0
+        ? "Sorry — here it is:"
+        : "```\n" + JSON.stringify(inventoryReply("repaired")) + "\n```",
+    );
+
+    await expect(takeInventory(provider, "Body.")).resolves.toMatchObject({
+      sourceSummary: "repaired",
     });
     expect(provider.stats().byTask.inventory).toBe(2);
   });

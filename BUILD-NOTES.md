@@ -2155,3 +2155,151 @@ which one needs a real API key (the Inspect call count). The pane's pure halves
 — `sim.ts`, `render.ts`, `overlay.ts` — carry 43 automated assertions the plan
 did not expect to exist, because both were written with no Obsidian import and
 what is readable in isolation is testable in isolation.
+
+## §14 manual check — fixes made during the pass
+
+### Fenced JSON is stripped before parsing (§11)
+
+Found by running the checklist against the real API, not by a test. With the
+recorded default models, **compile could not complete at all**: every source
+failed at `inventory` with "reply was not valid JSON after one repair retry",
+no manifest was written, and no `wiki/` was ever created.
+
+`claude-haiku-4-5-20251001` returns its JSON inside a ```` ```json ```` fence.
+§11 asks for "parse, one repair retry", and `wrapper.ts` implemented exactly
+that — but the repair *re-asks the same model*, which fences the second reply
+too. The mitigation only ever worked against a model that cooperates on the
+retry, and this one does not.
+
+`unfence` now strips a whole-reply fence before both parses. It is deliberately
+narrow: only a reply whose entire trimmed body is one fenced block is unwrapped,
+so prose that merely contains a fence still fails and still reaches the repair
+retry, which is the case that genuinely wants another look at the model.
+`synthesize.ts`'s own fence regex reads §8.2's *trailing* block out of prose —
+a different question, left where it is rather than unified, because one regex in
+front of two grammars is how the trace parser got into trouble.
+
+**The test that covered this could not have caught it.** `inventory.test.ts`
+already had a case named "parses a reply the model wrapped in a fenced block via
+the repair retry", and it passed throughout. Its stub was scripted to fence on
+call 0 and return clean JSON on call 1 — so it asserted that recovery works
+*when the model complies*, which is the assumption that fails in production. It
+is the ninth-plus instance of the shape this log has named repeatedly: the test
+built from the same example that motivated the design, confirming it rather than
+discriminating against its absence.
+
+Replaced with three tests. The discriminating one fences **every** reply, which
+throws under the repair-only reading; it also pins the call count at 1, since
+stripping means a fence no longer costs a model call. The other two keep the
+repair path covered (prose → clean) and cover the second call site (prose →
+fenced).
+
+Suite 912 passed / 4 skipped. Boundary, lint, typecheck and eval green; eval
+floors unmoved (recall@5 0.7604, recall@10 1.0000, MRR 0.7277).
+
+## Open findings — not yet addressed
+
+### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
+
+Found during the §14 manual-checklist setup, from reading rather than from a
+failing test. Not yet fixed; recorded so the next pass over §8.3 picks it up.
+
+`packUnderBudget` has two ways to lose a ranked page, and they are signalled
+very differently:
+
+- **The first item overflows the whole budget.** It is tail-truncated and
+  `truncatedForContextBudget()`'s marker is appended into the text, so the
+  *model* sees that the page was cut.
+- **A later item does not fit.** The loop `break`s (`tokens.ts`), dropping that
+  page and every page below it in rank order. No marker, no count, nothing.
+  The break is deliberate — cherry-picking a smaller page from further down
+  would destroy the rank order §6.5 and §7.4 both assemble in — but it means
+  budget exhaustion can cost more pages than the budget strictly requires.
+
+Neither loss reaches the user. The trace's `top:` line is built from
+`assembly.nodes` (`index.ts`), i.e. the pages that survived, so the note lists
+only what got in and never what was dropped; `usedTokens` is consumed for the
+follow-up round's remaining budget and then discarded; and `wasTruncated` /
+`TRUNCATION_MARKER` are exported from `assemble.ts` and read by nothing in the
+repo — the signal is computed and thrown away.
+
+The consequence is a third grounding state the frontmatter cannot express:
+grounded, but in less than what retrieval found. §7.4 step 5 gives zero-seed
+retrieval an explicit `grounded: false`; budget exhaustion is the same class of
+degradation with no corresponding signal.
+
+**This is the standard `Trace.unparsed` was written to meet** — "losing them
+quietly is a different failure from losing them" — applied to a rarer and
+smaller loss than this one. The fix is a §8.3 format decision (a `dropped:`
+line, or a count beside `top:`), not a parser or assembly change, and it should
+be taken with the trace-grammar work the M4 closeout deferred rather than
+bolted on separately.
+
+### Graph edges are drawn at a quarter of a near-background colour (§9)
+
+**Status (2026-09-01):** taken up on branch `claude/jolly-goldstine-a818bb`,
+touching `render.ts` and `tests/graph-view.test.ts`. Unmerged and unverified —
+this entry stands until the change is on master, `npm test` is green, and
+checklist §6.2/§6.3 and §9.2 have been re-run by hand in both themes.
+
+
+`render.ts` draws every edge in `--background-modifier-border` — Obsidian's
+subtle-divider variable, a colour chosen to sit just off the background — and
+then applies `EDGE_ALPHA = 0.25` at `lineWidth = 1`. The result is that links
+are effectively invisible against `--background-primary` on the default dark
+theme.
+
+§9 constrains only "Colors and fonts from Obsidian CSS variables"; it specifies
+node colour by kind and says nothing about edges or alpha, so both the variable
+and the 0.25 are free choices rather than spec. No checklist item asserts edge
+visibility either, which is why this survived to a manual pass.
+
+It matters more here than the "it is only cosmetic" reading suggests. The pane's
+whole job is showing *why* retrieval ranked what it did, and PPR runs on the
+edges — they are the mechanism, not decoration. During the §14 pass a node that
+was in fact connected to the giant component read as isolated, and distinguishing
+it needed a component computation outside the app.
+
+Candidate fixes, unranked: raise `EDGE_ALPHA` to roughly 0.45–0.5, or move the
+edge colour to `--text-faint` (already the raw-node colour, still theme-derived).
+Either keeps §9's CSS-variable discipline. Obsidian's own core graph draws edges
+about this faintly, so there is a house-style argument for leaving it — but that
+graph is ambient navigation and this one is a diagnostic instrument.
+
+### A click on a node reheats the layout and pins the node (§9)
+
+**Status (2026-09-01):** taken up on branch `claude/jovial-hawking-548047`,
+touching `sim.ts`, `view.ts`, `tests/graph-view.test.ts` and adding
+`press.ts`. Unmerged and unverified — this entry stands until the change is on
+master, `npm test` is green, and checklist §7 has been re-run by hand. Note
+both open graph findings edit `tests/graph-view.test.ts`, so whichever lands
+second will need a merge.
+
+
+§9 gives *drag* two side effects — "simulation cools to a stop, drag reheats
+locally" and "drag-to-pin" — and gives *click* one job, an instant PPR overlay.
+The implementation gives a click all three.
+
+`view.ts`'s `pointerdown` calls `sim.dragStart(node)` unconditionally, before
+anything knows whether the gesture will become a drag, and `dragStart` both
+`restart()`s the simulation at `DRAG_ALPHA_TARGET` and sets `fx`/`fy`. The
+click/drag discrimination happens later, on `pointerup`, against `CLICK_SLOP`
+— by which point the reheat has already fired and the node is already pinned.
+`dragEnd` returns `alphaTarget` to 0 but deliberately leaves `fx`/`fy` set,
+which is correct for a drag and wrong for a click.
+
+So every click on a node: reheats the whole layout, pins that node forever, and
+runs click-PPR. Only the third is §9's. The pins accumulate — a user who clicks
+ten nodes while exploring has frozen ten of them, and the layout can no longer
+relax.
+
+Not an invariant-1 violation: the simulation still cools to a stop, and nothing
+runs without a gesture. And the existing checklist items pass, because §7.3
+tests that a *drag* pins and §7.6 tests that a *click* runs PPR — neither asks
+whether a click does anything it should not. Found by a user noticing the graph
+move when they expected only a recolour.
+
+The fix is presumably to defer `dragStart`'s effects until travel exceeds
+`CLICK_SLOP`, which makes `pointermove` rather than `pointerdown` the place the
+drag begins. Worth checking against §7.3's "neighbours resettle around it" while
+doing so: the reheat has to still happen for a real drag.

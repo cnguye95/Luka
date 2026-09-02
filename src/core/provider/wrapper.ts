@@ -170,7 +170,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     if (!request.json) return text;
 
     try {
-      return JSON.parse(text) as unknown;
+      return JSON.parse(unfence(text)) as unknown;
     } catch (parseError) {
       // §11: one repair retry, appending the parse error.
       const repairUser =
@@ -187,7 +187,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
         request.images,
       );
       try {
-        return JSON.parse(repaired) as unknown;
+        return JSON.parse(unfence(repaired)) as unknown;
       } catch (secondError) {
         throw new ProviderError(
           `${request.task}: reply was not valid JSON after one repair retry — ${describe(secondError)}`,
@@ -203,6 +203,28 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
       return { requests, byTask: { ...byTask } };
     },
   };
+}
+
+/**
+ * Unwraps a JSON reply the model returned inside a markdown fence.
+ *
+ * §11 asks only for "parse, one repair retry", and the repair was written for
+ * exactly this shape — but it re-asks the same model, so it is a fix only when
+ * the model complies the second time. `claude-haiku-4-5-20251001` fences the
+ * repair reply too: every source of a real compile failed at `inventory` and
+ * no manifest was written at all. Stripping is deterministic where re-asking
+ * is not, and it costs no call.
+ *
+ * Deliberately narrow. Only a reply whose *entire* trimmed body is one fenced
+ * block is unwrapped, so prose that merely contains a fence still fails to
+ * parse and still reaches the repair retry — the case that genuinely needs
+ * another look at the model. `synthesize.ts` strips the *trailing* block out of
+ * prose, which is §8.2's different question and stays where it is; unifying
+ * the two would put one regex in front of two grammars.
+ */
+function unfence(text: string): string {
+  const fenced = /^```(?:[A-Za-z0-9_-]+)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/.exec(text.trim());
+  return fenced === null ? text : (fenced[1] as string);
 }
 
 function delayBeforeAttempt(attempt: number, lastError: unknown, random: () => number): number {

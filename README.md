@@ -12,8 +12,10 @@ spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 
 - [Status](#status)
 - [What compile does today](#what-compile-does-today)
+- [Page kinds and graph colours](#page-kinds-and-graph-colours)
 - [Development](#development)
 - [Running it in Obsidian](#running-it-in-obsidian)
+- [Commands](#commands)
 - [Eval](#eval)
 - [Manual checklist](#manual-checklist)
 
@@ -35,7 +37,7 @@ ANTHROPIC_API_KEY=sk-ant-... npx vitest run tests/compile-live.test.ts   # a rea
 
 Both are skipped without the key, and neither ever runs in CI.
 
-## What compile does today
+## Compile
 
 Run **Luka: Compile** from the command palette. It walks `raw/`, works out what
 changed by content hash, and normalizes only that:
@@ -74,6 +76,27 @@ disappearing quietly. The same is true of a source whose extraction failed: it
 is never recorded, so the next compile simply tries it again.
 
 Nothing runs on a timer or a file watcher. Compile happens when you ask for it.
+
+## Page Types and Graph Colours
+
+Compile writes three kinds of wiki page; the graph pane draws a fourth kind of
+node for the originals. Colour is how you tell them apart in the pane.
+
+| Kind | Definition |
+|---|---|
+| 🟢 **entity** | a named thing — a person, organization, place, product, or work |
+| 🔵 **concept** | an idea, method, or phenomenon |
+| 🟠 **source** | one page per ingested source |
+| ⚪ **raw** | the original file itself, not a wiki page |
+
+Colours are Obsidian theme variables rather than fixed hues, so the graph
+recolours when you switch themes. Files whose basename starts with `_`
+(`_index.md`, `_health.md`) are infrastructure and never appear in the graph.
+
+Running a query paints an **overlay** on top of these colours: a ring marks a
+seed, a stroke marks the top-K, reached nodes take a heat ramp toward red, and
+anything the query did not reach is **dimmed — not removed**. The node count
+never changes, and Esc clears the overlay.
 
 ## Development
 
@@ -152,6 +175,42 @@ has run you cannot get back to them without deleting `wiki/` and the manifest.
 If the vault lives inside a synced folder (OneDrive, Dropbox), pause the sync
 first — files changing underneath a run will muddy the "nothing to do" and
 "modifies no files" items.
+
+## Commands
+
+Luka registers six commands. All are invoked from the command palette
+(Ctrl/Cmd-P, then type `luka`) — there are no menus, and the single ribbon
+icon opens the graph pane.
+
+| Command | What it does |
+|---|---|
+| **Luka: Compile** | Walks `raw/`, normalizes what changed, and rebuilds the wiki. The scope modal appears first when the diff includes deletions or modifications. |
+| **Luka: Ask the wiki** | Opens a modal for one question; writes the answer to `answers/` and opens it. |
+| **Luka: File this answer** | Moves the active answer note to `raw/answers/` so the next compile ingests it as a source. Drops the retrieval trace, keeps the sources block. |
+| **Luka: Health check** | Writes and opens `wiki/_health.md`: article candidates, orphan pages, citations naming unknown files, filed answers and their ages. Makes no model calls. |
+| **Luka: Open graph** | Opens the graph pane. The ribbon icon opens the same one. |
+| **Luka: Show retrieval on graph** | Replays the active answer note's retrieval trace as an overlay on the graph. Makes no model calls. |
+
+Two of these are **context-sensitive**: *File this answer* and *Show retrieval
+on graph* appear only while an answer note is the active file, and are absent
+from the palette otherwise.
+
+### Obsidian's own commands
+
+The palette also carries every command Obsidian and its other plugins register,
+and a few of those matter while working on Luka:
+
+| Command | Why it comes up |
+|---|---|
+| **Reload app without saving** | Obsidian does not pick up a rebuilt `main.js` on its own — run this after `npm run install:vault`, or toggle the plugin off and on. |
+| **Open developer tools** | The console the manual checklist asks you to watch (Ctrl/Cmd-Shift-I does the same). |
+| **Show file explorer** | When the left sidebar is hidden and you want to see what compile wrote. |
+
+You never need an exact name: the palette is a fuzzy search, so typing `reload`
+or `devtool` finds them. **Settings → Hotkeys** lists every command with a
+search box and is the better place to browse what exists, or to bind a key —
+worth doing for *Luka: Compile*, which several checklist items ask you to
+trigger twice in quick succession.
 
 ## Eval
 
