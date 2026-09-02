@@ -312,24 +312,24 @@ Everything from here to "Export" is §9's pane, which has no automated
 coverage at all — §14 puts it here instead. This is the largest unverified
 surface in the project, so it comes before the older flows.
 
-- [ ] **Luka: Open graph** in the command palette opens the pane, and the ribbon
+- [x] **Luka: Open graph** in the command palette opens the pane, and the ribbon
       icon opens the same one. Pressing the ribbon again *reveals* that pane
       rather than opening a second copy.
-- [ ] On the compiled demo vault the pane opens in under a second (§15's AC —
+- [x] On the compiled demo vault the pane opens in under a second (§15's AC —
       wall-clock it from the click to the node/edge counts appearing).
-- [ ] On a small vault (a handful of pages), the pane shows the banner
+- [x] On a small vault (a handful of pages), the pane shows the banner
       "Mode A (lexical) active — graph ranking off" followed by live node, link
       pair and ratio counts, and the counts match what `wiki/_index.md` implies.
 - [x] With the pane open, run **Luka: Compile**. When it finishes, the pane's
       counts update on their own, with no click. (§7.1's rebuild event.)
-- [ ] The **Refresh** button updates the counts after a compile run from another
+- [ ] **FAILED — see BUILD-NOTES.** The **Refresh** button updates the counts after a compile run from another
       window or a vault sync.
-- [ ] Close the pane and reopen it: it works, and the developer console shows no
+- [x] Close the pane and reopen it: it works, and the developer console shows no
       error logged at close. (Invariant 1 — nothing of the view outlives it.)
-- [ ] The graph draws: nodes appear, spread out, and the layout comes to rest
+- [x] The graph draws: nodes appear, spread out, and the layout comes to rest
       within a few seconds rather than jittering forever. (§9's "simulation
       cools to a stop".)
-- [ ] Once it has settled, the pane is idle — Obsidian's CPU use drops back to
+- [x] Once it has settled, the pane is idle — Obsidian's CPU use drops back to
       baseline and stays there with the pane open and untouched. (Invariant 1:
       the only sanctioned loop is the simulation, and it must end.)
 
@@ -528,7 +528,7 @@ Least likely to matter, and the 500-node item needs a vault you may not have.
 
 - [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
       smooth. (§9's "drop labels first".)
-- [ ] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
+- [x] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
       pairs per node). After the refresh, the banner disappears.
 - [ ] A markdown source with **two or more** reachable remote images localizes
       all of them on its *first* compile, with no source failing. (§6.3 fetches

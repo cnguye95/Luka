@@ -2416,3 +2416,40 @@ it leaves every real rebuild reheating as it does now. Worth taking *after* the
 click fix has been verified by hand — both live in the same gesture/simulation
 seam, and stacking a second unverified change on the first is how this project's
 fix rounds have historically gone wrong.
+
+### The Refresh button cannot refresh (§7.1, §9, checklist §5.5)
+
+Found by the §14 manual pass. A page written into `wiki/concepts/` from outside
+Obsidian left the pane reading `37 nodes, 74 edges`; pressing **Refresh**
+returned the same numbers. Expected 38 and 75 — the page is a node and its one
+resolving `[[Luka]]` link is an edge.
+
+Not a wiring slip. The button calls `reload()`, which calls `core.getGraph()`,
+which is:
+
+    getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+
+The cache is returned whenever one exists, and `rebuildGraph` is a private
+function the `Core` interface never exposes. So the pane has no forced-rebuild
+path available to it at all: **no input can make Refresh re-read the vault.**
+What the button actually does is clear the overlay and redraw the snapshot it
+already had.
+
+§7.1 sanctions the cache — "built in memory at plugin load and after compile;
+no cache file" — and `Core`'s own doc comment says "cached until the next
+compile", so the caching is deliberate and the interface is honest about it.
+What is missing is a way for §9's pane to opt out of it, which checklist §5.5
+assumes exists: "the Refresh button updates the counts after a compile run from
+another window or a vault sync". Both of those are exactly the case the cache
+cannot see, because neither fires this window's rebuild event.
+
+So the defect is a gap between two things that are each internally consistent:
+the core caches by design, the checklist expects a re-read, and nothing
+connects them. A button labelled Refresh that structurally cannot refresh is
+the worse half of that gap.
+
+The fix is small — give `getGraph` a force flag, or export `rebuildGraph` on
+`Core`, and have `reload()` use it — but it deserves a decision about scope
+first: whether §7.1's "at plugin load and after compile" is a complete list of
+rebuild triggers, or a floor that §9's pane may add to. That is a spec
+question, and BUILD-NOTES is where it should be answered before code moves.
