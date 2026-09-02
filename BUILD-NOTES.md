@@ -2383,3 +2383,36 @@ nothing.
 
 Worth measuring rather than assuming: one occurrence in twenty-nine pages is a
 rate, not a certainty, and a rerun on the same corpus may not reproduce it.
+
+### A compile that changes nothing still reheats the layout (§7.1, §9)
+
+Found by the §14 manual pass while checking §4.7: with the pane open, a second
+compile reports "nothing to do — no sources changed" and writes not one byte
+(46 vault files verified byte-identical), yet the graph visibly rearranges.
+Same nodes, same edges, new positions.
+
+The rebuild itself is specified — §7.1 builds the graph "at plugin load and
+after compile" — and the pane is *supposed* to react, which is what checklist
+§5.4 asks of it. What is not specified is that the rebuild reheats
+unconditionally. `sim.replace` ends with `simulation.alpha(REHEAT_ALPHA)
+.restart()` whatever the incoming snapshot contains, so a settled layout at
+alpha < 0.001 is kicked back to 0.3 and drifts to a different equilibrium.
+
+That defeats the intent `replace` states three lines earlier, where it goes out
+of its way to preserve `x`/`y` and `fx`/`fy`: "re-hashing every position on each
+compile would throw the layout the user has been reading, and any pinning they
+did with it." Reheating throws it too — less violently, and for a compile that
+did nothing at all.
+
+Invariant 1 is not violated: the walk still cools to a stop. This is the same
+shape as the click-reheat fixed in `9f90088` — an action that changed nothing
+moves the layout anyway — and the same user noticed both unprompted, on two
+different triggers, which is the evidence that it reads as wrong rather than as
+alive.
+
+The fix is a guard, not a redesign: compare the incoming node paths and edge
+pairs against the current ones and skip the reheat when they match. Cheap, and
+it leaves every real rebuild reheating as it does now. Worth taking *after* the
+click fix has been verified by hand — both live in the same gesture/simulation
+seam, and stacking a second unverified change on the first is how this project's
+fix rounds have historically gone wrong.
