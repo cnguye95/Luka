@@ -2237,6 +2237,14 @@ bolted on separately.
 
 ### Graph edges are drawn at a quarter of a near-background colour (§9)
 
+**Status (2026-09-01):** FIXED on master (`c703d24`). `EDGE_ALPHA` 0.25 -> 0.45
+and the edge colour moved from `--background-modifier-border` to `--text-faint`.
+The tests pin composited WCAG contrast against the background rather than the
+constant, so they fail on a revert and survive a retune - verified by mutation,
+2 fail. Still owed: checklist §6.2/§6.3 and §9.2 by hand in both themes, since
+which CSS variable `sampleTheme` samples needs `getComputedStyle` and cannot be
+covered under vitest. Superseded status line follows.
+
 **Status (2026-09-01):** taken up on branch `claude/jolly-goldstine-a818bb`,
 touching `render.ts` and `tests/graph-view.test.ts`. Unmerged and unverified —
 this entry stands until the change is on master, `npm test` is green, and
@@ -2267,6 +2275,20 @@ about this faintly, so there is a house-style argument for leaving it — but th
 graph is ambient navigation and this one is a diagnostic instrument.
 
 ### A click on a node reheats the layout and pins the node (§9)
+
+**Status (2026-09-01):** FIXED on master (`9f90088`). The gesture decision moved
+into a new pure module `press.ts`; `pointerdown` now only records the press, and
+the drag - with its reheat and its pin - begins on the first `pointermove` past
+`CLICK_SLOP`.
+
+**The tests do not discriminate.** Reverting `view.ts`, the file that held the
+defect, leaves all 51 graph-view tests passing: the eight new ones exercise
+`press.ts` against a stub and nothing asserts that `view.ts` asks it. That is
+the tenth instance of this log's recurring shape. The extraction is right and
+matches the project's own doctrine, but it moved the testable part out and left
+the wired part bare. Closed instead by two new README §7 checklist items, both
+negatives - a click must not reheat, a click must not pin - which are the only
+place the wiring can be asserted. Still owed: §7 by hand.
 
 **Status (2026-09-01):** taken up on branch `claude/jovial-hawking-548047`,
 touching `sim.ts`, `view.ts`, `tests/graph-view.test.ts` and adding
@@ -2303,3 +2325,33 @@ The fix is presumably to defer `dragStart`'s effects until travel exceeds
 `CLICK_SLOP`, which makes `pointermove` rather than `pointerdown` the place the
 drag begins. Worth checking against §7.3's "neighbours resettle around it" while
 doing so: the reheat has to still happen for a real drag.
+
+### A title-duplicating heading survives into a page (§6.5, invariant 5)
+
+Found by the §14 manual pass, checklist item §4.5, on the demo corpus:
+`wiki/concepts/Knowledge wiki compilation.md` opens its body with
+`# Knowledge wiki compilation`. One page in twenty-nine.
+
+The prompt already forbids it — `generate.ts` says "Do NOT write citations, a
+sources list, frontmatter, or a heading that repeats the title. Those are
+written by code **and yours would be discarded**." The last clause is false.
+§6.5's post-process list is "frontmatter, link post-pass, citation block,
+`updated` date", and there is no heading-stripping pass anywhere in
+`src/core/compile/`. The prompt is the only defense, so the invariant holds
+only as far as the model complies with it — and here it did not.
+
+Consequence is small in itself (a redundant `<h1>` above prose that already
+says the same thing) but it is the shape invariant 5 exists to prevent: the
+model writing structure. It also makes pages inconsistent with each other,
+which a reader notices before a reviewer does.
+
+The fix is a post-pass in the same place the other four run: strip a leading
+heading whose text matches the page title after the same normalization §4's
+identity rules use, so case and NFC differences are caught too. Only the
+*leading* one — `## How the update works` further down is legitimate prose
+structure and must survive. Making the prompt's claim true is the cheapest way
+to close it; softening the prompt instead would leave the invariant enforced by
+nothing.
+
+Worth measuring rather than assuming: one occurrence in twenty-nine pages is a
+rate, not a certainty, and a rerun on the same corpus may not reproduce it.

@@ -11,8 +11,8 @@ spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 ## Table of Contents
 
 - [Status](#status)
-- [What compile does today](#what-compile-does-today)
-- [Page kinds and graph colours](#page-kinds-and-graph-colours)
+- [Compile](#compile)
+- [Page Types and Graph Colours](#page-types-and-graph-colours)
 - [Development](#development)
 - [Running it in Obsidian](#running-it-in-obsidian)
 - [Commands](#commands)
@@ -235,7 +235,7 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 93 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 95 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
@@ -362,6 +362,19 @@ surface in the project, so it comes before the older flows.
       label.
 - [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
       without movement does.
+- [ ] Let the layout come to rest, then click a node **without moving the
+      pointer**. The overlay appears and *nothing moves* — a click must not
+      reheat the simulation the way a drag does.
+- [ ] After that click, drag a *different* node to stir the layout, and watch
+      the one you clicked. It drifts along with its neighbours rather than
+      sitting frozen — a click must not pin. Only a drag pins.
+
+The last two are negatives: they check that a click does *not* acquire the
+drag's side effects. Both were true bugs, and neither is caught by the suite —
+`press.ts` decides which gesture a press became and is tested directly, but
+nothing asserts that `view.ts` actually asks it. Reverting `view.ts` alone
+leaves every automated test passing, so these two items are the only thing
+standing between that regression and the vault.
 
 ### 8. Overlays and the filter
 
