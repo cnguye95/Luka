@@ -538,14 +538,14 @@ two items here the highest-value pair in the list.
 
 ### 14. Health check
 
-- [ ] **Luka: Health check** writes `wiki/_health.md` and opens it, with no
+- [x] **Luka: Health check** writes `wiki/_health.md` and opens it, with no
       notice about model calls because it makes none.
-- [ ] It lists article candidates (links that resolve to nothing), orphan pages,
+- [x] It lists article candidates (links that resolve to nothing), orphan pages,
       citations naming files the manifest does not know, filed answers with
       their ages, and counts.
-- [ ] Running it twice in a row produces the same file; resolving a link by
+- [x] Running it twice in a row produces the same file; resolving a link by
       writing the page it wanted removes it from the candidates on the next run.
-- [ ] Running it while a compile is in flight shows "Luka is busy: compile".
+- [x] Running it while a compile is in flight shows "Luka is busy: compile".
 
 ### 15. Settings detail
 
