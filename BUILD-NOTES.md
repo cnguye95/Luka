@@ -2197,6 +2197,64 @@ fenced).
 Suite 912 passed / 4 skipped. Boundary, lint, typecheck and eval green; eval
 floors unmoved (recall@5 0.7604, recall@10 1.0000, MRR 0.7277).
 
+### A click on a node reheats the layout and pins the node (§9)
+
+**Status: CLOSED (2026-09-02).** Fixed on master (`9f90088`) and verified by
+hand — checklist §7 in full, including the two negatives added for it: a click
+on a settled layout moves nothing, and a node clicked then left alone drifts
+with its neighbours instead of sitting pinned. That hand check is the only
+thing that could confirm it, for the reason recorded below.
+
+Fixed on master (`9f90088`). The gesture decision moved
+into a new pure module `press.ts`; `pointerdown` now only records the press, and
+the drag - with its reheat and its pin - begins on the first `pointermove` past
+`CLICK_SLOP`.
+
+**The tests do not discriminate.** Reverting `view.ts`, the file that held the
+defect, leaves all 51 graph-view tests passing: the eight new ones exercise
+`press.ts` against a stub and nothing asserts that `view.ts` asks it. That is
+the tenth instance of this log's recurring shape. The extraction is right and
+matches the project's own doctrine, but it moved the testable part out and left
+the wired part bare. Closed instead by two new README §7 checklist items, both
+negatives - a click must not reheat, a click must not pin - which are the only
+place the wiring can be asserted. Still owed: §7 by hand.
+
+**Status (2026-09-01):** taken up on branch `claude/jovial-hawking-548047`,
+touching `sim.ts`, `view.ts`, `tests/graph-view.test.ts` and adding
+`press.ts`. Unmerged and unverified — this entry stands until the change is on
+master, `npm test` is green, and checklist §7 has been re-run by hand. Note
+both open graph findings edit `tests/graph-view.test.ts`, so whichever lands
+second will need a merge.
+
+
+§9 gives *drag* two side effects — "simulation cools to a stop, drag reheats
+locally" and "drag-to-pin" — and gives *click* one job, an instant PPR overlay.
+The implementation gives a click all three.
+
+`view.ts`'s `pointerdown` calls `sim.dragStart(node)` unconditionally, before
+anything knows whether the gesture will become a drag, and `dragStart` both
+`restart()`s the simulation at `DRAG_ALPHA_TARGET` and sets `fx`/`fy`. The
+click/drag discrimination happens later, on `pointerup`, against `CLICK_SLOP`
+— by which point the reheat has already fired and the node is already pinned.
+`dragEnd` returns `alphaTarget` to 0 but deliberately leaves `fx`/`fy` set,
+which is correct for a drag and wrong for a click.
+
+So every click on a node: reheats the whole layout, pins that node forever, and
+runs click-PPR. Only the third is §9's. The pins accumulate — a user who clicks
+ten nodes while exploring has frozen ten of them, and the layout can no longer
+relax.
+
+Not an invariant-1 violation: the simulation still cools to a stop, and nothing
+runs without a gesture. And the existing checklist items pass, because §7.3
+tests that a *drag* pins and §7.6 tests that a *click* runs PPR — neither asks
+whether a click does anything it should not. Found by a user noticing the graph
+move when they expected only a recolour.
+
+The fix is presumably to defer `dragStart`'s effects until travel exceeds
+`CLICK_SLOP`, which makes `pointermove` rather than `pointerdown` the place the
+drag begins. Worth checking against §7.3's "neighbours resettle around it" while
+doing so: the reheat has to still happen for a real drag.
+
 ## Verification owed — fixes merged but not yet confirmed by hand
 
 Both graph fixes are on master and green under `npm test`, but the pane has no
@@ -2208,21 +2266,21 @@ than a re-check.
 **The click fix (`9f90088`)** — the suite does not discriminate here at all;
 reverting `view.ts` leaves every test passing, so this list is the only guard:
 
-- [ ] §7 in full, all eight items
-- [ ] §7.7 specifically: a settled layout, a click with no pointer travel, and
+- [x] §7 in full, all eight items
+- [x] §7.7 specifically: a settled layout, a click with no pointer travel, and
       nothing moves
-- [ ] §7.8 specifically: click a node, then drag a *different* one — the clicked
+- [x] §7.8 specifically: click a node, then drag a *different* one — the clicked
       node drifts with its neighbours rather than sitting frozen
 
 **The edge fix (`c703d24`)** — the contrast property is pinned by tests, but
 which CSS variable `sampleTheme` reads needs `getComputedStyle` and cannot be
 covered under vitest:
 
-- [ ] §6.2 four distinguishable muted kind colours — checked in **dark**
-- [ ] §6.2 again — checked in **light**
-- [ ] §6.3 switching theme with the pane open recolours it without a reopen
+- [x] §6.2 four distinguishable muted kind colours — checked in **dark**
+- [x] §6.2 again — checked in **light**
+- [x] §6.3 switching theme with the pane open recolours it without a reopen
 - [ ] §9.2 the exported PNG has an opaque background in **both** themes
-- [ ] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
+- [x] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
       read as nodes against grey lines
 
 ## Open findings — not yet addressed
@@ -2301,58 +2359,6 @@ edge colour to `--text-faint` (already the raw-node colour, still theme-derived)
 Either keeps §9's CSS-variable discipline. Obsidian's own core graph draws edges
 about this faintly, so there is a house-style argument for leaving it — but that
 graph is ambient navigation and this one is a diagnostic instrument.
-
-### A click on a node reheats the layout and pins the node (§9)
-
-**Status (2026-09-01):** FIXED on master (`9f90088`). The gesture decision moved
-into a new pure module `press.ts`; `pointerdown` now only records the press, and
-the drag - with its reheat and its pin - begins on the first `pointermove` past
-`CLICK_SLOP`.
-
-**The tests do not discriminate.** Reverting `view.ts`, the file that held the
-defect, leaves all 51 graph-view tests passing: the eight new ones exercise
-`press.ts` against a stub and nothing asserts that `view.ts` asks it. That is
-the tenth instance of this log's recurring shape. The extraction is right and
-matches the project's own doctrine, but it moved the testable part out and left
-the wired part bare. Closed instead by two new README §7 checklist items, both
-negatives - a click must not reheat, a click must not pin - which are the only
-place the wiring can be asserted. Still owed: §7 by hand.
-
-**Status (2026-09-01):** taken up on branch `claude/jovial-hawking-548047`,
-touching `sim.ts`, `view.ts`, `tests/graph-view.test.ts` and adding
-`press.ts`. Unmerged and unverified — this entry stands until the change is on
-master, `npm test` is green, and checklist §7 has been re-run by hand. Note
-both open graph findings edit `tests/graph-view.test.ts`, so whichever lands
-second will need a merge.
-
-
-§9 gives *drag* two side effects — "simulation cools to a stop, drag reheats
-locally" and "drag-to-pin" — and gives *click* one job, an instant PPR overlay.
-The implementation gives a click all three.
-
-`view.ts`'s `pointerdown` calls `sim.dragStart(node)` unconditionally, before
-anything knows whether the gesture will become a drag, and `dragStart` both
-`restart()`s the simulation at `DRAG_ALPHA_TARGET` and sets `fx`/`fy`. The
-click/drag discrimination happens later, on `pointerup`, against `CLICK_SLOP`
-— by which point the reheat has already fired and the node is already pinned.
-`dragEnd` returns `alphaTarget` to 0 but deliberately leaves `fx`/`fy` set,
-which is correct for a drag and wrong for a click.
-
-So every click on a node: reheats the whole layout, pins that node forever, and
-runs click-PPR. Only the third is §9's. The pins accumulate — a user who clicks
-ten nodes while exploring has frozen ten of them, and the layout can no longer
-relax.
-
-Not an invariant-1 violation: the simulation still cools to a stop, and nothing
-runs without a gesture. And the existing checklist items pass, because §7.3
-tests that a *drag* pins and §7.6 tests that a *click* runs PPR — neither asks
-whether a click does anything it should not. Found by a user noticing the graph
-move when they expected only a recolour.
-
-The fix is presumably to defer `dragStart`'s effects until travel exceeds
-`CLICK_SLOP`, which makes `pointermove` rather than `pointerdown` the place the
-drag begins. Worth checking against §7.3's "neighbours resettle around it" while
-doing so: the reheat has to still happen for a real drag.
 
 ### A title-duplicating heading survives into a page (§6.5, invariant 5)
 

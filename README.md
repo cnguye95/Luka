@@ -335,37 +335,37 @@ surface in the project, so it comes before the older flows.
 
 ### 6. The graph draws correctly
 
-- [ ] Close and reopen the pane on the same vault: the layout starts from the
+- [x] Close and reopen the pane on the same vault: the layout starts from the
       same arrangement both times. (§9's "initial positions seeded by hashing
       page path".)
-- [ ] Concepts, entities, sources and raw files are four distinguishable muted
+- [x] Concepts, entities, sources and raw files are four distinguishable muted
       colours, and they are theme colours — not fixed hues.
-- [ ] Switch Obsidian between dark and light with the pane open. The graph
+- [x] Switch Obsidian between dark and light with the pane open. The graph
       recolours itself without needing to be reopened. (§15's AC.)
-- [ ] Well-connected nodes are visibly larger than leaf nodes.
-- [ ] At rest, about ten labels are shown — the highest-degree nodes — not one
+- [x] Well-connected nodes are visibly larger than leaf nodes.
+- [x] At rest, about ten labels are shown — the highest-degree nodes — not one
       per node.
-- [ ] Hovering a node shows a tooltip with its title, kind and summary. A raw
+- [x] Hovering a node shows a tooltip with its title, kind and summary. A raw
       source shows its filename and "raw" with no summary line.
 
 ### 7. The graph responds to the pointer
 
-- [ ] Dragging on empty space pans the graph; the scroll wheel zooms, and the
+- [x] Dragging on empty space pans the graph; the scroll wheel zooms, and the
       point under the cursor stays under it rather than sliding away.
-- [ ] Hovering costs no vault reads — the tooltip appears instantly even on a
+- [x] Hovering costs no vault reads — the tooltip appears instantly even on a
       large vault, because the summary travels on the node.
-- [ ] Dragging a node moves it, and it stays where it is dropped while its
+- [x] Dragging a node moves it, and it stays where it is dropped while its
       neighbours resettle around it. (§9's drag-to-pin.)
-- [ ] Double-clicking a node opens that page in the current tab. Double-clicking
+- [x] Double-clicking a node opens that page in the current tab. Double-clicking
       a raw source opens its readable markdown.
 - [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
       label.
-- [ ] Dragging a node does *not* trigger click-PPR when you release it; a click
+- [x] Dragging a node does *not* trigger click-PPR when you release it; a click
       without movement does.
-- [ ] Let the layout come to rest, then click a node **without moving the
+- [x] Let the layout come to rest, then click a node **without moving the
       pointer**. The overlay appears and *nothing moves* — a click must not
       reheat the simulation the way a drag does.
-- [ ] After that click, drag a *different* node to stir the layout, and watch
+- [x] After that click, drag a *different* node to stir the layout, and watch
       the one you clicked. It drifts along with its neighbours rather than
       sitting frozen — a click must not pin. Only a drag pins.
 
