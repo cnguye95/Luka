@@ -2255,6 +2255,53 @@ The fix is presumably to defer `dragStart`'s effects until travel exceeds
 drag begins. Worth checking against §7.3's "neighbours resettle around it" while
 doing so: the reheat has to still happen for a real drag.
 
+### Graph edges are drawn at a quarter of a near-background colour (§9)
+
+**Status (2026-09-01):** FIXED on master (`c703d24`). `EDGE_ALPHA` 0.25 -> 0.45
+and the edge colour moved from `--background-modifier-border` to `--text-faint`.
+The tests pin composited WCAG contrast against the background rather than the
+constant, so they fail on a revert and survive a retune - verified by mutation,
+2 fail. Still owed: checklist §6.2/§6.3 and §9.2 by hand in both themes, since
+which CSS variable `sampleTheme` samples needs `getComputedStyle` and cannot be
+covered under vitest. Superseded status line follows.
+
+**Status: CLOSED (2026-09-02).** Verified by hand: §6.2's four kind colours stay
+distinguishable in both themes, §6.3 recolours live with the pane open, raw nodes
+still read as nodes against edges now sharing `--text-faint`, and §9.2's export
+is opaque in both — checked by decoding the PNGs rather than by eye, since a
+viewer paints its own ground behind a transparent image. Dark exported
+rgba(28,28,28,255), light rgba(255,255,255,255); both files are RGBA, so
+transparency was possible and did not happen.
+
+**Superseded status line:** taken up on branch `claude/jolly-goldstine-a818bb`,
+touching `render.ts` and `tests/graph-view.test.ts`. Unmerged and unverified —
+this entry stands until the change is on master, `npm test` is green, and
+checklist §6.2/§6.3 and §9.2 have been re-run by hand in both themes.
+
+
+`render.ts` draws every edge in `--background-modifier-border` — Obsidian's
+subtle-divider variable, a colour chosen to sit just off the background — and
+then applies `EDGE_ALPHA = 0.25` at `lineWidth = 1`. The result is that links
+are effectively invisible against `--background-primary` on the default dark
+theme.
+
+§9 constrains only "Colors and fonts from Obsidian CSS variables"; it specifies
+node colour by kind and says nothing about edges or alpha, so both the variable
+and the 0.25 are free choices rather than spec. No checklist item asserts edge
+visibility either, which is why this survived to a manual pass.
+
+It matters more here than the "it is only cosmetic" reading suggests. The pane's
+whole job is showing *why* retrieval ranked what it did, and PPR runs on the
+edges — they are the mechanism, not decoration. During the §14 pass a node that
+was in fact connected to the giant component read as isolated, and distinguishing
+it needed a component computation outside the app.
+
+Candidate fixes, unranked: raise `EDGE_ALPHA` to roughly 0.45–0.5, or move the
+edge colour to `--text-faint` (already the raw-node colour, still theme-derived).
+Either keeps §9's CSS-variable discipline. Obsidian's own core graph draws edges
+about this faintly, so there is a house-style argument for leaving it — but that
+graph is ambient navigation and this one is a diagnostic instrument.
+
 ## Verification owed — fixes merged but not yet confirmed by hand
 
 Both graph fixes are on master and green under `npm test`, but the pane has no
@@ -2279,7 +2326,7 @@ covered under vitest:
 - [x] §6.2 four distinguishable muted kind colours — checked in **dark**
 - [x] §6.2 again — checked in **light**
 - [x] §6.3 switching theme with the pane open recolours it without a reopen
-- [ ] §9.2 the exported PNG has an opaque background in **both** themes
+- [x] §9.2 the exported PNG has an opaque background in **both** themes
 - [x] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
       read as nodes against grey lines
 
@@ -2320,45 +2367,6 @@ smaller loss than this one. The fix is a §8.3 format decision (a `dropped:`
 line, or a count beside `top:`), not a parser or assembly change, and it should
 be taken with the trace-grammar work the M4 closeout deferred rather than
 bolted on separately.
-
-### Graph edges are drawn at a quarter of a near-background colour (§9)
-
-**Status (2026-09-01):** FIXED on master (`c703d24`). `EDGE_ALPHA` 0.25 -> 0.45
-and the edge colour moved from `--background-modifier-border` to `--text-faint`.
-The tests pin composited WCAG contrast against the background rather than the
-constant, so they fail on a revert and survive a retune - verified by mutation,
-2 fail. Still owed: checklist §6.2/§6.3 and §9.2 by hand in both themes, since
-which CSS variable `sampleTheme` samples needs `getComputedStyle` and cannot be
-covered under vitest. Superseded status line follows.
-
-**Status (2026-09-01):** taken up on branch `claude/jolly-goldstine-a818bb`,
-touching `render.ts` and `tests/graph-view.test.ts`. Unmerged and unverified —
-this entry stands until the change is on master, `npm test` is green, and
-checklist §6.2/§6.3 and §9.2 have been re-run by hand in both themes.
-
-
-`render.ts` draws every edge in `--background-modifier-border` — Obsidian's
-subtle-divider variable, a colour chosen to sit just off the background — and
-then applies `EDGE_ALPHA = 0.25` at `lineWidth = 1`. The result is that links
-are effectively invisible against `--background-primary` on the default dark
-theme.
-
-§9 constrains only "Colors and fonts from Obsidian CSS variables"; it specifies
-node colour by kind and says nothing about edges or alpha, so both the variable
-and the 0.25 are free choices rather than spec. No checklist item asserts edge
-visibility either, which is why this survived to a manual pass.
-
-It matters more here than the "it is only cosmetic" reading suggests. The pane's
-whole job is showing *why* retrieval ranked what it did, and PPR runs on the
-edges — they are the mechanism, not decoration. During the §14 pass a node that
-was in fact connected to the giant component read as isolated, and distinguishing
-it needed a component computation outside the app.
-
-Candidate fixes, unranked: raise `EDGE_ALPHA` to roughly 0.45–0.5, or move the
-edge colour to `--text-faint` (already the raw-node colour, still theme-derived).
-Either keeps §9's CSS-variable discipline. Obsidian's own core graph draws edges
-about this faintly, so there is a house-style argument for leaving it — but that
-graph is ambient navigation and this one is a diagnostic instrument.
 
 ### A title-duplicating heading survives into a page (§6.5, invariant 5)
 

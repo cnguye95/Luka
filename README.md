@@ -405,11 +405,11 @@ calls, and the network panel is how you check that.
 
 ### 9. Export
 
-- [ ] **Export PNG** downloads a file through the browser/OS download path. It
+- [x] **Export PNG** downloads a file through the browser/OS download path. It
       matches what is on screen — same camera, same overlay if one is active.
-- [ ] The exported image has an opaque background in both dark and light
+- [x] The exported image has an opaque background in both dark and light
       themes, not a transparent one.
-- [ ] Nothing new appears anywhere in the vault after an export.
+- [x] Nothing new appears anywhere in the vault after an export.
 
 ### 10. Ask, answers, filing
 
