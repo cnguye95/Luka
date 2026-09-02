@@ -2449,7 +2449,16 @@ connects them. A button labelled Refresh that structurally cannot refresh is
 the worse half of that gap.
 
 The fix is small — give `getGraph` a force flag, or export `rebuildGraph` on
-`Core`, and have `reload()` use it — but it deserves a decision about scope
-first: whether §7.1's "at plugin load and after compile" is a complete list of
-rebuild triggers, or a floor that §9's pane may add to. That is a spec
-question, and BUILD-NOTES is where it should be answered before code moves.
+`Core`, and have `reload()` use it — but it needed a scope decision first:
+whether §7.1's "at plugin load and after compile" is a complete list of rebuild
+triggers, or a floor that §9's pane may add to.
+
+**Decided (2026-09-02): a floor.** §7.1's sentence is answering where the graph
+lives — in memory, no cache file — and its trigger list is incidental to that
+point rather than a closed enumeration. §14 is spec too, and checklist §5.5
+states the intent plainly. The alternative reading would mean deleting a button
+that already exists and is already documented, and leaving a user whose vault
+syncs across machines no way to update the pane short of restarting Obsidian.
+
+So the missing rebuild path is the defect, and Refresh keeps its name. Whoever
+takes this should add the force path rather than re-litigate the reading.
