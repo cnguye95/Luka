@@ -2197,6 +2197,34 @@ fenced).
 Suite 912 passed / 4 skipped. Boundary, lint, typecheck and eval green; eval
 floors unmoved (recall@5 0.7604, recall@10 1.0000, MRR 0.7277).
 
+## Verification owed — fixes merged but not yet confirmed by hand
+
+Both graph fixes are on master and green under `npm test`, but the pane has no
+automated Obsidian-surface coverage, and in one case the suite provably cannot
+catch a regression. Neither finding is closed until these run against a real
+vault. Tick them here, not in the README, whose boxes track a full pass rather
+than a re-check.
+
+**The click fix (`9f90088`)** — the suite does not discriminate here at all;
+reverting `view.ts` leaves every test passing, so this list is the only guard:
+
+- [ ] §7 in full, all eight items
+- [ ] §7.7 specifically: a settled layout, a click with no pointer travel, and
+      nothing moves
+- [ ] §7.8 specifically: click a node, then drag a *different* one — the clicked
+      node drifts with its neighbours rather than sitting frozen
+
+**The edge fix (`c703d24`)** — the contrast property is pinned by tests, but
+which CSS variable `sampleTheme` reads needs `getComputedStyle` and cannot be
+covered under vitest:
+
+- [ ] §6.2 four distinguishable muted kind colours — checked in **dark**
+- [ ] §6.2 again — checked in **light**
+- [ ] §6.3 switching theme with the pane open recolours it without a reopen
+- [ ] §9.2 the exported PNG has an opaque background in **both** themes
+- [ ] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
+      read as nodes against grey lines
+
 ## Open findings — not yet addressed
 
 ### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
