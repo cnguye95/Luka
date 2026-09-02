@@ -20,7 +20,16 @@ const LABEL_LIMIT = 10;
 /** §9: "target smooth pan/zoom at 500+ nodes", and "drop labels first". */
 const LABEL_DROP_THRESHOLD = 500;
 const LABEL_OFFSET = 4;
-const EDGE_ALPHA = 0.25;
+/**
+ * Edges carry §9's structure — PPR runs on them — so they have to be readable,
+ * not merely present. `--background-modifier-border` is Obsidian's subtle
+ * divider, ~28/255 off `--background-primary`; at any alpha below 1 it paints a
+ * line the eye cannot find, and a connected node reads as isolated. The colour
+ * moved to `--text-faint` (below) and the alpha rose with it: together they put
+ * the line at ~1.6 contrast against the background in both themes, a hairline
+ * that is visible without competing with the nodes it connects.
+ */
+const EDGE_ALPHA = 0.45;
 /** §9's "non-neighborhood dimmed", and the filter's "dims non-matches". */
 const DIM_OPACITY = 0.15;
 const TOP_K_STROKE = 2;
@@ -86,7 +95,7 @@ export function sampleTheme(el: HTMLElement): Theme {
     source: read("--color-orange", "#d99045"),
     raw: read("--text-faint", "#6b6b6b"),
     label: read("--text-muted", "#9a9a9a"),
-    edge: read("--background-modifier-border", "#3a3a3a"),
+    edge: read("--text-faint", "#6b6b6b"),
     accent: read("--interactive-accent", "#7f6df2"),
     heat: read("--color-red", "#e05252"),
     font: read("--font-interface", "sans-serif"),

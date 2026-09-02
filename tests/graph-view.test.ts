@@ -259,6 +259,130 @@ describe("§9's degradation: drop labels first", () => {
   });
 });
 
+describe("edges are drawn to be seen, not merely drawn", () => {
+  // The pane exists to show why retrieval ranked what it did, and PPR runs on
+  // the edges. Edges once used `--background-modifier-border` at alpha 0.25:
+  // Obsidian's subtle divider is ~28/255 off the background, so the composite
+  // landed at 1.09 contrast and a node genuinely inside the giant component
+  // read as isolated. This pins the property that failed — the composited line
+  // stands off the background — rather than the alpha that happens to satisfy
+  // it, so it survives a retune and fails a revert.
+  //
+  // It cannot cover the other half of that fix. Which CSS variable `edge` is
+  // sampled from lives in `sampleTheme`, which needs `getComputedStyle`; this
+  // suite runs under vitest's `node` environment. Picking a near-background
+  // variable again stays a manual check (README §6).
+  const MIN_CONTRAST = 1.45;
+
+  /** Records the alpha and stroke colour in force when the edges are stroked. */
+  function edgeStroke(theme: Theme): { alpha: number; color: string } {
+    let seen: { alpha: number; color: string } | null = null;
+    const ctx = {
+      setTransform: () => undefined,
+      fillRect: () => undefined,
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      // `draw` strokes the whole edge set once, before any node is painted.
+      stroke: () => {
+        seen ??= { alpha: ctx.globalAlpha, color: ctx.strokeStyle };
+      },
+      arc: () => undefined,
+      fill: () => undefined,
+      fillText: () => undefined,
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
+      globalAlpha: 1,
+      font: "",
+      textBaseline: "",
+    };
+    draw(ctx as unknown as CanvasRenderingContext2D, {
+      ...frameOf([node("a.md", { x: 0, y: 0 }), node("b.md", { x: 40, y: 40 })], {
+        edges: [{ a: "a.md", b: "b.md" }],
+      }),
+      theme,
+    });
+    if (seen === null) throw new Error("draw never stroked the edges");
+    return seen;
+  }
+
+  const rgb = (hex: string): [number, number, number] => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+
+  /** WCAG relative luminance. */
+  const luminance = (color: [number, number, number]): number => {
+    const channel = (v: number): number => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(color[0]) + 0.7152 * channel(color[1]) + 0.0722 * channel(color[2]);
+  };
+
+  /** The contrast an edge actually reaches once alpha has flattened it onto the background. */
+  function composited(theme: Theme): number {
+    const { alpha, color } = edgeStroke(theme);
+    const back = rgb(theme.background);
+    const front = rgb(color);
+    const flat = back.map((c, at) => c + (front[at] - c) * alpha) as [number, number, number];
+    const a = luminance(back);
+    const b = luminance(flat);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }
+
+  // Obsidian's default themes, near enough: `--background-primary` and the
+  // `--text-faint` the edge colour is sampled from.
+  it("stands off the background on the default dark theme", () => {
+    expect(
+      composited({ ...THEME, background: "#1e1e1e", edge: "#6b6b6b" }),
+    ).toBeGreaterThan(MIN_CONTRAST);
+  });
+
+  it("stands off the background on the default light theme", () => {
+    expect(
+      composited({ ...THEME, background: "#ffffff", edge: "#999999" }),
+    ).toBeGreaterThan(MIN_CONTRAST);
+  });
+
+  it("still paints edges with the theme's edge colour, not a fixed hue", () => {
+    // §9: "colors and fonts from Obsidian CSS variables". Whatever the theme
+    // hands over is what reaches the canvas.
+    expect(edgeStroke({ ...THEME, edge: "#123456" }).color).toBe("#123456");
+  });
+
+  it("leaves the background opaque, so the PNG export is not transparent", () => {
+    // The export draws the same frame onto a fresh canvas, where globalAlpha
+    // starts at 1; the edge alpha must not have leaked onto the fillRect.
+    const order: string[] = [];
+    const ctx = {
+      setTransform: () => undefined,
+      fillRect: () => order.push(`fillRect@${ctx.globalAlpha}`),
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      stroke: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      fillText: () => undefined,
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
+      globalAlpha: 1,
+      font: "",
+      textBaseline: "",
+    };
+    draw(
+      ctx as unknown as CanvasRenderingContext2D,
+      frameOf([node("a.md"), node("b.md", { x: 40 })], { edges: [{ a: "a.md", b: "b.md" }] }),
+    );
+
+    expect(order).toEqual(["fillRect@1"]);
+  });
+});
+
 describe("positions seeded by hashing the page path (§9)", () => {
   const snapshot = (paths: string[]): GraphSnapshot => ({
     nodes: paths.map((path) => ({
