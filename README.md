@@ -244,9 +244,9 @@ destructive and paid checks, then edge cases. Work top to bottom.
 
 If any of these fail, nothing below is worth running.
 
-- [ ] Plugin appears under Community plugins and enables without console errors.
-- [ ] Settings tab shows an API key field (masked) and one model id per task.
-- [ ] Values survive a reload of Obsidian (they are stored in
+- [x] Plugin appears under Community plugins and enables without console errors.
+- [x] Settings tab shows an API key field (masked) and one model id per task.
+- [x] Values survive a reload of Obsidian (they are stored in
       `.obsidian/plugins/luka/data.json`).
 
 ### 2. Before you compile — the empty-vault states
@@ -254,9 +254,9 @@ If any of these fail, nothing below is worth running.
 Do these while the vault is still empty; after the first compile you cannot
 get back to this state without deleting `wiki/` and the manifest.
 
-- [ ] On an empty vault — no `wiki/`, no manifest — the pane shows
+- [x] On an empty vault — no `wiki/`, no manifest — the pane shows
       "No graph yet. Run Luka: Compile to build one." rather than a blank area.
-- [ ] On an empty vault the Compile pointer shows and the banner does not —
+- [x] On an empty vault the Compile pointer shows and the banner does not —
       the two states never appear together.
 
 ### 3. The first compile
@@ -264,45 +264,45 @@ get back to this state without deleting `wiki/` and the manifest.
 Copy `demo/raw/` to `raw/` in the test vault. Needs a real API key: this
 compile costs a few cents and takes a minute or two.
 
-- [ ] **Luka: Compile** reports seven new sources and nothing skipped.
-- [ ] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the seven
+- [x] **Luka: Compile** reports seven new sources and nothing skipped.
+- [x] `.obsidian/plugins/luka/ingest-manifest.json` lists exactly the seven
       sources.
-- [ ] A second **Luka: Compile** reports "nothing to do" and modifies no files.
-- [ ] `raw/note.md` and `raw/notes.txt` gained an `ingested` / `source-format`
+- [x] A second **Luka: Compile** reports "nothing to do" and modifies no files.
+- [x] `raw/note.md` and `raw/notes.txt` gained an `ingested` / `source-format`
       block at the top and are otherwise unchanged.
-- [ ] `raw/note.md` shows
+- [x] `raw/note.md` shows
       `<!-- image not fetched: fig1.png — ... -->` under the figure, with the
       original remote link still present, and its `data:` image untouched.
-- [ ] `raw/page.md`, `raw/paper.md`, `raw/runs.md` and `raw/toy-repo.md` exist,
+- [x] `raw/page.md`, `raw/paper.md`, `raw/runs.md` and `raw/toy-repo.md` exist,
       each carrying `derived-from`.
-- [ ] `raw/paper.md` contains the PDF's text, confirming pdf.js works inside the
+- [x] `raw/paper.md` contains the PDF's text, confirming pdf.js works inside the
       Electron renderer.
-- [ ] Editing `raw/note.md` and compiling again reports one changed source.
-- [ ] Triggering Compile twice in quick succession shows
+- [x] Editing `raw/note.md` and compiling again reports one changed source.
+- [x] Triggering Compile twice in quick succession shows
       "Luka is busy: compile" rather than running twice.
 
 ### 4. What compile wrote
 
 Reading the vault the compile above produced. No further calls.
 
-- [ ] `wiki/sources/` holds one page per source, each with a
+- [x] `wiki/sources/` holds one page per source, each with a
       `source: "[[raw/...]]"` key and a citation block naming its own raw file.
-- [ ] `wiki/entities/` and `wiki/concepts/` hold pages whose bodies are prose
+- [x] `wiki/entities/` and `wiki/concepts/` hold pages whose bodies are prose
       with `[[wikilinks]]`, and whose citation blocks name the sources they came
       from.
-- [ ] `wiki/_index.md` opens with `# Index` and lists every page under
+- [x] `wiki/_index.md` opens with `# Index` and lists every page under
       *Sources*, *Entities* or *Concepts*.
-- [ ] Ctrl/Cmd-clicking a `[[link]]` in a generated page opens the page it
+- [x] Ctrl/Cmd-clicking a `[[link]]` in a generated page opens the page it
       names, or offers to create it (an unresolved link is a future-article
       signal, not a bug).
-- [ ] No wiki page contains frontmatter, a citation list, or a heading written
+- [ ] **FAILED — see BUILD-NOTES.** No wiki page contains frontmatter, a citation list, or a heading written
       by the model — code writes all four (invariant 5).
-- [ ] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
-- [ ] A second **Luka: Compile** reports "nothing to do" and makes no API calls
+- [x] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
+- [x] A second **Luka: Compile** reports "nothing to do" and makes no API calls
       (watch the console or your Anthropic usage page).
-- [ ] Editing one source and recompiling regenerates only the pages that cite
+- [x] Editing one source and recompiling regenerates only the pages that cite
       it.
-- [ ] Removing the API key and compiling a changed source surfaces one failure
+- [x] Removing the API key and compiling a changed source surfaces one failure
       notice per source and leaves the manifest untouched, so the next compile
       with a key restored picks them up again.
 
@@ -320,7 +320,7 @@ surface in the project, so it comes before the older flows.
 - [ ] On a small vault (a handful of pages), the pane shows the banner
       "Mode A (lexical) active — graph ranking off" followed by live node, link
       pair and ratio counts, and the counts match what `wiki/_index.md` implies.
-- [ ] With the pane open, run **Luka: Compile**. When it finishes, the pane's
+- [x] With the pane open, run **Luka: Compile**. When it finishes, the pane's
       counts update on their own, with no click. (§7.1's rebuild event.)
 - [ ] The **Refresh** button updates the counts after a compile run from another
       window or a vault sync.
@@ -496,7 +496,7 @@ two items here the highest-value pair in the list.
       assert.
 - [ ] `.trash/`, if it appears, is not picked up as a source by a later
       compile: the next **Luka: Compile** still reports "nothing to do".
-- [ ] Editing a source rather than deleting it also opens the modal, and its
+- [x] Editing a source rather than deleting it also opens the modal, and its
       "may be deleted" list is empty.
 - [ ] A compile whose diff is only additions opens no modal at all.
 
