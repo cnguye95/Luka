@@ -2507,3 +2507,36 @@ again on every future pass.
 Worth noting what this is *not*: `requestUrl` is the right choice, and its own
 comment says why (it bypasses renderer CORS). The defect is in §14's
 verification method, not in the transport.
+
+### §14's "trigger Compile while the modal is open" cannot be performed (checklist §13.3)
+
+Third item in this pass whose stated method cannot reach its condition, after
+§8.7's directory and §12.1's network panel.
+
+§13.3 asks the reader to trigger Compile a second time while the scope modal is
+open and see "Luka is busy: compile", proving the lock spans preview → confirm
+→ work. But an Obsidian modal captures the keyboard scope: Ctrl/Cmd-P does not
+open the command palette while one is up, and there is no ribbon icon for
+Compile (§8.1 gives the ribbon to the graph pane alone). There is no way to
+dispatch the command from the UI in that state, so the notice cannot be
+observed by the route the item describes.
+
+**The property itself is covered, and precisely.** `cascade-m2d.test.ts` starts
+a compile whose `confirm` callback blocks — the modal being open — and asserts
+`busyWith === "compile"`, that a second `compile()` rejects with `BusyError`,
+that the message is exactly "Luka is busy: compile", and that the lock clears
+once the confirm answers. That is §13.3's whole claim, including the string.
+
+So the item is not a gap in coverage; it is a gap between what is covered and
+what a human can see. Three options, none free: give Compile a ribbon icon
+(changes §8.1's "one ribbon icon" and adds surface for a single test); state
+that the manual item is redundant and point at the test; or leave it and accept
+that the reader ticks it on the test's authority. The last is what this pass
+did, and the honest version of it is to say so in the item's own text rather
+than let a future reader repeat the attempt.
+
+Worth noting the shape all three share: each item names a *mechanism* rather
+than an *outcome* — "a directory", "the network panel", "trigger it again" —
+and mechanisms are what rot when the platform underneath them differs from the
+one the author had in mind. The items that survived this pass unchanged are the
+ones that name what should be true, and leave how to see it to the reader.

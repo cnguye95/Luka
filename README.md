@@ -481,7 +481,7 @@ Continues from the answer note the section above wrote.
 - [x] Delete the `<!-- trace:start -->` block from an answer note by hand and
       run the command: a notice says there is no trace, and the pane is left
       exactly as it was.
-- [ ] Replay a trace, then compile after deleting one of the pages it names.
+- [x] Replay a trace, then compile after deleting one of the pages it names.
       Replay again: the remaining pages light and the status line reports how
       many labels it could not resolve.
 - [x] Trace replay makes no model call. (§9's "zero calls".)
@@ -491,19 +491,19 @@ Continues from the answer note the section above wrote.
 The only paid items in the pane. Skip if you would rather not spend the calls;
 nothing below depends on them.
 
-- [ ] With a real API key set, type a question into the graph's query box and
+- [x] With a real API key set, type a question into the graph's query box and
       press **Inspect (1 model call)**. Exactly one request reaches the API —
       not two, not three. Count it on the usage page, not in DevTools.
 - [x] The button's label reads exactly "Inspect (1 model call)".
-- [ ] The overlay appears: seeds ringed, top-K stroked, and on a Mode-B vault a
+- [x] The overlay appears: seeds ringed, top-K stroked, and on a Mode-B vault a
       heat ramp across what the query reached.
-- [ ] On a small Mode-A vault, inspection lights seeds and lexical top-K with
+- [x] On a small Mode-A vault, inspection lights seeds and lexical top-K with
       **no** heat ramp, and the Mode-A banner above explains why.
 - [x] Nothing is written anywhere in the vault by an inspection — no answer
       note, no file at all.
-- [ ] The button is disabled while the call is in flight, and pressing Enter in
+- [x] The button is disabled while the call is in flight, and pressing Enter in
       the query box does the same thing as clicking it.
-- [ ] Inspect works while a compile is running (the pane is never blocked), and
+- [x] Inspect works while a compile is running (the pane is never blocked), and
       Esc clears the resulting overlay.
 
 ### 13. Deletion is recoverable — destructive, deliberately late
@@ -513,27 +513,28 @@ core is tested against in-memory and Node filesystems; only Obsidian's own
 adapter can show that a delete reaches the system trash, which makes the last
 two items here the highest-value pair in the list.
 
-- [ ] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
+- [x] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
       modal first, showing the diff counts and both lists — pages to regenerate,
       and pages that may be deleted.
-- [ ] Pressing **Cancel** (or Esc) closes it, reports "compile cancelled", and
+- [x] Pressing **Cancel** (or Esc) closes it, reports "compile cancelled", and
       changes nothing: `wiki/sources/page.md` and `raw/page.md` are still there.
-- [ ] Triggering Compile a second time while the modal is open shows
+- [x] Triggering Compile a second time while the modal is open shows
       "Luka is busy: compile" — the lock is held across the confirm.
-- [ ] Running Compile again and pressing **Compile** removes `wiki/sources/page.md`
+- [x] Running Compile again and pressing **Compile** removes `wiki/sources/page.md`
       and `raw/page.md`, drops the page from `wiki/_index.md`, and regenerates
       any page that cited it from its remaining sources.
-- [ ] After the deletion above, `wiki/sources/page.md` and `raw/page.md` are in
+- [x] After the deletion above, `wiki/sources/page.md` and `raw/page.md` are in
       the system trash (or the vault's `.trash/` folder, if the platform has no
       usable system trash) — **not** gone. This is what makes a mistaken
       confirmation at the scope modal survivable, and it is the one thing the
       modal's "pages that *may* be deleted" wording promises but code cannot
       assert.
-- [ ] `.trash/`, if it appears, is not picked up as a source by a later
+- [ ] **N/A where the OS has a system trash** (deletes go there instead, so no
+      vault-local folder appears). `.trash/`, if it appears, is not picked up as a source by a later
       compile: the next **Luka: Compile** still reports "nothing to do".
 - [x] Editing a source rather than deleting it also opens the modal, and its
       "may be deleted" list is empty.
-- [ ] A compile whose diff is only additions opens no modal at all.
+- [x] A compile whose diff is only additions opens no modal at all.
 
 ### 14. Health check
 
