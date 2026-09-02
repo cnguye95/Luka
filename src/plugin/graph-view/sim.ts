@@ -50,6 +50,12 @@ type SimLink = SimulationLinkDatum<SimNode>;
 
 export interface Sim {
   readonly nodes: SimNode[];
+  /**
+   * The alpha the walk is being *held* at — d3's `alphaTarget`. Zero unless a
+   * drag is holding it warm, which is what "cools to a stop" needs; readable so
+   * the reheat can be asserted without running d3's timer.
+   */
+  readonly heldAlpha: number;
   /** Positions for a fresh snapshot, keeping what survived (§9's refresh). */
   replace(graph: GraphSnapshot): void;
   stop(): void;
@@ -152,6 +158,9 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
   return {
     get nodes() {
       return nodes;
+    },
+    get heldAlpha() {
+      return simulation.alphaTarget();
     },
     replace,
     nodeAt: (path: string) => byPath.get(path),

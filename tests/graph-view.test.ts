@@ -27,7 +27,14 @@ import {
   isLit,
   matchesFilter,
 } from "../src/plugin/graph-view/overlay";
-import { createSim, type SimNode } from "../src/plugin/graph-view/sim";
+import {
+  CLICK_SLOP,
+  pressEnded,
+  pressMoved,
+  pressOn,
+  type Press,
+} from "../src/plugin/graph-view/press";
+import { createSim, type Sim, type SimNode } from "../src/plugin/graph-view/sim";
 import type { GraphSnapshot } from "../src/core/types";
 
 const THEME: Theme = {
@@ -391,6 +398,130 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
     sim.replace(snapshot(["a.md"]));
 
     expect(sim.nodes.map((n) => n.path)).toEqual(["a.md"]);
+    sim.stop();
+  });
+});
+
+describe("what a press on a node turns out to be (§9's click against its drag)", () => {
+  const snapshot = (paths: string[]): GraphSnapshot => ({
+    nodes: paths.map((path) => ({
+      path,
+      title: path,
+      kind: "concept" as const,
+      degree: 1,
+      summary: "",
+    })),
+    edges: [],
+  });
+
+  /** A live simulation, the node under the press, and the press — as the view
+   * holds them between `pointerdown` and the release. */
+  function pressed(): { sim: Sim; node: SimNode; press: Press } {
+    const sim = createSim(snapshot(["a.md", "b.md"]), () => undefined);
+    const node = sim.nodeAt("a.md") as SimNode;
+    return { sim, node, press: pressOn("a.md", 100, 100) };
+  }
+
+  it("starts nothing on the press itself", () => {
+    // Where the defect lived: `dragStart` ran on `pointerdown`, before anything
+    // knew which of §9's two gestures this was going to be.
+    const { sim, node } = pressed();
+
+    expect(node.fx).toBeUndefined();
+    expect(node.fy).toBeUndefined();
+    expect(sim.heldAlpha).toBe(0);
+    sim.stop();
+  });
+
+  it("does not pin a node the pointer only rested on", () => {
+    const { sim, node, press } = pressed();
+
+    pressMoved(press, sim, node, 100 + CLICK_SLOP, 100);
+
+    expect(press.begun).toBe(false);
+    expect(node.fx).toBeUndefined();
+    expect(node.fy).toBeUndefined();
+    sim.stop();
+  });
+
+  it("neither reheats nor pins for a click, and still owes it a PPR", () => {
+    // §9 gives a click one job, an instant PPR overlay. The other two are the
+    // drag's, and the pin is the one that accumulates: ten clicks while
+    // exploring froze ten nodes, and the layout could not relax again.
+    const { sim, node, press } = pressed();
+
+    pressMoved(press, sim, node, 102, 101);
+    const clicked = pressEnded(press, sim, 102, 101);
+
+    expect(clicked).toBe("a.md");
+    expect(node.fx).toBeUndefined();
+    expect(node.fy).toBeUndefined();
+    expect(sim.heldAlpha).toBe(0);
+    sim.stop();
+  });
+
+  it("begins the drag on the first move past the slop, and not on the one at it", () => {
+    // Pinned from both sides: a threshold tested only from beyond it is
+    // satisfied by any smaller one, including the zero the defect had.
+    const { sim, node, press } = pressed();
+
+    expect(pressMoved(press, sim, node, 100 + CLICK_SLOP, 100)).toBe(false);
+    expect(node.fx).toBeUndefined();
+
+    expect(pressMoved(press, sim, node, 100 + CLICK_SLOP + 1, 100)).toBe(true);
+
+    expect(node.fx).toBe(node.x);
+    expect(node.fy).toBe(node.y);
+    sim.stop();
+  });
+
+  it("reheats the walk for a real drag, so checklist §7.3's neighbours resettle", () => {
+    const { sim, node, press } = pressed();
+
+    pressMoved(press, sim, node, 140, 100);
+
+    expect(sim.heldAlpha).toBeGreaterThan(0);
+    sim.stop();
+  });
+
+  it("leaves a dragged node where it was dropped and lets the walk cool (checklist §7.3)", () => {
+    const { sim, node, press } = pressed();
+
+    pressMoved(press, sim, node, 140, 100);
+    sim.dragTo(node, 12, 34);
+    const clicked = pressEnded(press, sim, 140, 100);
+
+    expect(node.fx).toBe(12);
+    expect(node.fy).toBe(34);
+    expect(sim.heldAlpha).toBe(0);
+    expect(clicked).toBeNull();
+    sim.stop();
+  });
+
+  it("runs no click-PPR for a drag released back over its origin (checklist §7.6)", () => {
+    // Distance from the release point cannot tell this from a click: the
+    // gesture travelled far enough to pin the node and then came back. Whether
+    // the drag began is what decides.
+    const { sim, node, press } = pressed();
+
+    pressMoved(press, sim, node, 140, 100);
+    const clicked = pressEnded(press, sim, 100, 100);
+
+    expect(clicked).toBeNull();
+    expect(node.fx).toBe(node.x);
+    sim.stop();
+  });
+
+  it("calls no release a click when the travel arrived with it", () => {
+    // No `pointermove` reported the distance, so nothing began — but the
+    // pointer did move, and checklist §7.6's click is the one without movement.
+    const { sim, node, press } = pressed();
+
+    const clicked = pressEnded(press, sim, 140, 100);
+
+    expect(clicked).toBeNull();
+    expect(node.fx).toBeUndefined();
+    expect(sim.heldAlpha).toBe(0);
     sim.stop();
   });
 });

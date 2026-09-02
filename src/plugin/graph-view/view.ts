@@ -24,6 +24,7 @@ import {
   type LukaSettings,
 } from "../../core/index";
 import { fromClickPPR, fromInspect, fromTrace, type Overlay } from "./overlay";
+import { pressEnded, pressMoved, pressOn, type Press } from "./press";
 import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
 import { createSim, type Sim, type SimNode } from "./sim";
 
@@ -46,8 +47,6 @@ const ZOOM_SENSITIVITY = 0.002;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 6;
 const TOOLTIP_OFFSET = 12;
-/** Pointer travel, in CSS pixels, that turns a click into a drag. */
-const CLICK_SLOP = 4;
 /** Device ratio the exported PNG is rendered at, independent of the display. */
 const PNG_SCALE = 2;
 
@@ -85,16 +84,15 @@ export class LukaGraphView extends ItemView {
   private hovered: string | null = null;
   private overlay: Overlay | null = null;
   private filter = "";
-  /** Where a pointer went down, so a drag is not mistaken for a click. */
-  private pressedAt: { x: number; y: number } | null = null;
   /**
-   * Path of the node under an active drag, or `null` when panning or idle.
+   * The press on a node currently in progress, or `null` when panning or idle.
    *
-   * A path, not the node: `sim.replace` allocates fresh `SimNode` objects, so a
-   * compile landing mid-drag would leave a held reference pointing at an object
-   * no longer in the simulation, and the drag would go on mutating an orphan.
+   * `press.ts` owns what it becomes: a press starts nothing, and the drag —
+   * with its reheat and its pin — begins on the move that passes `CLICK_SLOP`.
+   * Before that the gesture is still a candidate click, and §9 gives a click no
+   * business moving the layout.
    */
-  private dragging: string | null = null;
+  private press: Press | null = null;
   /** Where a background pan started, in canvas space. */
   private panFrom: { x: number; y: number; camX: number; camY: number } | null = null;
 
@@ -260,7 +258,7 @@ export class LukaGraphView extends ItemView {
     this.tooltipEl = null;
     this.replayEl = null;
     this.inspectEl = null;
-    this.dragging = null;
+    this.press = null;
     this.panFrom = null;
     this.hovered = null;
     this.overlay = null;
@@ -367,9 +365,10 @@ export class LukaGraphView extends ItemView {
         this.panFrom = { x: point.x, y: point.y, camX: this.camera.x, camY: this.camera.y };
         return;
       }
-      this.dragging = node.path;
-      this.pressedAt = point;
-      this.sim?.dragStart(node);
+      // Recorded, not started. Which gesture this is depends on travel that has
+      // not happened yet, and `dragStart` reheats and pins — neither of which
+      // §9 asks a click for.
+      this.press = pressOn(node.path, point.x, point.y);
     });
 
     this.registerDomEvent(canvas, "pointermove", (event: PointerEvent) => {
@@ -377,18 +376,22 @@ export class LukaGraphView extends ItemView {
       if (frame === null) return;
       const point = at(event);
 
-      if (this.dragging !== null) {
-        const held = this.sim?.nodeAt(this.dragging);
-        // Gone: a compile replaced the node set mid-drag. Ending the gesture is
+      const press = this.press;
+      const sim = this.sim;
+      if (press !== null) {
+        const held = sim?.nodeAt(press.path);
+        // Gone: a compile replaced the node set mid-gesture. Ending it is
         // honest — there is nothing left to follow the pointer.
-        if (held === undefined) {
-          this.dragging = null;
-          this.pressedAt = null;
-          this.sim?.dragEnd();
+        if (sim === null || held === undefined) {
+          if (press.begun) sim?.dragEnd();
+          this.press = null;
           return;
         }
+        // The drag starts here, on the first move past `CLICK_SLOP`, and until
+        // then this branch only swallows the move: the press is still a click.
+        if (!pressMoved(press, sim, held, point.x, point.y)) return;
         const graphPoint = toGraph(this.camera, point.x, point.y);
-        this.sim?.dragTo(held, graphPoint.x, graphPoint.y);
+        sim.dragTo(held, graphPoint.x, graphPoint.y);
         this.schedule();
         return;
       }
@@ -414,21 +417,19 @@ export class LukaGraphView extends ItemView {
 
     const endGesture = (event: PointerEvent) => {
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-      const draggedPath = this.dragging;
-      const from = this.pressedAt;
-      // §9's drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
-      // so the node stays where it was dropped.
-      if (draggedPath !== null) this.sim?.dragEnd();
-      this.dragging = null;
+      const press = this.press;
+      const sim = this.sim;
+      this.press = null;
       this.panFrom = null;
-      this.pressedAt = null;
 
-      // A press that did not travel is a click, not a drag. §9 gives the two
-      // gestures different jobs on the same button, and distance is what tells
-      // them apart — a pin that also re-ran PPR would fire on every drag.
-      if (draggedPath === null || from === null) return;
+      // A press that never began a drag is a click. §9 gives the two gestures
+      // different jobs on the same button, and `press.ts` is where they are
+      // told apart — releasing a drag runs no PPR (checklist §7.6), and a drag that has
+      // begun is still one however near its origin it is let go.
+      if (press === null || sim === null) return;
       const point = at(event);
-      if (Math.hypot(point.x - from.x, point.y - from.y) > CLICK_SLOP) return;
+      const clicked = pressEnded(press, sim, point.x, point.y);
+      if (clicked === null) return;
       // §9 wants this "instant", so it runs on the press rather than waiting to
       // learn whether a second one is coming. Two earlier attempts to suppress
       // the first half of a double-click were both wrong — `event.detail` is 0
@@ -436,7 +437,7 @@ export class LukaGraphView extends ItemView {
       // shorter than the 500ms platform double-click interval so it fired
       // anyway, on top of delaying every ordinary click. `dblclick` undoes the
       // overlay instead, which needs no timer and cannot be mistimed.
-      void this.runClickPPR(draggedPath);
+      void this.runClickPPR(clicked);
     };
     this.registerDomEvent(canvas, "pointerup", endGesture);
     this.registerDomEvent(canvas, "pointercancel", endGesture);
