@@ -191,6 +191,20 @@ icon opens the graph pane.
 | **Luka: Open graph** | Opens the graph pane. The ribbon icon opens the same one. |
 | **Luka: Show retrieval on graph** | Replays the active answer note's retrieval trace as an overlay on the graph. Makes no model calls. |
 
+### Asking without spending
+
+The graph pane has its own question box, and it is not a second way to run
+*Ask the wiki*. Typing into `Ask the graph…` and pressing **Inspect (1 model
+call)** — or Enter — answers a narrower question: *what would retrieval
+actually pull for this?* It makes exactly one model call to choose seeds, ranks
+from them, paints the result as an overlay, and stops. No synthesis, no answer,
+and no file: §12.5 pins that an inspection writes nothing anywhere in the vault.
+
+That makes it the cheap way to see why an answer surfaced what it did, or to
+sanity-check a question before paying for the real thing. *Ask the wiki* costs
+two or three calls and leaves a note; *Inspect* costs one and leaves nothing,
+which is why the button prints its own price.
+
 Two of these are **context-sensitive**: *File this answer* and *Show retrieval
 on graph* appear only while an answer note is the active file, and are absent
 from the palette otherwise.
@@ -387,18 +401,26 @@ standing between that regression and the vault.
 
 ### 8. Overlays and the filter
 
+**How to check "no model call".** Not in DevTools. The plugin calls the API
+through Obsidian's `requestUrl`, which runs in Electron's main process, so its
+requests never appear in the renderer's Network panel — an empty panel there is
+consistent with any number of calls and proves nothing. Use your Anthropic
+usage page, which counts server-side, or read the path: click-PPR, the filter
+and trace replay reach no provider at all, and `ppr.ts` holds no reference to
+one.
+
 All of these are free — §9 gives click-PPR, the filter and replay zero model
-calls, and the network panel is how you check that.
+calls.
 
 - [x] Clicking a node recolours the graph instantly: the clicked node gains a
       ring, the top-K gain a stroke, reached nodes take a heat ramp, and
-      everything unreached dims. No network request appears in the developer
-      tools. (§9's "no model call".)
+      everything unreached dims. No model call — see the note above on how to
+      check that. (§9's "no model call".)
 - [x] The status line names the overlay while one is active.
 - [x] Pressing Esc clears the overlay and restores the plain graph.
 - [x] Typing in the filter box dims non-matching nodes as you type, matching on
       both title and path, case-insensitively. Clearing it restores everything.
-      Again, no network request.
+      Again, no model call.
 - [x] Filter and overlay compose: with both active, a node outside both is
       dimmer than one outside only one of them.
 - [x] Click-PPR still works while a compile is running — the pane is never
@@ -451,18 +473,18 @@ Needs a real API key. One question costs a few cents.
 
 Continues from the answer note the section above wrote.
 
-- [ ] Ask a question on the demo vault, then run **Luka: Show retrieval on
+- [x] Ask a question on the demo vault, then run **Luka: Show retrieval on
       graph** from the answer note. The pane opens and lights exactly the pages
       the note's own trace block lists as seeds and top entries.
-- [ ] The command does not appear in the palette while a non-answer note is
+- [x] The command does not appear in the palette while a non-answer note is
       active, and the pane's "Show retrieval" button is hidden then too.
-- [ ] Delete the `<!-- trace:start -->` block from an answer note by hand and
+- [x] Delete the `<!-- trace:start -->` block from an answer note by hand and
       run the command: a notice says there is no trace, and the pane is left
       exactly as it was.
 - [ ] Replay a trace, then compile after deleting one of the pages it names.
       Replay again: the remaining pages light and the status line reports how
       many labels it could not resolve.
-- [ ] Trace replay makes no network request. (§9's "zero calls".)
+- [x] Trace replay makes no model call. (§9's "zero calls".)
 
 ### 12. Query inspection — one model call per press
 
@@ -470,8 +492,8 @@ The only paid items in the pane. Skip if you would rather not spend the calls;
 nothing below depends on them.
 
 - [ ] With a real API key set, type a question into the graph's query box and
-      press **Inspect (1 model call)**. Exactly one request appears in the
-      developer tools network panel — not two, not three.
+      press **Inspect (1 model call)**. Exactly one request reaches the API —
+      not two, not three. Count it on the usage page, not in DevTools.
 - [x] The button's label reads exactly "Inspect (1 model call)".
 - [ ] The overlay appears: seeds ringed, top-K stroked, and on a Mode-B vault a
       heat ramp across what the query reached.

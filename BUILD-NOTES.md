@@ -2476,3 +2476,34 @@ syncs across machines no way to update the pane short of restarting Obsidian.
 
 So the missing rebuild path is the defect, and Refresh keeps its name. Whoever
 takes this should add the force path rather than re-litigate the reading.
+
+### §14's "no network request" method cannot work (checklist §8.1, §8.4, §11.5, §12.1)
+
+Found while running §12.1. The plugin reaches the API through Obsidian's
+`requestUrl` (`http-obsidian.ts`), which runs in Electron's **main** process.
+DevTools' Network panel observes the renderer only, so a Luka model call never
+appears there — not one, not three. An empty panel is consistent with any
+number of calls.
+
+Four items name that panel as their instrument. Three are negative assertions
+(§8.1, §8.4, §11.5: "no network request") and were passing on evidence that
+could not have failed. §12.1 is positive — "exactly one request appears in the
+developer tools network panel — not two, not three" — and is simply untestable
+as written.
+
+The three negatives were re-verified statically instead, which is stronger than
+the panel would have been even if it worked: click-PPR calls `core.computePPR`,
+and `ppr.ts` contains no provider reference at all ("pure and synchronous: it is
+arithmetic over a snapshot"); the filter handler sets a field and schedules a
+redraw, reaching no core method; trace replay goes through `fromTrace` in
+`overlay.ts`, which imports a type and `SimNode`. None of the three can make a
+model call. Their ticks stand on that, not on the panel.
+
+§12.1's count needs a server-side check — the Anthropic usage page — and the
+checklist now says so. §8's preamble gains a note explaining why DevTools is
+the wrong instrument, since the mistake is natural and would otherwise be made
+again on every future pass.
+
+Worth noting what this is *not*: `requestUrl` is the right choice, and its own
+comment says why (it bypasses renderer CORS). The defect is in §14's
+verification method, not in the transport.
