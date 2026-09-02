@@ -358,7 +358,7 @@ surface in the project, so it comes before the older flows.
       neighbours resettle around it. (§9's drag-to-pin.)
 - [x] Double-clicking a node opens that page in the current tab. Double-clicking
       a raw source opens its readable markdown.
-- [ ] Moving the pointer off the canvas hides the tooltip and clears the hover
+- [x] Moving the pointer off the canvas hides the tooltip and clears the hover
       label.
 - [x] Dragging a node does *not* trigger click-PPR when you release it; a click
       without movement does.
@@ -381,20 +381,20 @@ standing between that regression and the vault.
 All of these are free — §9 gives click-PPR, the filter and replay zero model
 calls, and the network panel is how you check that.
 
-- [ ] Clicking a node recolours the graph instantly: the clicked node gains a
+- [x] Clicking a node recolours the graph instantly: the clicked node gains a
       ring, the top-K gain a stroke, reached nodes take a heat ramp, and
       everything unreached dims. No network request appears in the developer
       tools. (§9's "no model call".)
-- [ ] The status line names the overlay while one is active.
-- [ ] Pressing Esc clears the overlay and restores the plain graph.
-- [ ] Typing in the filter box dims non-matching nodes as you type, matching on
+- [x] The status line names the overlay while one is active.
+- [x] Pressing Esc clears the overlay and restores the plain graph.
+- [x] Typing in the filter box dims non-matching nodes as you type, matching on
       both title and path, case-insensitively. Clearing it restores everything.
       Again, no network request.
-- [ ] Filter and overlay compose: with both active, a node outside both is
+- [x] Filter and overlay compose: with both active, a node outside both is
       dimmer than one outside only one of them.
-- [ ] Click-PPR still works while a compile is running — the pane is never
+- [x] Click-PPR still works while a compile is running — the pane is never
       blocked by the lock.
-- [ ] Open the pane on a vault where one file under `wiki/` is unreadable (make
+- [x] Open the pane on a vault where one file under `wiki/` is unreadable (make
       one a directory, or lock it). The pane shows a notice naming the problem
       and falls back to the empty state — it does not throw into the console or
       render a blank surface with no explanation.
