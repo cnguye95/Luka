@@ -394,8 +394,12 @@ calls, and the network panel is how you check that.
       dimmer than one outside only one of them.
 - [x] Click-PPR still works while a compile is running — the pane is never
       blocked by the lock.
-- [x] Open the pane on a vault where one file under `wiki/` is unreadable (make
-      one a directory, or lock it). The pane shows a notice naming the problem
+- [x] Open the pane on a vault where one file under `wiki/` is unreadable. Deny
+      read on it — `icacls "<file>" /deny "%USERNAME%":(R)` on Windows, `chmod
+      000` elsewhere; restore with `/remove:d`. Replacing it with a *directory*
+      does not reproduce, because `fs-obsidian.ts` tags entries by kind and
+      `pagetable.ts` skips folders, so the file is never read and nothing
+      throws. The pane shows a notice naming the problem
       and falls back to the empty state — it does not throw into the console or
       render a blank surface with no explanation.
 
