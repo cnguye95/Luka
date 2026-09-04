@@ -110,6 +110,13 @@ export interface LukaSettings {
   requestTimeoutMs: number;
   maxRetries: number;
   compileConcurrency: number;
+  /**
+   * Keys of "what to add next" cards the user dismissed. Not a §17 parameter —
+   * it is the only durable state that pane has, and `data.json` is where this
+   * plugin already keeps what it must remember. Pruned to the current report
+   * whenever a new dismissal is saved, so it cannot grow without bound.
+   */
+  dismissedGaps: string[];
 }
 
 /** handoff.md §17. Values marked "fixed" there are constants in their own modules, not settings. */
@@ -134,6 +141,7 @@ export const DEFAULT_SETTINGS: LukaSettings = {
   requestTimeoutMs: 120_000,
   maxRetries: 2,
   compileConcurrency: 2,
+  dismissedGaps: [],
 };
 
 /**
@@ -180,6 +188,14 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
       typeof settings.followUpEnabled === "boolean"
         ? settings.followUpEnabled
         : DEFAULT_SETTINGS.followUpEnabled,
+    // The same rule as everything above, for the one list here: a hand-edited
+    // `data.json` can put anything in this key, and a non-array is not a set of
+    // dismissals. `filter` also returns a fresh array, which `models`' comment
+    // explains the need for — the pane reads this while the plugin may be
+    // writing a new list.
+    dismissedGaps: Array.isArray(settings.dismissedGaps)
+      ? settings.dismissedGaps.filter((key): key is string => typeof key === "string")
+      : [],
     // §7.3's predicate and §7.4's caps. A node count or ratio below zero makes
     // the predicate meaningless rather than merely strict, and a cap below one
     // asks the model for nothing at all.

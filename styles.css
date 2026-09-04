@@ -1,7 +1,9 @@
 /*
- * §9's graph pane. Layout only — every colour the pane draws is sampled from
- * Obsidian's CSS variables at render time, in `graph-view/render.ts`, so a
- * theme switch is picked up without reopening the view.
+ * §9's graph pane and the "what to add next" pane. Layout, and no literal
+ * colours: the canvas samples Obsidian's variables at draw time in
+ * `graph-view/render.ts`, the card glyphs reference them through `var()` with
+ * the same fallbacks in `gaps-view/layout.ts`, and everything here uses
+ * `var()` too. A theme switch is therefore picked up without reopening a view.
  */
 
 .luka-graph-view {
@@ -83,4 +85,121 @@
 .luka-graph-query {
   flex: 2 1 12em;
   min-width: 8em;
+}
+
+/* "What to add next". Same shell as §9's pane, its own classes: the two panes
+ * share an idiom, not a stylesheet, so neither can restyle the other. */
+
+.luka-gaps-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+
+.luka-gaps-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  align-items: center;
+  padding: var(--size-4-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.luka-gaps-filter {
+  flex: 1 1 8em;
+  min-width: 6em;
+}
+
+.luka-gaps-status {
+  padding: var(--size-4-1) var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.luka-gaps-empty {
+  padding: var(--size-4-4);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.luka-gaps-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--size-4-3);
+  padding: var(--size-4-3);
+  overflow: auto;
+  align-content: start;
+}
+
+.luka-gap-card {
+  /* The card is the query container, so the glyph hides by how wide the card
+   * is rather than how wide the window is — a narrow sidebar in a wide window
+   * is exactly the case a viewport rule gets wrong. */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  padding: var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+/* Sorted last and reading quieter: still available, still not the headline. */
+.luka-gap-demoted {
+  opacity: 0.7;
+}
+
+.luka-gap-head {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+
+.luka-gap-title {
+  font-weight: var(--font-semibold);
+}
+
+.luka-gap-glyph {
+  align-self: center;
+  width: 96px;
+  height: 96px;
+}
+
+.luka-gap-glyph-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.luka-gap-reason {
+  margin: 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.luka-gap-chip {
+  align-self: flex-start;
+  padding: var(--size-4-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+}
+
+.luka-gap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1);
+}
+
+/* The chip already carries the number in words, so the picture is what goes
+ * when there is no room for it. §9's own degradation rule, one step further. */
+@container (max-width: 200px) {
+  .luka-gap-glyph {
+    display: none;
+  }
 }

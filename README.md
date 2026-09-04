@@ -178,7 +178,7 @@ first — files changing underneath a run will muddy the "nothing to do" and
 
 ## Commands
 
-Luka registers six commands. All are invoked from the command palette
+Luka registers seven commands. All are invoked from the command palette
 (Ctrl/Cmd-P, then type `luka`) — there are no menus, and the single ribbon
 icon opens the graph pane.
 
@@ -190,6 +190,7 @@ icon opens the graph pane.
 | **Luka: Health check** | Writes and opens `wiki/_health.md`: article candidates, orphan pages, citations naming unknown files, filed answers and their ages. Makes no model calls. |
 | **Luka: Open graph** | Opens the graph pane. The ribbon icon opens the same one. |
 | **Luka: Show retrieval on graph** | Replays the active answer note's retrieval trace as an overlay on the graph. Makes no model calls. |
+| **Luka: What to add next** | Opens a pane of suggestions read off the wiki's own structure: articles several pages link to that nobody has written, and pages resting on a single source. Makes no model calls and writes nothing; **Refresh** rescans, and a pane Obsidian restored waits to be asked. |
 
 ### Asking without spending
 
@@ -258,7 +259,7 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 95 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 118 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
@@ -578,3 +579,50 @@ Least likely to matter, and the 500-node item needs a vault you may not have.
       `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
       pages keep their grounding, and nothing is rewritten from an empty
       context. Restore the file afterwards.
+
+### 17. What to add next
+
+The second pane, and the newest code in the plugin. Everything here is free —
+it makes no model call at all — and nothing it does writes to the vault.
+
+- [ ] **Luka: What to add next** opens a pane titled "What to add next" in the
+      right sidebar. Running the command again *reveals* that pane rather than
+      opening a second copy, and **no new ribbon icon appears** — §8.1 still
+      allows exactly one, and it is the graph's.
+- [ ] Opened by the command, it scans at once: the status line gives counts and
+      cards appear. No progress notice about model calls, because it makes none.
+- [ ] Restart Obsidian with the pane open. It comes back reading "Press Refresh
+      to scan…", with no cards and nothing in the console, and stays that way
+      until you press **Refresh** or run the command. (Invariant 1: a pane
+      Obsidian restored was opened by nobody, so it walks nothing on its own.)
+- [ ] A **New article** card names a target at least two pages link to that no
+      title or alias resolves. The bold number matches the chip, the sentence
+      names the citing pages, and the glyph shows a dashed hollow centre with
+      one dot per citing page — "+k more" past eight.
+- [ ] A **Thin evidence** card names a page whose `## Sources` block has exactly
+      one entry, and the sentence names that entry. At most five appear, and no
+      `wiki/sources/` page is among them (each cites exactly its own raw file).
+- [ ] Names with an underscore or camelCase, and names already inside an
+      existing page's title, sort after the rest, read dimmer, and say "low
+      confidence" on the chip. They are still listed.
+- [ ] **Find sources** shows a notice with a search string built from the card's
+      title and citing pages, and puts the same string on the clipboard — paste
+      it somewhere to confirm. No browser opens and nothing leaves the machine.
+- [ ] **Ask** opens the Ask modal with the question already written in it.
+      Enter asks it; Esc cancels and asks nothing.
+- [ ] **Dismiss** removes the card. It stays gone after Refresh and after an
+      Obsidian restart, and `.obsidian/plugins/luka/data.json` gains a
+      `dismissedGaps` list.
+- [ ] Write the page a dismissed New-article card wanted, press **Refresh**,
+      then dismiss any other card: the stale key has gone from `data.json`.
+- [ ] With the pane open and armed, run **Luka: Compile** on a changed source.
+      The cards update on their own when it finishes. A compile that reports
+      "nothing to do" leaves them exactly as they were.
+- [ ] The filter box hides non-matching cards as you type, matching on the
+      title, the citing pages and the citation. Clearing it restores them, and
+      the status line's count follows.
+- [ ] Narrow the sidebar until a card is under about 200px: the glyph
+      disappears and the words stay readable. Widen it and the glyph returns.
+      Switching between dark and light recolours the glyphs with no reopen.
+- [ ] After all of the above, `git status` in the vault shows nothing new: the
+      pane has written no file anywhere.

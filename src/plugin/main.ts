@@ -1,5 +1,12 @@
 import { Notice, Plugin, TFile } from "obsidian";
-import { BusyError, HEALTH_PATH, createCore, type Core, type ProgressEvent } from "../core/index";
+import {
+  BusyError,
+  HEALTH_PATH,
+  createCore,
+  normalizeSettings,
+  type Core,
+  type ProgressEvent,
+} from "../core/index";
 import { askQuestion } from "./ask-modal";
 import { DEFAULT_SETTINGS, type LukaSettings } from "../core/types";
 import { registerCommands } from "./commands";
@@ -8,11 +15,12 @@ import { ObsidianHttp } from "./http-obsidian";
 import { notify, progressNotice, reportAnswer, reportCompile } from "./notices";
 import { confirmScope } from "./scope-modal";
 import { GRAPH_VIEW_TYPE, LukaGraphView, type GraphHost } from "./graph-view/view";
+import { GAPS_VIEW_TYPE, LukaGapsView, type GapsHost } from "./gaps-view/view";
 import { LukaSettingTab } from "./settings";
 
 const FALLBACK_PLUGIN_DIR = ".obsidian/plugins/luka";
 
-export default class LukaPlugin extends Plugin implements GraphHost {
+export default class LukaPlugin extends Plugin implements GraphHost, GapsHost {
   override settings: LukaSettings = { ...DEFAULT_SETTINGS };
   private core!: Core;
 
@@ -32,7 +40,10 @@ export default class LukaPlugin extends Plugin implements GraphHost {
       GRAPH_VIEW_TYPE,
       (leaf) => new LukaGraphView(leaf, this.core, this.settings, this),
     );
-    // §8.1: "One ribbon icon: the graph pane." The only one Luka adds.
+    this.registerView(GAPS_VIEW_TYPE, (leaf) => new LukaGapsView(leaf, this.core, this));
+    // §8.1: "One ribbon icon: the graph pane." The only one Luka adds — the
+    // second pane opens from its command, and adding an icon for it would be
+    // changing that sentence rather than working within it.
     this.addRibbonIcon("git-fork", "Luka: Open graph", () => {
       void this.openGraph();
     });
@@ -72,8 +83,8 @@ export default class LukaPlugin extends Plugin implements GraphHost {
    * it across a modal the user may leave open indefinitely would block compile
    * for no work, and §8.1 only asks compile's preview to be held that way.
    */
-  async runAsk(): Promise<void> {
-    const question = await askQuestion(this.app);
+  async runAsk(initial = ""): Promise<void> {
+    const question = await askQuestion(this.app, initial);
     if (question === null) return;
 
     const progress = progressNotice("asking…");
@@ -119,6 +130,45 @@ export default class LukaPlugin extends Plugin implements GraphHost {
     if (leaf === null) return;
     if (existing.length === 0) await leaf.setViewState({ type: GRAPH_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * "What to add next": reveal the pane, then ask it to scan.
+   *
+   * Reveal-not-duplicate for the same reason `openGraph` is — one report, one
+   * view of it. The scan is here rather than in `onOpen` because opening is not
+   * always a user's doing: Obsidian restores an open pane at startup and calls
+   * `onOpen` itself, and invariant 1 has nothing walk the vault unasked. This
+   * command *is* the asking.
+   */
+  async openGaps(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(GAPS_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getRightLeaf(false);
+    if (leaf === null) return;
+    if (existing.length === 0) await leaf.setViewState({ type: GAPS_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+
+    const view = leaf.view;
+    if (view instanceof LukaGapsView) await view.scan();
+    else notify("could not open the What to add next pane.");
+  }
+
+  /** `GapsHost`: a card's Ask button, with the gap already written into it. */
+  ask(prefill: string): void {
+    void this.runAsk(prefill);
+  }
+
+  /**
+   * `GapsHost`: `loadSettings` validates nothing, so this reads through the
+   * same normalizer core uses rather than trusting `data.json` directly.
+   */
+  dismissed(): readonly string[] {
+    return normalizeSettings(this.settings).dismissedGaps;
+  }
+
+  async saveDismissed(keys: readonly string[]): Promise<void> {
+    this.settings.dismissedGaps = [...keys];
+    await this.saveSettings();
   }
 
   /**

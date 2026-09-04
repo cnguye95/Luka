@@ -2257,6 +2257,73 @@ both — §10 literally does the one vault scan its own sentence claims.
   list, which §5 states without saying it is closed. Same precedent as
   `inspect`, added to it in M4.
 
+**One command, no second ribbon icon.** §8.1's "one ribbon icon: the graph
+pane" stands. The pane opens from "Luka: What to add next" and reveals an open
+one rather than opening a second, exactly as `openGraph` does. The command is
+the seventh — §8.1 names five and §9 adds the sixth — and it is the user's
+addition, not an inference from silence.
+
+- **W15** — dismissals are `dismissedGaps: string[]` on `LukaSettings`,
+  normalized like everything else there (a non-array is not a set of
+  dismissals; non-string entries are dropped; the list is copied, not shared,
+  for the reason `models` is). §16 rules out "session state" and "operation
+  logs"; a list of things this user does not want to be shown again is neither
+  — it is a preference, in the file preferences already live in. It is pruned
+  to the current report on every new dismissal, so it cannot grow without
+  bound. Each save rewrites `data.json` whole, as every settings keystroke
+  already does.
+- **W16** — the pane arms itself. Obsidian restores an open pane at startup and
+  calls `onOpen` itself, which is not a user invocation, so a restored pane
+  renders a prompt and reads nothing until the command or Refresh asks it to.
+  Invariant 1 read strictly: a vault walk nobody asked for is a vault walk
+  nobody asked for, whoever called the method. Once armed it rescans on every
+  rebuilt event, which is how a compile updates it.
+- **W17** — the rebuilt listener cannot throw. Those listeners run inside the
+  promise `compile` awaits *after* its writes, so an exception would be
+  reported to the user as a failed compile that in fact succeeded, and would
+  skip every listener registered after it. The whole handler is wrapped.
+- **W18** — Refresh forces the rebuild and lets the event drive the scan. The
+  forced build publishes to this pane's own listener first, so the identity
+  check on the snapshot is what keeps one press to one scan; an epoch counter
+  covers the other direction, where an earlier scan resolves after a later one
+  started. Without both, opening the pane while the load-time build is still
+  running scans twice.
+- **W19** — "Find sources" copies a query and shows it in a notice. It does not
+  open a browser. Nothing in the plugin navigates anywhere today, invariant 9's
+  only egress rule is about the API key, and sending page titles to a search
+  engine on a click whose label does not say so is not a decision §0 lets code
+  make quietly. The clipboard hands the user the query and lets them choose.
+  `obsidian.d.ts` offers no clipboard helper, so `navigator.clipboard`, with
+  the notice still carrying the query when it is refused.
+- **W20** — the glyph is an inline SVG per card, not a canvas. Colours are CSS
+  variables with `render.ts`'s own hex fallbacks, so a theme switch needs no
+  repaint and no `css-change` listener, and a theme without `--color-blue`
+  still draws something; dashed strokes are native, and both the ghost node and
+  its edges are dashed; nothing simulates, so no timer runs. A radial layout
+  puts the ghost at the centre and what wants it on a ring, capped at eight
+  with "+k more" — past that a ring reads as "many" rather than as a count, and
+  counting is the job. `styles.css`'s header now says "no literal colours"
+  rather than "layout only", which is the rule that was actually in force.
+- **W21** — the chip carries the number, and the glyph hides first. Under about
+  200px of card width a container query drops the picture and leaves the words:
+  §9's "drop labels first" applied one step further. On the measured vaults
+  demand is almost always two, so a two-spoke glyph was never going to
+  out-explain "+2 connections" — the picture is for the shape, not the count.
+- **W22** — at most forty cards reach the DOM; the status line says how many
+  more matched. The filter runs over the whole report, so a search still finds
+  what the cap holds back.
+- **W23** — every word the pane says lives in `gaps-view/cards.ts`, which
+  imports types only. Core ships cards ranked and keyed; the plugin never
+  re-sorts them and never re-derives a §4 rule. The reason sentence is built
+  from elements rather than a markup string, so a model-written title is text.
+
+**What §14 leaves to the user:** README §17, thirteen items, none of which
+vitest can reach — restore-without-scan, the clipboard, `data.json` pruning,
+the rebuilt-event rescan, the container query and the theme switch all need a
+running Obsidian. The pane's pure halves — `cards.ts` and `layout.ts` — carry
+29 automated assertions, on the same principle the graph pane's split was made:
+what is readable in isolation is testable in isolation.
+
 ## §14 manual check — fixes made during the pass
 
 ### Fenced JSON is stripped before parsing (§11)

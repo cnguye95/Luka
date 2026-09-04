@@ -38,6 +38,16 @@ export function registerCommands(plugin: LukaPlugin): void {
     },
   });
 
+  // Not one of §8.1's five. The user asked for this pane after M4 and chose a
+  // command rather than a second ribbon icon; BUILD-NOTES records the decision.
+  plugin.addCommand({
+    id: "open-gaps",
+    name: "What to add next",
+    callback: () => {
+      void plugin.openGaps();
+    },
+  });
+
   plugin.addCommand({
     id: "show-retrieval",
     name: "Show retrieval on graph",

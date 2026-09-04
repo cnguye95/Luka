@@ -8,21 +8,26 @@ import { App, Modal, Setting } from "obsidian";
  * question, but a promise left hanging would strand the command with no way
  * back, which is the failure `scope-modal.ts` settles in `onClose` to avoid.
  */
-export function askQuestion(app: App): Promise<string | null> {
+export function askQuestion(app: App, initial = ""): Promise<string | null> {
   return new Promise((resolve) => {
-    new AskModal(app, resolve).open();
+    new AskModal(app, resolve, initial).open();
   });
 }
 
 class AskModal extends Modal {
   private answered = false;
-  private question = "";
+  private question: string;
 
   constructor(
     app: App,
     private readonly respond: (question: string | null) => void,
+    initial = "",
   ) {
     super(app);
+    // Prefilled when "what to add next" opened it, so the answer confirms or
+    // dissolves the gap the card names. Still editable, and still the user's
+    // question: nothing is asked until they press Ask or Enter.
+    this.question = initial;
   }
 
   override onOpen(): void {
@@ -30,9 +35,12 @@ class AskModal extends Modal {
     contentEl.createEl("h3", { text: "Luka: ask the wiki" });
 
     new Setting(contentEl).setName("Question").addText((text) => {
-      text.setPlaceholder("What does the wiki say about…?").onChange((value) => {
-        this.question = value;
-      });
+      text
+        .setPlaceholder("What does the wiki say about…?")
+        .setValue(this.question)
+        .onChange((value) => {
+          this.question = value;
+        });
       // Enter submits, which is what a one-field modal should do.
       text.inputEl.addEventListener("keydown", (event: KeyboardEvent) => {
         if (event.key !== "Enter") return;
