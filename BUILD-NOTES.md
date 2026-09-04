@@ -2330,6 +2330,32 @@ covered under vitest:
 - [x] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
       read as nodes against grey lines
 
+**The reheat guard (2026-09-04, branch `claude/what-to-add-next`)** — the suite
+pins that `replace` reports no reheat and still carries metadata, but whether a
+settled layout *visibly* holds still needs a real vault:
+
+- [ ] §4.7: with the pane open and settled, run a second **Compile** that
+      reports "nothing to do". Nothing moves at all.
+- [ ] §5.4 again: a compile that really changes a source still updates the
+      counts, and the new node appears and settles.
+- [ ] §7.3 again: a drag still reheats and neighbours still resettle — the
+      guard must not have made `replace` the only reheat path.
+- [ ] Edit one page's `summary:` by hand, press **Refresh**: the layout stays
+      still and that node's tooltip shows the new summary.
+
+**The force path (2026-09-04, branch `claude/what-to-add-next`)** — the suite
+covers the core call; the button and the two triggers §5.5 names cannot be
+reached under vitest:
+
+- [ ] §5.5: write a page into `wiki/concepts/` from outside Obsidian — with
+      `kind: concept` in its frontmatter, or `loadPageTable` skips it and the
+      counts correctly do not move — then press **Refresh**. The counts rise by
+      that page and by each of its links that resolves.
+- [ ] §5.2 again: opening the pane is still under a second, i.e. opening reads
+      the cache and does not walk.
+- [ ] Press **Refresh** on an unchanged vault: the counts stay the same and the
+      layout does not move (this is the guard above, on the new trigger).
+
 ## Open findings — not yet addressed
 
 ### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
@@ -2400,6 +2426,27 @@ rate, not a certainty, and a rerun on the same corpus may not reproduce it.
 
 ### A compile that changes nothing still reheats the layout (§7.1, §9)
 
+**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
+owed.** `sim.replace` now compares the incoming node paths and edge pairs
+against the ones the current layout was built for (`sameTopology`, exported so
+it can be asserted directly). On a match it carries the incoming title, kind,
+degree and summary onto the nodes already held — a compile can rewrite a page's
+prose without changing the topology, and the tooltip reads that metadata — then
+returns without touching alpha. Every other snapshot reheats exactly as before.
+
+`replace` returns whether it reheated because there was no other way to observe
+it: `heldAlpha` reads d3's `alphaTarget`, which a reheat never sets, and
+`alpha()` itself decays on d3's own timer from the moment `restart()` runs —
+the timer every sim test passes `() => undefined` to keep out of assertions.
+The view ignores the boolean; it exists for the suite.
+
+Taken with the force path below rather than alone, and after the click fix was
+verified by hand (that condition is met — see Verification owed). The pairing is
+deliberate: once Refresh really re-reads the vault, a press on an unchanged
+vault would stir a settled layout every time, so the guard is what makes the
+force path safe to add. Mutation: deleting the guard fails 3 tests, deleting the
+four metadata assignments fails 1.
+
 Found by the §14 manual pass while checking §4.7: with the pane open, a second
 compile reports "nothing to do — no sources changed" and writes not one byte
 (46 vault files verified byte-identical), yet the graph visibly rearranges.
@@ -2432,6 +2479,22 @@ seam, and stacking a second unverified change on the first is how this project's
 fix rounds have historically gone wrong.
 
 ### The Refresh button cannot refresh (§7.1, §9, checklist §5.5)
+
+**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
+owed.** `getGraph` takes `{ force?: boolean }`. Forced, it retires any build in
+flight and walks the vault, publishing what it finds to `onGraphRebuilt` exactly
+as a compile's own rebuild does; unforced it still answers from the cache, so
+§15's "opens under a second" is untouched and the pane's first load does not
+walk. The button calls `reload(true)`; nothing else forces.
+
+Retiring first is the half that is easy to miss: `rebuildGraph` collapses
+concurrent callers onto one walk, so without `invalidateGraph()` a forced read
+would join a walk that began before the vault moved and answer Refresh with the
+very snapshot it was asked to replace. Mutation: deleting the branch fails 2
+tests, deleting the `invalidateGraph()` inside it fails 1.
+
+Paired with the reheat guard above, which is what keeps a press on an unchanged
+vault from stirring a settled layout.
 
 Found by the §14 manual pass. A page written into `wiki/concepts/` from outside
 Obsidian left the pane reading `37 nodes, 74 edges`; pressing **Refresh**

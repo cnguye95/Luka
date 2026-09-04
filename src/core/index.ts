@@ -212,6 +212,20 @@ export interface InspectResult {
   ranked: RankedNode[];
 }
 
+export interface GetGraphOptions {
+  /**
+   * Walk the vault again even when a snapshot is cached.
+   *
+   * §7.1's trigger list — "at plugin load and after compile" — was read as a
+   * floor rather than a closed enumeration (BUILD-NOTES, 2026-09-02), because
+   * checklist §5.5 asks Refresh to see a compile run in another window or a
+   * vault sync, and neither fires this window's rebuild event. Any build in
+   * flight is retired first, so the answer describes the vault as it stands
+   * now rather than as it stood when an earlier walk began.
+   */
+  force?: boolean;
+}
+
 export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
   /** §5's read-only scope preview: no lock, no model call, no write. */
@@ -220,8 +234,11 @@ export interface Core {
    * §7.1's graph, built in memory and cached until the next compile. Async
    * because the build reads the vault, and §7.1 asks for one at plugin load —
    * which the plugin starts by calling this.
+   *
+   * `{ force: true }` walks the vault again and publishes what it finds to
+   * `onGraphRebuilt`, exactly as a compile's own rebuild does.
    */
-  getGraph(): Promise<GraphSnapshot>;
+  getGraph(options?: GetGraphOptions): Promise<GraphSnapshot>;
   /**
    * §5's `ask`: §7's retrieval into §8's answer note. Holds the operation lock
    * (invariant 2) and writes the note atomically on success only
@@ -367,7 +384,17 @@ export function createCore(deps: CoreDeps): Core {
           ...(deps.now === undefined ? {} : { now: deps.now }),
         }),
       ),
-    getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+    getGraph: (options: GetGraphOptions = {}) => {
+      if (options.force === true) {
+        // Retire first, exactly as `compile` does above: joining a walk that
+        // began before this moment would answer a Refresh with the past, and
+        // the point of the flag is that the caller has reason to think the
+        // vault moved without this window hearing about it.
+        invalidateGraph();
+        return rebuildGraph();
+      }
+      return graph === null ? rebuildGraph() : Promise.resolve(graph);
+    },
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);
       return computePPR(await (graph === null ? rebuildGraph() : Promise.resolve(graph)), seedPaths, {

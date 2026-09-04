@@ -287,3 +287,93 @@ describe("the graph is rebuilt after compile (§7.1)", () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe("a forced read walks the vault again (§9's Refresh)", () => {
+  const coreOver = (fs: MemFs) =>
+    createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+      provider: new StubProvider(() => ""),
+    });
+
+  it("re-reads a vault that changed underneath the cache, and publishes what it finds", async () => {
+    // The §14 finding: a page written into `wiki/` from outside Obsidian left
+    // the pane's counts unchanged, because nothing could make `getGraph`
+    // re-walk. Both halves matter — the cache still answers the unforced call
+    // (§15's "opens under a second"), and the forced one sees the new page.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: "{}",
+    });
+    const core = coreOver(fs);
+    const seen: GraphSnapshot[] = [];
+    core.onGraphRebuilt((graph) => seen.push(graph));
+
+    const first = await core.getGraph();
+    expect(nodePaths(first)).toEqual(["wiki/concepts/A.md"]);
+    expect(seen).toHaveLength(1);
+
+    // Written straight to the vault, the way a sync or another window does it:
+    // no compile runs here, so no rebuild event fires.
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+    expect(await core.getGraph()).toBe(first);
+
+    const forced = await core.getGraph({ force: true });
+
+    expect(nodePaths(forced)).toEqual(["wiki/concepts/A.md", "wiki/concepts/B.md"]);
+    expect(pairs(forced)).toEqual(["wiki/concepts/A.md|wiki/concepts/B.md"]);
+    // Published, so a pane listening rather than awaiting hears about it too.
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toBe(forced);
+    // And cached, so the next unforced read does not walk a third time.
+    expect(await core.getGraph()).toBe(forced);
+  });
+
+  it("retires a walk already in flight rather than joining it", async () => {
+    // `rebuildGraph` collapses concurrent callers onto one walk. Without the
+    // retire, a forced read would join a walk that began before the vault
+    // moved and answer Refresh with the very snapshot it was asked to replace.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: "{}",
+    });
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parkedOnce = false;
+    const originalRead = fs.read.bind(fs);
+    fs.read = async (path: string) => {
+      // Only the first walk parks; the forced one must be free to overtake it.
+      if (!parkedOnce && path === MANIFEST) {
+        parkedOnce = true;
+        await parked;
+      }
+      return originalRead(path);
+    };
+
+    const core = coreOver(fs);
+    const seen: GraphSnapshot[] = [];
+    core.onGraphRebuilt((graph) => seen.push(graph));
+
+    const stale = core.getGraph();
+    while (!parkedOnce) await new Promise((resolve) => setTimeout(resolve, 0));
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+
+    const forced = core.getGraph({ force: true });
+    release();
+    const fresh = await forced;
+    await stale;
+
+    expect(nodePaths(fresh)).toEqual(["wiki/concepts/A.md", "wiki/concepts/B.md"]);
+    // The superseded walk published nothing and cached nothing: one event, from
+    // the forced build, and the cache answers with it afterwards. (Its own
+    // caller may still be handed what it walked — `currentOrNewer` falls back
+    // to that rather than to `null` while no snapshot is cached yet.)
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(fresh);
+    expect(await core.getGraph()).toBe(fresh);
+  });
+});

@@ -345,8 +345,9 @@ surface in the project, so it comes before the older flows.
       pair and ratio counts, and the counts match what `wiki/_index.md` implies.
 - [x] With the pane open, run **Luka: Compile**. When it finishes, the pane's
       counts update on their own, with no click. (§7.1's rebuild event.)
-- [ ] **FAILED — see BUILD-NOTES.** The **Refresh** button updates the counts after a compile run from another
-      window or a vault sync.
+- [ ] **Fixed on branch, verification owed — see BUILD-NOTES.** The **Refresh**
+      button updates the counts after a compile run from another window or a
+      vault sync.
 - [x] Close the pane and reopen it: it works, and the developer console shows no
       error logged at close. (Invariant 1 — nothing of the view outlives it.)
 - [x] The graph draws: nodes appear, spread out, and the layout comes to rest

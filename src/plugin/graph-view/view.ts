@@ -159,7 +159,9 @@ export class LukaGraphView extends ItemView {
     const toolbar = root.createDiv({ cls: "luka-graph-toolbar" });
     const refresh = toolbar.createEl("button", { text: "Refresh" });
     this.registerDomEvent(refresh, "click", () => {
-      void this.reload();
+      // Forced: checklist §5.5 asks this button to see a compile run in another
+      // window or a vault sync, and neither fires this window's rebuild event.
+      void this.reload(true);
     });
 
     // §9: "lexical filter box dims non-matches (no model call)". Nothing here
@@ -276,11 +278,15 @@ export class LukaGraphView extends ItemView {
    * unreadable file under `wiki/` is enough to reject it. That is a known
    * compile-side gap logged against its own milestone; what the pane owes is
    * to say so instead of rendering a blank surface with no explanation.
+   *
+   * Forced only from the Refresh button. Opening the pane reads the cache:
+   * §15's "opens under a second" is a promise about the cached snapshot, and
+   * the plugin already walked the vault at load.
    */
-  private async reload(): Promise<void> {
+  private async reload(force = false): Promise<void> {
     let next: GraphSnapshot | null = null;
     try {
-      next = await this.core.getGraph();
+      next = await this.core.getGraph(force ? { force: true } : {});
     } catch (error) {
       new Notice(`Luka: could not read the graph — ${message(error)}`, 6000);
     }
