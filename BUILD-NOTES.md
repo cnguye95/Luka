@@ -2156,6 +2156,45 @@ which one needs a real API key (the Inspect call count). The pane's pure halves
 did not expect to exist, because both were written with no Obsidian import and
 what is readable in isolation is testable in isolation.
 
+## What to add next — user-directed (2026-09-04)
+
+§15 assigns no milestone to a recommendation surface and §9 describes no second
+pane, so nothing here follows from the spec being silent — §0 forbids reading
+silence as permission. It is the user's decision, taken after a viability
+assessment against the code as built, the way the health check was "included in
+M3 on the user's decision". The scope they set: one command, no second ribbon
+icon, two card types, and no model call anywhere in the path.
+
+The feature is a pane of recommendation cards computed from structural gaps —
+unresolved wikilink targets several pages want, and pages resting on a single
+source. §10's report already lists the first as text; this is the ranked,
+visual, actionable half. Built on branch `claude/what-to-add-next`, core first.
+Decisions below in commit order.
+
+**Answer notes persist what synthesis said was missing.** §4 lists an answer's
+frontmatter as exact keys — kind, question, asked, mode, grounded — and §8.2's
+`missing_information` list was read once, used as the follow-up round's
+keywords, and dropped. It is now written as `missing:` after `grounded`. This
+is a §4 deviation and the user approved it as one.
+
+- **W1** — items are flattened to one line and stripped of `[[`/`]]` before
+  they are written. The flattening is `inventory.ts`'s existing rule for a
+  model-written summary; the brackets are this key's own problem, because
+  `buildGraph` scans a node's whole file for links including frontmatter, so a
+  filed answer carrying `[[X]]` in this list would manufacture an edge the
+  model chose — or, unresolved, an article candidate in §10 that nobody wrote.
+- **W2** — the list persisted is the *last* synthesis's, not the first's. The
+  follow-up round is the wiki's own attempt to close the gap, so what is still
+  reported after it is what the wiki could not answer. When no second round
+  runs, the last reply is the first one and the rule is the same sentence.
+- **W3** — the key is omitted entirely when the list is empty. An answer that
+  lacked nothing should carry no key saying so.
+- **W4** — the "open question" card type this data would feed is **deferred**;
+  the user chose to ship the two structural signals. The key lands now anyway,
+  so notes written from today accumulate the evidence a later decision needs.
+  Nothing reads it yet, and that is deliberate: today every vault has zero of
+  these, so a card type built on it would have had nothing to show.
+
 ## §14 manual check — fixes made during the pass
 
 ### Fenced JSON is stripped before parsing (§11)

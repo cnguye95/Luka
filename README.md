@@ -454,6 +454,9 @@ Needs a real API key. One question costs a few cents.
 - [x] The note reads as prose with `[[links]]`, then `## Sources consulted`,
       then `## Retrieval trace` — and its frontmatter carries `kind: answer`,
       `question`, `asked`, `mode` and `grounded`.
+- [ ] An answer whose synthesis still reported something missing carries a
+      `missing:` list in its frontmatter, each entry on one line with no
+      `[[brackets]]`; an answer that reported nothing has no such key.
 - [x] Ctrl/Cmd-clicking a link in the answer opens the page it names.
 - [x] Asking something the wiki says nothing about produces a note whose first
       line is the `> [!warning] Not grounded in your wiki` callout, rendered as

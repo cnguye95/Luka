@@ -113,6 +113,27 @@ export function stripMissingBlock(reply: string): SynthesisReply {
 }
 
 /**
+ * The model's own words, made safe to write into frontmatter.
+ *
+ * Two rules, both borrowed rather than invented. Flattening to one line is
+ * `inventory.ts`'s rule for a summary — "flattened at the point the model's
+ * words enter the system" — because a newline would turn the item into a block
+ * scalar, and invariant 5 gives structure to code. Stripping `[[`/`]]` is the
+ * one this key adds: `buildGraph` scans a node's whole file for links,
+ * frontmatter included, so once an answer is filed a bracketed item would
+ * become an edge the model chose — or, unresolved, an article candidate in
+ * §10's report that nobody wrote.
+ */
+export function cleanMissing(list: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const item of list) {
+    const flat = item.replace(/\[\[|\]\]/g, "").replace(/\s+/g, " ").trim();
+    if (flat !== "") out.push(flat);
+  }
+  return out;
+}
+
+/**
  * §8.3: "any link outside the retrieved set is unlinked to plain text plus
  * marker".
  *
@@ -255,6 +276,12 @@ export interface AnswerNote {
   asked: string;
   mode: RetrievalMode;
   grounded: boolean;
+  /**
+   * §8.2's `missing_information` from the last synthesis, already through
+   * `cleanMissing`. Omitted from the note when empty: an answer that lacked
+   * nothing should carry no key saying so.
+   */
+  missing?: readonly string[];
   /** The model's prose, already stripped of its JSON block. */
   body: string;
   consulted: readonly AssembledNode[];
@@ -269,12 +296,15 @@ export interface AnswerNote {
  * everything is decided.
  */
 export function renderAnswerNote(note: AnswerNote): string {
+  const missing = note.missing ?? [];
   const frontmatter = serializeFrontmatter({
     kind: "answer",
     question: note.question,
     asked: note.asked,
     mode: note.mode,
     grounded: note.grounded,
+    // `serializeFrontmatter` drops `undefined`, so an empty list writes no key.
+    ...(missing.length === 0 ? {} : { missing: [...missing] }),
   });
 
   const parts: string[] = [];

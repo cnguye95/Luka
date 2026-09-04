@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   answerNotePath,
+  cleanMissing,
   renderAnswerNote,
   slugOf,
   stripMissingBlock,
@@ -137,6 +138,27 @@ describe("§8.3's link validation", () => {
   });
 });
 
+describe("what the model said was missing enters frontmatter as one line each", () => {
+  it("flattens an item that spans lines", () => {
+    // A newline would make the item a YAML block scalar — structure, which
+    // invariant 5 gives to code. Same rule `inventory.ts` applies to a summary.
+    expect(cleanMissing(["the\n  publication dates"])).toEqual(["the publication dates"]);
+  });
+
+  it("strips link brackets, so a filed answer manufactures no edge", () => {
+    // `buildGraph` scans a node's whole file for links, frontmatter included.
+    expect(cleanMissing(["[[PageRank]] convergence rate"])).toEqual(["PageRank convergence rate"]);
+  });
+
+  it("drops an item that is empty once cleaned", () => {
+    expect(cleanMissing(["   ", "[[]]", "dates"])).toEqual(["dates"]);
+  });
+
+  it("leaves an ordinary item alone", () => {
+    expect(cleanMissing(["who funded the study"])).toEqual(["who funded the study"]);
+  });
+});
+
 describe("§8.3's note is written by code (invariant 5)", () => {
   const base = {
     question: "How does ranking work?",
@@ -155,6 +177,19 @@ describe("§8.3's note is written by code (invariant 5)", () => {
     expect(note).toContain("asked: '2026-08-20T10:00:00Z'");
     expect(note).toContain("mode: B");
     expect(note).toContain("grounded: true");
+  });
+
+  it("persists what was still missing, after grounded", () => {
+    const note = renderAnswerNote({ ...base, missing: ["dates", "the author"] });
+
+    expect(note).toContain("grounded: true\nmissing:\n  - dates\n  - the author\n---\n");
+  });
+
+  it("writes no missing key when nothing was missing", () => {
+    // An answer that lacked nothing should not carry a key saying so, and an
+    // empty list in the frontmatter would be a claim of its own.
+    expect(renderAnswerNote(base)).not.toContain("missing");
+    expect(renderAnswerNote({ ...base, missing: [] })).not.toContain("missing");
   });
 
   it("writes the sources block, then the trace, at the foot", () => {

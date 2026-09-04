@@ -68,7 +68,7 @@ import {
   selectSeeds,
   type RankedNode,
 } from "./retrieve/pipeline";
-import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
+import { answerNotePath, cleanMissing, renderAnswerNote, synthesize } from "./answer/synthesize";
 import { fileBack } from "./answer/fileback";
 import { healthCheck } from "./health";
 import {
@@ -619,6 +619,10 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     asked: asked.toISOString(),
     mode,
     grounded,
+    // The *last* synthesis's list: `reply` is reassigned by the follow-up
+    // round above, and §8.2's one expansion is the wiki's own attempt to close
+    // the gap — so what is still missing afterwards is what it could not.
+    missing: cleanMissing(reply.missing),
     body: reply.body,
     consulted: assembly.nodes,
     pages,

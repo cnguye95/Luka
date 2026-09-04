@@ -69,6 +69,18 @@ describe("filing moves the note into raw/answers/ (§8.4)", () => {
     expect(text).toContain("- [[PageRank]]");
   });
 
+  it("keeps a missing list the answer carried", async () => {
+    // Filing strips the trace and nothing else, so the gap signal survives into
+    // `raw/answers/` — where a later compile ingests the note as a source.
+    const fs = new MemFs({
+      [NOTE_PATH]: note().replace("grounded: true\n", "grounded: true\nmissing:\n  - the dates\n"),
+    });
+
+    const text = fs.text(await fileBack(fs, NOTE_PATH));
+
+    expect(text).toContain("missing:\n  - the dates");
+  });
+
   it("keeps the frontmatter, so compile can still tell what it is", async () => {
     const fs = vault();
 

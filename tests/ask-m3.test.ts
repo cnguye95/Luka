@@ -377,6 +377,44 @@ describe("§8.2's follow-up round", () => {
 
     expect(result.round2).toBe(false);
     expect(provider.stats().byTask.synthesis).toBe(1);
+    // The strongest gap signal there is: the wiki had nothing to expand with,
+    // so what synthesis said it lacked is what the vault still lacks.
+    expect(fs.text(result.path)).toContain("missing:\n  - photosynthesis in deep sea vents");
+  });
+
+  it("persists the last round's missing list, not the first's", async () => {
+    // The follow-up round is the wiki's own attempt to close the gap. What it
+    // still reports afterwards is the answer; the first round's list has been
+    // acted on already.
+    const fs = await twoPages();
+    const provider = new StubProvider((request, index) => {
+      if (request.task === "seed-selection") {
+        return { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+      }
+      if (request.task === "synthesis") {
+        return index === 0
+          ? answerWith("Ranking uses [[PageRank]].", ["convergence"])
+          : answerWith("Ranking uses [[PageRank]] and [[Convergence]].", ["the proof"]);
+      }
+      return "";
+    });
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+    const note = fs.text(result.path);
+    const frontmatter = note.slice(0, note.indexOf("\n---\n", 4));
+
+    expect(result.round2).toBe(true);
+    expect(frontmatter).toContain("missing:\n  - the proof");
+    expect(frontmatter).not.toContain("convergence");
+  });
+
+  it("writes no missing key when the answer reported nothing missing", async () => {
+    const fs = await twoPages();
+
+    const result = await core(fs, expanding([])).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note.slice(0, note.indexOf("\n---\n", 4))).not.toContain("missing");
   });
 
   it("does not spend a call when the pages it found have nothing to read", async () => {

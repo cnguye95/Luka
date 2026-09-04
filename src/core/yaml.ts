@@ -70,6 +70,7 @@ const KEY_ORDER = [
   "asked",
   "mode",
   "grounded",
+  "missing",
 ];
 
 export function parseFrontmatter(text: string): ParsedFrontmatter {
