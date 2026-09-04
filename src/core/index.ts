@@ -70,6 +70,7 @@ import {
 } from "./retrieve/pipeline";
 import { answerNotePath, cleanMissing, renderAnswerNote, synthesize } from "./answer/synthesize";
 import { fileBack } from "./answer/fileback";
+import { gapReport, scanPages, type GapReport } from "./gaps";
 import { healthCheck } from "./health";
 import {
   normalizeSettings,
@@ -98,6 +99,10 @@ export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types
 export { readablePathOf } from "./manifest";
 export { FILED_ANSWERS_FOLDER } from "./answer/fileback";
 export { HEALTH_PATH } from "./health";
+// The gap report's shape only. Its rules — §4's namespace, §10's resolution —
+// stay inside core, and the cards arrive ranked and keyed so no consumer has
+// to re-derive either.
+export type { GapCard, GapCiter, GapKind, GapReport } from "./gaps";
 export {
   parseTrace,
   resolveTraceNodes,
@@ -276,6 +281,20 @@ export interface Core {
    */
   inspect(question: string): Promise<InspectResult>;
   /**
+   * "What to add next": §10's article candidates and the pages resting on a
+   * single source, ranked, with no model call. Not in handoff.md — a
+   * user-directed addition to §5's list, recorded in BUILD-NOTES.
+   *
+   * Lock-free, like `previewCompile` and `inspect` and for the same reason: it
+   * writes nothing. It reads the page table fresh so a Refresh means something,
+   * and takes centrality from the cached snapshot. One consequence is worth
+   * stating plainly: `loadPageTable` reads each page without a guard, so this
+   * whole call can reject while a compile is rewriting `wiki/`. The pane is
+   * expected to say so and try again on the rebuild rather than to pretend the
+   * vault is empty.
+   */
+  gaps(): Promise<GapReport>;
+  /**
    * §7.1: "Built in memory at plugin load and after compile." Returns an
    * unsubscribe, so a view that closes stops hearing about rebuilds.
    */
@@ -407,6 +426,15 @@ export function createCore(deps: CoreDeps): Core {
     // nothing, and §9's pane is never blocked by the lock.
     inspect: async (question: string) =>
       runInspect(deps, await (graph === null ? rebuildGraph() : Promise.resolve(graph)), question),
+    // Outside the lock for the same reason again, and reading the vault fresh
+    // rather than from the snapshot: unresolved link targets are exactly what
+    // §7.1's graph drops, so the gap signal is not in it to be read.
+    gaps: async () => {
+      const pages = await loadPageTable(deps.fs);
+      const { scans, unreadable } = await scanPages(deps.fs, pages);
+      const snapshot = await (graph === null ? rebuildGraph() : Promise.resolve(graph));
+      return gapReport(pages, scans, snapshot, unreadable);
+    },
     onGraphRebuilt: (callback: (graph: GraphSnapshot) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);

@@ -2195,6 +2195,68 @@ is a §4 deviation and the user approved it as one.
   Nothing reads it yet, and that is deliberate: today every vault has zero of
   these, so a card type built on it would have had nothing to show.
 
+**One page scan serves both reports.** `articleCandidates` read every page and
+grouped unresolved targets inside `health.ts`, privately; `danglingCitations`
+opened every page again for the citation blocks. The gap report needs the same
+two facts about the same pages, and a second implementation of "does this link
+resolve" is a second answer that can disagree with §10's. `scanPages`,
+`unresolvedTargets` and `wikiDegrees` now live in `src/core/gaps.ts` and serve
+both — §10 literally does the one vault scan its own sentence claims.
+
+- **W5** — grouping moved from the raw target string to `handleOf`, so
+  `[[Zeppelin]]` and `[[zeppelin]]` are one candidate rather than two wanted
+  once each. §4's namespace folds case, so the vault could never hold both.
+  The spelling shown is the `comparePaths`-minimum variant seen, which puts a
+  capitalized form first. This is the one visible change to §10's output;
+  health's other bytes are identical, its 15 tests were not touched, and a
+  test in `gaps.test.ts` asserts the two reports name the same targets.
+- **W6** — §10 still lists *every* candidate. The pane's extra filters —
+  demand of two, sanitizable names, demotion — are the pane's, applied on top.
+  Diagnosis reports everything; a prescription is allowed to be selective.
+- **W7** — centrality is wiki-only degree: edges whose both ends are wiki
+  pages, counted off the snapshot. `GraphNode.degree` counts citation edges
+  too, and on the measured vaults roughly half of every degree was those, so
+  "wanted by pages carrying N links" would have been a claim about how many
+  files a page cites. PageRank was the alternative and was rejected: the
+  façade reads `pprAlpha` live from settings, so card order would move when a
+  user tuned retrieval, and pinning α would be a §17 deviation for a number
+  nobody would see.
+- **W8** — `gaps()` is lock-free like `previewCompile` and `inspect`, and reads
+  the page table fresh rather than from the snapshot, because §7.1 *drops*
+  unresolved targets — the gap signal is not in the graph to be read. The
+  consequence is accepted rather than fixed: `loadPageTable`'s read is
+  unguarded, so the call can reject while a compile rewrites `wiki/`. The
+  per-page scan does guard, and reports an `unreadable` count.
+- **W9** — a card's key is the gap plus its evidence: the target handle and the
+  sorted paths of the pages wanting it. Dismissal expiry then needs no code at
+  all — when another page starts wanting the same target the key is a different
+  string, so the card returns. No hash: the data is already short, bounded by
+  §4's title length, and a third copy of FNV-1a (there are two private ones
+  already) would be a copy that can disagree.
+- **W10** — thin evidence is "exactly one citation entry", counted from the
+  block, with no liveness test. Entries are manifest paths and a dangling or
+  pending one is §10's business; deciding liveness here would mean an eighth
+  answer on the readable/live seam CLAUDE.md says to change all-or-none.
+  Source pages are excluded: §4 has each cite exactly its own raw file, so
+  including them would describe the schema rather than the wiki.
+- **W11** — the thin list is capped at five, ranked by wiki degree. On both
+  fixture vaults *most* non-source pages cite exactly one source, so uncapped
+  this signal is a list of nearly every page. The cap is what makes it a
+  recommendation; it is not a display detail and does not belong in the plugin.
+- **W12** — identifier-shaped names (`link_pairs`, `linkTargets`) and names
+  already contained in an existing title (`vault` under "vault nodes") are
+  sorted last, not dropped. Call B tells the model to link freely with natural
+  names and these are what that produced; "usually noise" is not a reason for
+  code to decide the user may not see them.
+- **W13** — there is no separate invariant-8 check on a candidate name.
+  `sanitizeTitle` strips the reserved `_` prefix, so every target invariant 8
+  would refuse the sanitize test refuses first — verified by mutation, and the
+  redundant check was removed rather than left as code no input could make
+  decide anything.
+- **W14** — `getGraph(options)` and `gaps()` are additions to §5's contract
+  list, which §5 states without saying it is closed. Same precedent as
+  `inspect`, added to it in M4.
+
 ## §14 manual check — fixes made during the pass
 
 ### Fenced JSON is stripped before parsing (§11)
@@ -2642,3 +2704,34 @@ than an *outcome* — "a directory", "the network panel", "trigger it again" —
 and mechanisms are what rot when the platform underneath them differs from the
 one the author had in mind. The items that survived this pass unchanged are the
 ones that name what should be true, and leave how to see it to the reader.
+
+### A page alias can hijack a raw node's handle (§7.1)
+
+Found while sizing the "what to add next" pane against `test-vault`. That
+feature does not touch it and takes the snapshot as given.
+
+`wiki/entities/runs.csv.md` carries the alias `raw/runs.csv` — model-written,
+from Call A, which sees only the body and is asked for "obvious variants"; the
+dataset's own derivative opens with the line `# runs.csv`. `buildGraph` claims
+page titles and aliases before manifest sources, and `claim` keeps the first
+claimant, so the handle `raw/runs.csv` maps to the entity page before the
+manifest loop can claim it for the derivative. And `resolve` applies no `raw/`
+guard — the guard `resolveLinks` and the health check both apply to exactly
+this prefix — so every `[[raw/runs.csv]]` in a citation block or a `source:`
+key resolves to the entity page.
+
+The result on that vault: `raw/runs.md` sits at degree 0 as its own component,
+while the entity page collects the edges §7.1 gives the source. The orphan
+section does not report it either, because that filter excludes `kind: "raw"`.
+Nothing is lost — no write, no data — but the graph says something untrue about
+which file the citations name, and any ranking read off degrees inherits it.
+
+It is systematic rather than a quirk of one vault: any derivative whose
+descriptor page echoes its origin path as an alias does this.
+
+Candidate fixes, unranked: give `resolve` the same `raw/` guard the other two
+resolvers apply, so a source-shaped target is answered from manifest claims
+only; claim manifest handles before page aliases; or refuse an alias beginning
+`raw/` when the page table is loaded. Each touches `build.ts`, which CLAUDE.md
+names as the seam where `GraphNode` changes reach the rename path, so it wants
+its own commit with the 7/1 mutation counts re-run — not a fold into a feature.
