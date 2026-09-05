@@ -544,9 +544,20 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
     const settled = sim.alpha;
     expect(settled).toBeLessThan(fresh);
 
+    const before = sim.nodes.map((node) => ({ x: node.x, y: node.y }));
+
     expect(sim.replace(same())).toBe(false);
 
     expect(sim.alpha).toBe(settled);
+    // And the positions, which are the thing the user is actually reading.
+    //
+    // One gap is left open here on purpose, because closing it would cost
+    // more than it buys: `simulation.restart()` *alone* changes no alpha and
+    // moves nothing synchronously — it schedules a frame on d3's timer — so no
+    // assertion in a synchronous test can see it. Catching it would mean
+    // waiting on that timer, which is the flakiness every sim test is written
+    // to keep out. Alpha catches the reheat, which is the defect §14 found.
+    expect(sim.nodes.map((node) => ({ x: node.x, y: node.y }))).toEqual(before);
     sim.stop();
   });
 

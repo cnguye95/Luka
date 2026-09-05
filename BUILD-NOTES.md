@@ -2331,16 +2331,31 @@ is synthesis's items alone, each dashed to the answer.
   name. It also never applied the length rule at all, which is what W9's
   correction refers to. CLAUDE.md's coupling note asks that both rules move
   together, and here they are one expression.
-- **W20** — a name that reads as code is dropped, not demoted: underscores,
-  camelCase, or no letters at all. Page generation invites the model to "link
-  freely… write the natural name", and on the measured vaults it produced
-  `link_pairs`, `linkTargets`, `degrees` and `double-bracket`. With five slots
-  a demotion is a distinction without a difference, and nobody is going to
-  write an article called `link_pairs`.
-- **W21** — five links at most, synthesis's items uncapped. The items are the
-  `missing:` key, and a section showing fewer than the key records would be the
-  second of two answers to one question. The links are a scan's output and run
-  long on a page that gestures at everything.
+- **W20** — a name that reads as code is dropped, not demoted: an underscore,
+  or no letters at all. Page generation invites the model to "link freely…
+  write the natural name", and on the measured vaults it produced `link_pairs`
+  alongside real names. With five slots a demotion is a distinction without a
+  difference.
+
+  *(Corrected 2026-09-05, after review.)* This first also refused any lowercase
+  letter followed by an uppercase one. That is the shape of `linkTargets` — and
+  of `PageRank`, this project's own canonical page, along with `OpenAI`,
+  `GitHub`, `JavaScript` and every other capitalized compound a wiki is
+  actually about. The section could never have recommended any of them while
+  §10 went on listing them, so the two surfaces disagreed with nothing to
+  explain why. Two of the four names cited above as the rule's motivation,
+  `degrees` and `double-bracket`, were not caught by it either.
+
+  camelCase is now deliberately untested. `linkTargets` and `iPhone` are the
+  same string shape and nothing lexical separates them, so refusing the shape
+  means refusing real product names. The two mistakes do not cost the same: a
+  code-shaped name that survives is one weak line, and it still has to be
+  linked by a consulted page and outrank the others to appear at all, while a
+  real name dropped is advice the user never sees.
+- **W21** — five links at most, synthesis's items uncapped. The items are few
+  by nature — a model reporting on one answer — and each is filtered against
+  the page table, so what survives is worth saying. The links are a scan's
+  output and run long on a page that gestures at everything.
 - **W22** — demand of one is enough here, where the pane needed two. The scans
   *are* the pages this answer was built from, so a single page reaching for
   something is already this question running into it. The pane's threshold was
@@ -2350,9 +2365,19 @@ is synthesis's items alone, each dashed to the answer.
   test asserts that substring is absent from a whole note that lacked nothing,
   and a section saying it would be a false positive on a real property.
 - **W24** — the section is computed inside `renderAnswerNote` rather than
-  passed in. It has everything already, and computing it there makes the
-  section and the `missing:` key two renderings of one list rather than two
-  lists that can disagree. The only new field is `graph`, for the solid edges.
+  passed in. It has everything already, and computing it there means the
+  section and the `missing:` key are drawn from one list at one moment. The
+  only new field is `graph`, for the solid edges.
+
+  *(Amended 2026-09-05, after review.)* They are drawn from one list; they are
+  not the same list. Synthesis reports what its *answer* lacked, which is not
+  the same question as what the wiki lacks — it can name a page it was handed,
+  and the review found a note that said "the wiki could not answer this" about
+  PageRank two blocks below a link to PageRank in its own sources list. The key
+  is the record and keeps that verbatim; the section is advice and drops it,
+  along with a name the model repeated. Two jobs, one list, different filters.
+  The user took that decision explicitly, weighing it against the alternative
+  of leaving the section unfiltered and correcting only the claim.
 - **W25** — the diagram's solid edges come from §7.1's snapshot, and only
   between pages the diagram already draws. They are what the wiki holds, which
   is what makes the dashes read as the addition to it; an edge to a page not
@@ -2365,6 +2390,29 @@ is synthesis's items alone, each dashed to the answer.
   than a `PageMeta`, so the section can ask §10's question about text it
   already holds without forging a page-table entry. The health check is
   unchanged by it.
+- **W28** — `src/core/answer/addnext.ts` is added to §3's tree, and
+  `src/core/gaps.ts` with it. Recorded in the form the five earlier additions
+  use (`paths.ts`, `concurrency.ts`, `pagetable.ts`, `scripts/`, and
+  `eval/metrics.ts`, which is recorded as *not* in the tree).
+- **W29** — §5 says `onGraphRebuilt` fires "after compile and after load"; a
+  forced read publishes too, so a listener now hears from a gesture as well.
+  The 2026-09-02 decision that §7.1's trigger list is a floor was argued about
+  where the graph is built, not about who is told, so this is its own line
+  rather than a consequence of that one.
+- **W30** — §16's nearest non-goal to a generated diagram is "Marp/matplotlib/
+  slide outputs", and it does not reach this. That clause names three
+  artifact-generation toolchains; the section adds no dependency, produces no
+  file, and writes plain markdown that the host renders. §9 already establishes
+  drawing the graph as in scope. Named here because the log's habit is to
+  dispose of the adjacent non-goal explicitly rather than leave the reader to
+  wonder — as `addnext.ts` and `gaps.ts` both do for "LLM-driven health
+  checks".
+- **W31** — the escaping in the diagram is worth keeping and the first reason
+  given for it was wrong. It said a `[[X]]` inside the fence would become a
+  §7.1 edge; it would not, because an unfiled note is not a node and a filed
+  one has the block stripped. The real reason is the one the checklist tests:
+  Obsidian renders `[[X]]` as a live link in the note the user is reading, and
+  a recommendation to write a page should not look like the page.
 
 ## §14 manual check — fixes made during the pass
 
@@ -2667,7 +2715,7 @@ value without waiting for that timer.
 The distinction was not academic. Asserting the boolean asserts what `replace`
 *says*, and the mutation that matters is a `replace` that reheats and still
 reports `false` — the original defect, wearing a correct answer. That mutation
-passed all 996 tests. Against `alpha` it fails. This is the shape this log has
+passed the whole suite as it then stood. Against `alpha` it fails. This is the shape this log has
 recorded before under a different name: an oracle computed by the code under
 test is not an oracle. Mutation now: deleting the guard fails 3, inserting a
 reheat before its `return false` fails 1, and deleting the `title` or `degree`
@@ -2725,8 +2773,9 @@ walk. The button calls `reload(true)`; nothing else forces.
 Retiring first is the half that is easy to miss: `rebuildGraph` collapses
 concurrent callers onto one walk, so without `invalidateGraph()` a forced read
 would join a walk that began before the vault moved and answer Refresh with the
-very snapshot it was asked to replace. Mutation: deleting the branch fails 2
-tests, deleting the `invalidateGraph()` inside it fails 1.
+very snapshot it was asked to replace. (Mutation counts for this path are
+stated once, with the 2026-09-05 review below, rather than here where they
+would go stale as tests are added.)
 
 Paired with the reheat guard above, which is what keeps a press on an unchanged
 vault from stirring a settled layout.
@@ -2739,29 +2788,52 @@ lost its generation and was handed the *pre-refresh* cache by `currentOrNewer`
 one gesture. Forced reads now coalesce on a `forcing` slot of their own. A
 button gets pressed twice; that is not an edge case.
 
-The second is the compile window. A forced walk that both starts and finishes
-while a compile is rewriting `wiki/` reads pages the compile has written
-against a manifest it has not yet committed — a snapshot of a vault that never
-existed, cached and published, and left there if the compile then fails. A
-forced read while the lock says `compile` now answers from the cache and leaves
-the publishing to the compile's own rebuild, which is the only walk that can
-see the vault whole. Narrowed to `compile` deliberately: `ask` writes
-`answers/` and the health check writes a `_`-prefixed file, and neither is ever
-a node, so a walk during those is sound and refusing it would make Refresh do
-nothing for no reason. §9's "never blocked by the lock" holds either way —
-nothing waits, the call returns at once with what is known.
+The second is the compile window. A forced walk that runs while a compile is
+rewriting `wiki/` reads pages the compile has written against a manifest it has
+not yet committed — a snapshot of a vault that never existed.
 
-Mutation: deleting the `forcing` slot fails 1, deleting the compile guard fails
-1.
+**Superseded 2026-09-05, after a second review.** The first fix for this asked
+`lock.busyWith === "compile"` before starting a walk, and it was wrong in four
+ways at once. It fell through to a full walk when no snapshot was cached; it
+was never consulted when a second press joined a walk already in flight; it
+sampled the lock once at walk start, so a compile beginning a moment later
+reopened the window for the walk's whole duration; and it refused Refresh for
+as long as the scope-preview modal stayed open — the one phase that holds the
+lock, writes nothing, and can last minutes. Three of those want a wider guard
+and the fourth wants a narrower one, which is the tell: the lock is a proxy for
+"writes are in flight" that is too coarse and too narrow at the same time.
 
-Two residuals are accepted rather than fixed, and named here so the next reader
-does not think they were missed. A superseded walk publishes nothing, which is
-right whenever its successor publishes — every case but one: a compile whose
-own rebuild then fails leaves the cache at the pre-compile snapshot with
-nothing to correct it. The recovery is a Refresh, which by then is not busy.
-And an *unforced* build begun mid-compile with an empty cache can still publish
-a torn snapshot; that predates this branch and is corrected by the compile's
-rebuild on every path but the same failing one.
+The rule is now checked where it can actually be answered — when the walk
+lands, not when it starts. `runCompile` marks the boundaries of its write phase
+through a `WritePhase` the façade hands it, and a walk that was in flight when
+writing began, or began while writing was in flight, publishes nothing and is
+not handed back to its own caller either. A snapshot of a vault that never
+existed is no better an answer for the reader who asked than for anyone else;
+the compile's own rebuild publishes the real one.
+
+Two signals rather than one, because a walk can overlap the phase from either
+side: an epoch sampled at start catches the walk already running, and a flag
+catches the walk that starts inside. `end` runs in a `finally` — a compile that
+throws has still stopped writing, and a flag left set would silence every later
+walk for the rest of the session. The `writing` flag alone would have been
+enough for the second case and the epoch alone for the first; both are load-
+bearing and each has its own failing test.
+
+What this buys beyond correctness: the guard is gone, so Refresh works during
+the preview modal, and nothing in `getGraph` reads the lock any more. §9's
+"never blocked by the lock" is true in the plainer sense that the lock is not
+consulted at all.
+
+Mutation: deleting the `forcing` slot fails 2, releasing it on success rather
+than in a `finally` fails 1, deleting the overlap check fails 1, never setting
+the `writing` flag fails 1, never clearing it fails 3, and moving `writes.end()`
+out of the `finally` fails 1.
+
+One residual is accepted rather than fixed, and named here so the next reader
+does not think it was missed. A forced press landing between the lock's release
+and the compile's own rebuild retires that rebuild; if the forced walk then
+rejects, the cache stays at the pre-compile snapshot. The window is a few
+microseconds and the recovery is another Refresh.
 
 The pane keeps its drawn graph when a walk rejects, rather than replacing it
 with the empty state. The walk failed, not the snapshot on screen, and

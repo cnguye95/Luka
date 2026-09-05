@@ -258,7 +258,7 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 100 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 101 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
@@ -458,7 +458,7 @@ Needs a real API key. One question costs a few cents.
       `missing:` list in its frontmatter, each entry on one line with no
       `[[brackets]]`; an answer that reported nothing has no such key.
 - [ ] That same answer ends with `## Add next` between `## Sources consulted`
-      and `## Retrieval trace`: a bullet per gap with the count in bold, and
+      and `## Retrieval trace`: a bullet per gap with its name in bold, and
       below them a diagram that **renders in reading view** — dashed boxes for
       what is not written, dashed lines to the pages that reached for it, and a
       dashed line from "This answer" for what synthesis said it lacked.
@@ -466,9 +466,12 @@ Needs a real API key. One question costs a few cents.
       and Ctrl/Cmd-clicking one opens nothing.
 - [ ] An answer that lacked nothing, over pages whose links all resolve, has no
       `## Add next` section at all.
-- [ ] Filing that answer drops `## Add next` along with the trace, keeps
-      `missing:` and `## Sources consulted`, and the next **Compile** creates no
-      page named after a gap the section listed.
+- [ ] Filing the answer that *did* name gaps drops `## Add next` along with the
+      trace, keeps `missing:` and `## Sources consulted`, and the next
+      **Compile** creates no page named after a gap the section listed.
+- [ ] No bullet in `## Add next` names a page the wiki already has — check one
+      against `## Sources consulted` in the same note. The `missing:` key may
+      still list it: the key is the record, the section is the advice.
 - [x] Ctrl/Cmd-clicking a link in the answer opens the page it names.
 - [x] Asking something the wiki says nothing about produces a note whose first
       line is the `> [!warning] Not grounded in your wiki` callout, rendered as

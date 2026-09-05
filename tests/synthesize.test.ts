@@ -159,6 +159,9 @@ describe("what the model said was missing enters frontmatter as one line each", 
     expect(cleanMissing(["[]][X][[]"])).toEqual(["X"]);
     // The mirror shape: removing `[[` closes a `]]` behind it.
     expect(cleanMissing(["funding][[]sources"])).toEqual(["fundingsources"]);
+    // And deeper than two passes, so the loop is a fixpoint rather than a
+    // second pass bolted onto the first.
+    expect(cleanMissing(["[][[][X][]][]"])).toEqual(["X"]);
   });
 
   it("drops an item that is empty once cleaned", () => {
@@ -228,6 +231,45 @@ describe("§8.3's note is written by code (invariant 5)", () => {
     expect(note.indexOf("sources:start")).toBeLessThan(note.indexOf("gaps:start"));
     expect(note.indexOf("gaps:start")).toBeLessThan(note.indexOf("trace:start"));
     expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
+  });
+
+  it("gives the section the page table, so a link that resolves is not a gap", () => {
+    // The section is handed `pages` by its caller. Nothing else observes that
+    // it is: the pure function is tested with a page table, and the note is
+    // tested for a section, and between them the argument can be dropped.
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [node("Airships", { text: "Lift from [[PageRank]] and [[Zeppelin]]." })],
+      pages: [
+        {
+          path: "wiki/concepts/PageRank.md",
+          title: "PageRank",
+          kind: "concept",
+          aliases: [],
+          summary: "",
+          updated: "2026-08-20",
+        },
+      ],
+    });
+
+    expect(note).toContain("- **Zeppelin** —");
+    expect(note).not.toContain("- **PageRank** —");
+  });
+
+  it("gives the section the snapshot, so the diagram shows what the wiki holds", () => {
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [
+        node("Airships", { text: "See [[Zeppelin]]." }),
+        node("Hindenburg", { text: "See [[Zeppelin]]." }),
+      ],
+      graph: {
+        nodes: [],
+        edges: [{ a: "wiki/concepts/Airships.md", b: "wiki/concepts/Hindenburg.md" }],
+      },
+    });
+
+    expect(note).toContain("  p0 --- p1");
   });
 
   it("writes no section when the answer ran into nothing", () => {

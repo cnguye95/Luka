@@ -19,10 +19,18 @@
 //     an error", and here the pages that wanted it are the ones the answer was
 //     built from.
 //
-// Both go through `unresolvedTargets`, which is §10's rule, so the section and
-// `wiki/_health.md` cannot disagree about what resolves.
+// Both are resolved by §4's rule — the links through `unresolvedTargets`,
+// which is the function §10 uses, and synthesis's items through the same title
+// index — so neither the section nor `wiki/_health.md` calls a page missing
+// that the other can see.
+//
+// That is where the section parts company with the `missing:` frontmatter key
+// it is drawn from. The key is the record: what synthesis said its answer
+// lacked, verbatim, including a page that already exists. The section is the
+// advice, and there is nothing to advise about a page the wiki already has.
+// Two jobs, one list, different filters.
 import { comparePaths } from "../paths";
-import { linkTargets } from "../compile/links";
+import { buildTitleIndex, linkTargets } from "../compile/links";
 import { handleOf, titleStem } from "../compile/pagetable";
 import { unresolvedTargets, type LinkScan } from "../gaps";
 import type { AssembledNode } from "../retrieve/assemble";
@@ -37,9 +45,9 @@ const ANSWER_LABEL = "This answer";
 /**
  * How many unresolved targets to name.
  *
- * Synthesis's own items are not capped: they are the `missing:` frontmatter
- * key, and a section that showed fewer than the key records would be the
- * shorter of two answers to one question. The links are a scan's output and
+ * Only the links are capped. Synthesis's items are few by nature — a model
+ * reporting on one answer — and each is already filtered against the page
+ * table, so what survives is worth saying. The links are a scan's output and
  * can run long on a page that gestures at everything.
  */
 const TARGET_CAP = 5;
@@ -104,12 +112,28 @@ function nameable(name: string): boolean {
  * A name that reads as code rather than as an article.
  *
  * Page generation invites the model to "link freely… write the natural name",
- * and on the measured vaults it obliged with `linkTargets`, `link_pairs`,
- * `degrees` and `double-bracket`. Nobody is going to write an article called
- * `link_pairs`, so naming it costs a slot and some of the reader's trust.
+ * and on the measured vaults it obliged with `linkTargets` and `link_pairs`
+ * alongside real ones.
+ *
+ * The test is deliberately narrow, because the cost of the two mistakes is not
+ * symmetric. A code-shaped name that survives is one weak line in a list; a
+ * real one that is dropped is a recommendation the user never sees, and
+ * §10 goes on listing it, so the two surfaces disagree with no way to tell
+ * why. An earlier version of this asked only whether a lowercase letter was
+ * followed by an uppercase one, which is the shape of `linkTargets` — and of
+ * `PageRank`, `OpenAI`, `GitHub` and every other capitalized compound a wiki
+ * is actually about.
+ *
+ * So the test is two unambiguous shapes only: an underscore, and no letter at
+ * all. camelCase is deliberately *not* tested. `linkTargets` and `iPhone` are
+ * the same string shape, and nothing lexical tells them apart — so refusing
+ * the shape means refusing real product and project names, which is the more
+ * expensive of the two mistakes. A code-shaped name that survives still has to
+ * be linked by a page this answer actually consulted, and still has to outrank
+ * the others, so it costs at worst one weak line.
  */
 function identifierShaped(name: string): boolean {
-  return name.includes("_") || /\p{Ll}\p{Lu}/u.test(name) || !/\p{L}/u.test(name);
+  return name.includes("_") || !/\p{L}/u.test(name);
 }
 
 /**
@@ -130,12 +154,21 @@ export function answerGaps(input: AnswerGapsInput): AnswerGap[] {
       targets: linkTargets(node.text),
     }));
 
-  const gaps: AnswerGap[] = input.missing.map((title) => ({
-    title,
-    fromAnswer: true,
-    citers: [],
-  }));
-  const at = new Map(gaps.map((gap, index) => [handleOf(gap.title), index]));
+  // §4's rule, the same one §10 resolves candidates with. Synthesis reports
+  // what its answer lacked, which is not the same question as what the wiki
+  // lacks: it can name a page that exists — one already among the pages it was
+  // given — and the frontmatter key records that faithfully. The section is
+  // advice about what to write, so a page that exists has no place in it.
+  const known = buildTitleIndex(input.pages);
+
+  const gaps: AnswerGap[] = [];
+  const at = new Map<string, number>();
+  for (const title of input.missing) {
+    const handle = handleOf(title);
+    if (known.has(handle) || at.has(handle)) continue;
+    at.set(handle, gaps.length);
+    gaps.push({ title, fromAnswer: true, citers: [] });
+  }
 
   const unwritten = unresolvedTargets(input.pages, scans)
     .filter((target) => nameable(target.display) && !identifierShaped(target.display))
@@ -188,8 +221,11 @@ export function renderGapsBlock(gaps: readonly AnswerGap[], graph?: GraphSnapsho
     if (gap.citers.length === 0) {
       return `- **${gap.title}** — the wiki could not answer this`;
     }
-    const names = gap.citers.map((citer) => citer.title).join(", ");
-    return `- **${gap.title}** — wanted by ${String(gap.citers.length)} of the pages consulted: ${names}`;
+    // Counted by the names it then lists, which is `health.ts`'s rule for the
+    // same sentence: two pages can share a filename stem, and "wanted by 2:
+    // Foo, Foo" is a count the reader cannot check.
+    const names = [...new Set(gap.citers.map((citer) => citer.title))];
+    return `- **${gap.title}** — wanted by ${String(names.length)} of the pages consulted: ${names.join(", ")}`;
   });
 
   return [GAPS_START, HEADING, ...bullets, "", "```mermaid", ...diagram(gaps, graph), "```", GAPS_END].join(

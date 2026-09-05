@@ -227,8 +227,9 @@ export function validateAnswerLinks(
  *      that a near-miss a parser might one day accept is already gone.
  *
  * Three families, not four. `sources`, `trace` and `gaps` are the blocks code
- * writes into an answer note and a parser reads back out of one — `stripTrace`
- * and `stripGaps` both run at filing. `compile/citations.ts` has a fourth
+ * writes into an answer note; `stripTrace` and `stripGaps` read two of them
+ * back at filing, and the sources block is covered because it is code's to
+ * write, not because anything parses it. `compile/citations.ts` has a fourth
  * `BLOCK`, for `citations:start`/`end`, and it was briefly added here on the
  * reasoning that §8.4 files an answer into `raw/answers/` where the next
  * compile reads it.

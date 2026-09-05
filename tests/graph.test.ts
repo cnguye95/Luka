@@ -377,6 +377,63 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     expect(await core.getGraph()).toBe(fresh);
   });
 
+  it("refreshes again, and again, as a button must", async () => {
+    // The slot that collapses two simultaneous presses has to be released
+    // afterwards, or the second press ever made returns the first press's
+    // answer — a Refresh that cannot refresh, which is the §14 finding this
+    // whole path exists to close, reintroduced one layer up.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: "{}",
+    });
+    const core = coreOver(fs);
+    await core.getGraph();
+
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+    const second = await core.getGraph({ force: true });
+    expect(nodePaths(second)).toEqual(["wiki/concepts/A.md", "wiki/concepts/B.md"]);
+
+    await fs.write("wiki/concepts/C.md", page("C", "concept", "Links [[A]]."));
+    const third = await core.getGraph({ force: true });
+
+    expect(nodePaths(third)).toEqual([
+      "wiki/concepts/A.md",
+      "wiki/concepts/B.md",
+      "wiki/concepts/C.md",
+    ]);
+  });
+
+  it("refreshes again after a walk that failed", async () => {
+    // The slot is released in a `finally`, so the press after an unreadable
+    // file still walks. Released only on success, one bad file would kill the
+    // button for the rest of the session.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: "{}",
+    });
+    const core = coreOver(fs);
+    await core.getGraph();
+
+    // `loadPageTable` reads each page without a guard, which is the way a
+    // walk actually rejects — one unreadable file under `wiki/`.
+    const originalRead = fs.read.bind(fs);
+    let failNext = true;
+    fs.read = async (path: string) => {
+      if (failNext && path.startsWith("wiki/")) {
+        failNext = false;
+        throw new Error("EACCES wiki/");
+      }
+      return originalRead(path);
+    };
+
+    await expect(core.getGraph({ force: true })).rejects.toThrow(/EACCES/);
+
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+    const after = await core.getGraph({ force: true });
+
+    expect(nodePaths(after)).toContain("wiki/concepts/B.md");
+  });
+
   it("joins two presses onto one walk, and answers the first with what it read", async () => {
     // Refresh is a button, and a button gets pressed twice. Forcing retires
     // the in-flight slot before it asks — that is what makes it a refresh —
@@ -422,13 +479,14 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     expect(one).not.toBe(stale);
   });
 
-  it("answers from the cache while a compile holds the lock, without walking", async () => {
-    // A walk that starts and finishes inside a compile's write window reads
-    // pages the compile has already written against a manifest it has not yet
-    // committed — a snapshot of a vault that never existed, cached and
-    // published, and left there if the compile then fails. The compile's own
-    // rebuild is the walk that can see the vault whole, so the press waits for
-    // it rather than racing it. Nothing blocks: the call returns at once.
+  it("publishes nothing from a walk that overlapped the writes", async () => {
+    // The manifest is committed last, so for the whole write phase `wiki/` and
+    // the manifest describe different moments, and a walk reading both sees a
+    // vault that never existed. It is free to run — nothing blocks a reader —
+    // but it must not become the answer anyone else is given. The compile
+    // retires the generation at both edges of its write phase, so the question
+    // "did this overlap the writes" is asked when the walk lands rather than
+    // when it starts, which is the only moment it can be answered.
     const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
     const replies = (request: { task: string }) =>
       request.task === "page-generation"
@@ -440,6 +498,8 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
       release = resolve;
     });
     let parkedOnce = false;
+    // Inventory is the first model call after the write phase opens, so
+    // parking there parks the compile mid-write.
     const stalling = new StubProvider(async (request) => {
       if (request.task === "inventory" && !parkedOnce) {
         parkedOnce = true;
@@ -457,22 +517,122 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     });
 
     const warm = await core.getGraph();
-    const compiling = core.compile();
-    while (core.busyWith === null) await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(core.busyWith).toBe("compile");
+    const seen: GraphSnapshot[] = [];
+    core.onGraphRebuilt((graph) => seen.push(graph));
 
-    fs.resetCounters();
+    const compiling = core.compile();
+    // Waiting on the lock is too early: it is taken before discovery, and the
+    // write phase does not open until the preview gate is past. Parking at the
+    // first inventory call is the signal that writes are actually in flight.
+    while (!parkedOnce) await new Promise((resolve) => setTimeout(resolve, 0));
+
     const during = await core.getGraph({ force: true });
 
-    // The cache, unchanged, and not one file opened to produce it.
+    // It walked — this is not a refusal — and it published nothing.
+    expect(seen).toHaveLength(0);
+    // A reader is handed the cache rather than the half-written vault.
     expect(during).toBe(warm);
-    expect(fs.reads).toBe(0);
-    expect(core.busyWith).toBe("compile");
+    expect(await core.getGraph()).toBe(warm);
 
     release();
     await compiling;
 
-    // The compile's own rebuild published the vault as it left it.
+    // The compile's own rebuild is what the pane hears about.
+    expect(seen).toHaveLength(1);
     expect(await core.getGraph()).not.toBe(warm);
+  });
+
+  it("reopens to refreshes after a compile that threw mid-write", async () => {
+    // The write phase closes in a `finally`. Without it a failed compile
+    // leaves the flag set, every later walk reads as overlapping, and nothing
+    // publishes again for the rest of the session — a silence far worse than
+    // the torn snapshot the flag exists to prevent.
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const replies = (request: { task: string }) =>
+      request.task === "page-generation"
+        ? "Prose about [[PageRank]]."
+        : inventoryReply("A note about ranking.", [{ title: "PageRank", kind: "concept" }]);
+    const core = createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+      provider: new StubProvider(replies),
+    });
+
+    await core.getGraph();
+    // An unguarded write, which is what actually throws out of a compile —
+    // a source that merely fails is recorded and the run completes.
+    const originalWrite = fs.write.bind(fs);
+    fs.write = async (path: string, data: string | Uint8Array) => {
+      if (path === MANIFEST) throw new Error("EACCES manifest");
+      return originalWrite(path, data);
+    };
+
+    await expect(core.compile()).rejects.toThrow(/EACCES/);
+    fs.write = originalWrite;
+
+    // The vault moved while that compile was failing; a refresh must see it.
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Body."));
+    const seen: GraphSnapshot[] = [];
+    core.onGraphRebuilt((graph) => seen.push(graph));
+
+    const after = await core.getGraph({ force: true });
+
+    expect(nodePaths(after)).toContain("wiki/concepts/B.md");
+    expect(seen).toHaveLength(1);
+    expect(await core.getGraph()).toBe(after);
+  });
+
+  it("refreshes during the scope preview, which holds the lock and writes nothing", async () => {
+    // §8.1 holds the lock across preview, confirm and work, and the modal can
+    // stay open indefinitely. Refusing to refresh for all of it would
+    // reproduce the §14 complaint — a Refresh that returns the same numbers —
+    // during the one phase where there is nothing to be wrong about.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: JSON.stringify({ "raw/gone.md": { hash: "a" } }),
+    });
+    const core = createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+      provider: new StubProvider(() => ""),
+    });
+
+    const before = await core.getGraph();
+
+    let atModal!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      atModal = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // A source that left the vault puts the run through the preview (§6.6),
+    // where it waits on the answer.
+    const compiling = core.compile({
+      confirm: async () => {
+        atModal();
+        await held;
+        return false;
+      },
+    });
+    await reached;
+    expect(core.busyWith).toBe("compile");
+
+    // A page arrives from another window while the modal is open.
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+    const during = await core.getGraph({ force: true });
+
+    expect(nodePaths(during)).toContain("wiki/concepts/B.md");
+    expect(during).not.toBe(before);
+    // And it is the cached answer afterwards, not a walk thrown away.
+    expect(await core.getGraph()).toBe(during);
+
+    release();
+    await compiling;
   });
 });

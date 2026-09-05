@@ -329,10 +329,27 @@ export function createCore(deps: CoreDeps): Core {
    */
   let generation = 0;
 
+  /**
+   * Whether a compile is rewriting the vault, and how many times that has
+   * started or stopped.
+   *
+   * `generation` cannot answer this. It is bumped by whoever wants a fresh
+   * walk — including the forced read itself, which retires the old slot and
+   * then matches the value it just set. What a walk needs to know instead is
+   * whether the *vault* was being rewritten at any point while it read, and
+   * that is a question only answerable when it lands.
+   */
+  let writing = false;
+  let writeEpoch = 0;
+
   function rebuildGraph(): Promise<GraphSnapshot> {
     if (building !== null) return building;
 
     const mine = generation;
+    // Sampled at both ends: `writing` catches a walk that began inside the
+    // phase, and a moved epoch catches one the phase began or ended under.
+    const wroteAtStart = writing;
+    const epochAtStart = writeEpoch;
     // A handle on this build's own promise, so the cleanup below can tell
     // whether it still owns the slot.
     const own: { promise: Promise<GraphSnapshot> | null } = { promise: null };
@@ -340,12 +357,19 @@ export function createCore(deps: CoreDeps): Core {
     own.promise = buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
       .then((built) => {
         // A newer generation means the vault moved while this walked, so this
-        // is not the cached answer for anyone.
-        if (mine === generation) {
+        // is not the cached answer for anyone. Nor is a walk that overlapped a
+        // compile's writes: `wiki/` and the manifest are committed at
+        // different moments, so such a walk describes a vault that never
+        // existed. The compile's own rebuild publishes the real one.
+        const overlappedWrites = wroteAtStart || epochAtStart !== writeEpoch;
+        if (mine === generation && !overlappedWrites) {
           graph = built;
           for (const listener of listeners) listener(built);
         }
-        return currentOrNewer(built, mine);
+        // Not published, and not handed back either: a snapshot of a vault
+        // that never existed is no better an answer for the caller who asked
+        // than for everyone else.
+        return currentOrNewer(built, mine, overlappedWrites);
       })
       .finally(() => {
         // Only if this build still owns the slot. `invalidateGraph` may have
@@ -380,8 +404,8 @@ export function createCore(deps: CoreDeps): Core {
    * fails leaves the cache at the pre-compile snapshot with nothing to correct
    * it. The recovery is a Refresh, which by then is not busy and walks.
    */
-  function currentOrNewer(built: GraphSnapshot, mine: number): GraphSnapshot {
-    return mine === generation || graph === null ? built : graph;
+  function currentOrNewer(built: GraphSnapshot, mine: number, superseded: boolean): GraphSnapshot {
+    return (mine === generation && !superseded) || graph === null ? built : graph;
   }
 
   // `deps` is passed through, not copied. The plugin mutates its settings
@@ -390,7 +414,31 @@ export function createCore(deps: CoreDeps): Core {
   // when the call is made. Each run makes §17's numbers safe for itself.
   return {
     compile: async (options: CompileOptions = {}) => {
-      const result = await lock.run("compile", () => runCompile(deps, options));
+      // Two signals, because a walk can overlap the phase from either side: a
+      // walk already in flight when writing begins is caught by the epoch it
+      // sampled, and one that starts while writing is caught by the flag.
+      // Between them no walk overlapping the phase can publish, whatever its
+      // timing. `end` runs in a `finally` because a compile that throws has
+      // still stopped writing, and a flag left set would silence every later
+      // walk for the rest of the session.
+      const writes: WritePhase = {
+        begin: () => {
+          writing = true;
+          writeEpoch += 1;
+          // A walk already in flight cannot describe what is about to be
+          // written either, so retire it as well.
+          invalidateGraph();
+        },
+        end: () => {
+          writing = false;
+        },
+      };
+      let result: CompileResult;
+      try {
+        result = await lock.run("compile", () => runCompile(deps, options, writes));
+      } finally {
+        writes.end();
+      }
       // "and after compile" (§7.1). A declined preview changed nothing, so
       // there is nothing to rebuild from.
       if (!result.cancelled) {
@@ -416,19 +464,15 @@ export function createCore(deps: CoreDeps): Core {
       if (options.force === true) {
         // One walk per gesture, however many times the button is pressed.
         if (forcing !== null) return forcing;
-        // A compile is rewriting `wiki/` and has not yet committed the
-        // manifest. A walk that both starts and finishes inside that window
-        // publishes new pages against the old manifest — a snapshot of a vault
-        // that never existed — and nothing corrects it if the compile then
-        // fails. The compile's own rebuild publishes the vault as it left it,
-        // which is what the press was asking for; until then the cache is the
-        // truest answer available. This is not the lock blocking a reader:
-        // nothing waits, the call returns at once with what is known, and §9's
-        // pane stays responsive throughout.
-        if (lock.busyWith === "compile") {
-          return graph === null ? rebuildGraph() : Promise.resolve(graph);
-        }
-        // Retire first, exactly as `compile` does above: joining a walk that
+        // Nothing here asks whether a compile is running. A walk taken during
+        // one is free to go: it will simply not publish, because `compile`
+        // retires the generation at both edges of its write phase. That rule
+        // is checked when the walk lands rather than when it starts, which is
+        // the only point at which "did this overlap the writes" can be
+        // answered — and it leaves the scope preview, which holds the lock and
+        // writes nothing, a perfectly good moment to refresh.
+        //
+        // Retire first, exactly as `compile` does: joining a walk that
         // began before this moment would answer a Refresh with the past, and
         // the point of the flag is that the caller has reason to think the
         // vault moved without this window hearing about it.
@@ -767,7 +811,26 @@ function countingProvider(inner: LLMProvider, onCall: () => void): LLMProvider {
   };
 }
 
-async function runCompile(input: CoreDeps, options: CompileOptions): Promise<CompileResult> {
+/**
+ * How `runCompile` tells the façade that the vault is being rewritten.
+ *
+ * §7.1's graph is read from `wiki/` and the manifest, and the manifest is
+ * committed last — so for the whole write phase those two describe different
+ * moments, and a walk that reads both sees a vault that never existed. The
+ * façade closes that by retiring any walk which overlaps the phase; it cannot
+ * work the boundaries out for itself, because the lock is held across the
+ * scope preview too, where nothing is written and a walk is perfectly safe.
+ */
+interface WritePhase {
+  begin(): void;
+  end(): void;
+}
+
+async function runCompile(
+  input: CoreDeps,
+  options: CompileOptions,
+  writes: WritePhase,
+): Promise<CompileResult> {
   // One consistent settings state for the whole run, taken now rather than at
   // `createCore`, so a key typed since load is seen and a key typed mid-run
   // cannot change the rules underneath a compile already in flight.
@@ -807,6 +870,11 @@ async function runCompile(input: CoreDeps, options: CompileOptions): Promise<Com
     const preview = cascadeScope(pages, citations, discovery);
     if (!(await options.confirm(preview))) return cancelled(discovery);
   }
+
+  // Everything above this line reads. Everything below it writes, and the
+  // manifest that reconciles those writes is not committed until the end, so
+  // this is where a concurrent walk starts seeing a vault that never existed.
+  writes.begin();
 
   const today = (deps.now?.() ?? new Date()).toISOString().slice(0, 10);
   const normalizeDeps = {

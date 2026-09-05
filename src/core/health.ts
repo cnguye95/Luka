@@ -39,15 +39,17 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
   // One scan for both link-reading sections, which each opened every page
   // before. Not §10's "one vault scan" in full — the page table and the graph
   // build read the files on their own account — but the report's own reads are
-  // now one pass, and this is the same scan the answer note's `## Add next`
-  // section resolves against, so the two cannot disagree about what resolves.
+  // now one pass. The answer note's `## Add next` section resolves against the
+  // same *rule* rather than the same scan — it reads the pages one answer was
+  // built from, at the moment it was answered — so the two cannot disagree
+  // about what resolves, only about what they were looking at.
   const { scans } = await scanPages(fs, pages);
   const now = (deps.now ?? (() => new Date()))();
 
   const report = [
     "# Health",
     "",
-    `Written ${now.toISOString().slice(0, 10)} from one scan of the vault. No model was asked.`,
+    `Written ${now.toISOString().slice(0, 10)} from a scan of the vault. No model was asked.`,
     "",
     ...articleCandidates(pages, scans),
     "",

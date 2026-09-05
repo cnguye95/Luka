@@ -59,6 +59,42 @@ describe("what the answer ran into", () => {
     ]);
   });
 
+  it("does not advise writing a page the wiki already has", () => {
+    // Synthesis reports what its *answer* lacked, which is not the same
+    // question as what the wiki lacks: it can name a page it was given. The
+    // frontmatter key records that faithfully; the section is advice, and
+    // there is nothing to advise about a page that exists. Without this the
+    // note can say "the wiki could not answer this" about PageRank two blocks
+    // below a link to PageRank in its own sources list.
+    const gaps = gapsOf(
+      ["PageRank", "the 1998 paper"],
+      [],
+      [meta("wiki/concepts/PageRank.md", "PageRank")],
+    );
+
+    expect(gaps.map((g) => g.title)).toEqual(["the 1998 paper"]);
+  });
+
+  it("resolves a synthesis item through an alias, as §4 does", () => {
+    const gaps = gapsOf(["PPR"], [], [meta("wiki/concepts/PageRank.md", "PageRank", ["PPR"])]);
+
+    expect(gaps).toEqual([]);
+  });
+
+  it("names one gap once when the model repeats itself", () => {
+    // Model lists repeat, and two spellings of one §4 name are one name. Left
+    // alone they render as two bullets that contradict each other: one says
+    // the wiki could not answer it, the other names the pages that wanted it.
+    const gaps = gapsOf(
+      ["Zeppelin", "zeppelin", "Zeppelin"],
+      [node("wiki/concepts/A.md", "Airships", "See [[Zeppelin]].")],
+    );
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]?.title).toBe("Zeppelin");
+    expect(gaps[0]?.citers).toHaveLength(1);
+  });
+
   it("merges a link and a synthesis item that name the same page", () => {
     // One gap with two kinds of evidence, not two gaps. It keeps the model's
     // place and takes the pages, so the count in the sentence stays true.
@@ -127,14 +163,26 @@ describe("what the answer ran into", () => {
     expect(gaps).toEqual([]);
   });
 
-  it("drops a name that reads as code rather than as an article", () => {
-    // Page generation invites the model to link freely, and on the measured
-    // vaults it produced these. Nobody writes an article called `link_pairs`.
+  it("drops the two name shapes no article ever has", () => {
+    // An underscore, and no letter at all. Both from the measured vaults.
     const gaps = gapsOf([], [
-      node("wiki/concepts/A.md", "A", "See [[link_pairs]], [[linkTargets]], [[2026]], [[Graph pane]]."),
+      node("wiki/concepts/A.md", "A", "See [[link_pairs]], [[2026]], [[Graph pane]]."),
     ]);
 
     expect(gaps.map((g) => g.title)).toEqual(["Graph pane"]);
+  });
+
+  it("keeps a capitalized compound, which is what a wiki is mostly about", () => {
+    // The predecessor refused any lowercase letter followed by an uppercase
+    // one. That is the shape of `linkTargets` — and of `PageRank`, this
+    // project's own canonical page, along with every product and project name
+    // a wiki actually holds. §10 went on listing them, so the two surfaces
+    // disagreed with nothing to explain why.
+    const gaps = gapsOf([], [
+      node("wiki/concepts/A.md", "A", "See [[PageRank]], [[OpenAI]] and [[JavaScript]]."),
+    ]);
+
+    expect(gaps.map((g) => g.title)).toEqual(["JavaScript", "OpenAI", "PageRank"]);
   });
 
   it("names at most five links, the most wanted first", () => {
@@ -225,6 +273,20 @@ describe("what the section says", () => {
     );
   });
 
+  it("counts the names it lists, when two pages share a filename stem", () => {
+    // `health.ts` de-duplicates citers by title before counting, for the same
+    // sentence and with a comment saying why. A count of paths beside a list
+    // of titles reads as "wanted by 2 … Ranking, Ranking".
+    const gaps = gapsOf([], [
+      node("wiki/concepts/Ranking.md", "Ranking", "See [[Zeppelin]]."),
+      node("wiki/entities/Ranking.md", "Ranking", "See [[Zeppelin]]."),
+    ]);
+
+    expect(renderGapsBlock(gaps)).toContain(
+      "- **Zeppelin** — wanted by 1 of the pages consulted: Ranking",
+    );
+  });
+
   it("draws solid edges only between pages the diagram already shows", () => {
     // The solid edges are what the wiki holds, so the dashes read as the
     // addition to it. An edge to a page that is not drawn would name a node
@@ -287,6 +349,27 @@ describe("labels", () => {
 
   it("flattens whitespace, so a label cannot break the line it is on", () => {
     expect(mermaidLabel("two\n  words")).toBe("two words");
+    // Trimmed too: a leading space inside the quotes is a label that does not
+    // line up with any other.
+    expect(mermaidLabel("   spaced   ")).toBe("spaced");
+  });
+
+  it("cuts at the limit, not one past it", () => {
+    // A name exactly at the limit is not long, and an ellipsis on it claims a
+    // truncation that did not happen.
+    expect(mermaidLabel("x".repeat(40))).toBe("x".repeat(40));
+    expect(mermaidLabel("x".repeat(41))).toBe(`${"x".repeat(40)}…`);
+  });
+
+  it("cuts an entity whole, whichever side of the limit it falls", () => {
+    // Escaping first would turn one character into five and then cut through
+    // the middle, leaving `#3` in the diagram. The character here sits just
+    // inside the limit, which is where the two orders differ.
+    const label = mermaidLabel(`${"z".repeat(39)}"tail`);
+
+    expect(label).toContain("#34;");
+    expect(label.endsWith("…")).toBe(true);
+    expect(label).not.toMatch(/#\d*…$/);
   });
 });
 
@@ -304,6 +387,27 @@ describe("filing", () => {
     expect(stripGaps(noteWith(block))).not.toContain("## Add next");
     expect(stripGaps(noteWith(block))).toContain("The answer.");
     expect(stripGaps(noteWith(block))).toContain("tail");
+  });
+
+  it("does not swallow prose between a stray sentinel and the real block", () => {
+    // The other half of the trace's rule, and the one with teeth: filing
+    // deletes the original, so text this removes has no other copy. A lazy
+    // match would take everything from the first sentinel to the last.
+    const stray = ["<!-- gaps:start -->", "## Add next", "USER PROSE"].join("\n");
+    const real = renderGapsBlock(gapsOf(["a gap"], []));
+
+    const kept = stripGaps(`${stray}\n${real}\n`);
+
+    expect(kept).toContain("USER PROSE");
+    expect(kept).not.toContain("a gap");
+  });
+
+  it("strips a block written with Windows line endings", () => {
+    // `BLOCK` spells `\r?\n` throughout on purpose; a note round-tripped
+    // through an editor that normalises to CRLF must still file clean.
+    const block = renderGapsBlock(gapsOf(["a gap"], [])).replace(/\n/g, "\r\n");
+
+    expect(stripGaps(`Answer.\r\n\r\n${block}\r\n`)).toBe("Answer.");
   });
 
   it("leaves a block alone when the heading is not the one code writes", () => {
