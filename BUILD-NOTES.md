@@ -2647,6 +2647,39 @@ reached under vitest:
 
 ## Open findings — not yet addressed
 
+### Half the readable/live seam is closed (§7.1) — 2026-09-05
+
+The seam was deferred to its own milestone on the reading that it was one
+problem. It is two, and only one of them was ever ambiguous.
+
+**"Where is a source's readable markdown" is now one function.**
+`src/core/readable.ts` owns §7.1's rule and `readablePathOf`,
+`readableFromManifest` and `readablePathFor` all reach it. They used to decide
+it separately and disagreed on one input: a converting source with no
+derivative recorded. Two returned the source path — which makes a PDF a graph
+node §7.1 says is not one, and puts its raw bytes into a Call B prompt under
+the label of its extracted text — while the third refused it, with a comment
+explaining why the others were wrong. Nobody had reconciled them because the
+disagreement is unreachable while invariant 3 holds: the manifest records only
+sources that completed, and a converting source that completed has its pointer.
+It is reachable from an entry written before ownership was recorded, which the
+refusing function names outright.
+
+The rule is now stated once and the two callers that were wrong are right. The
+third, `readablePathFor`, keeps its non-null return because it runs directly
+after a successful normalize and cannot be in the refused case; it says so, and
+points at the shared rule for what happens when the pointer really is missing.
+
+**"Is this source still live" is untouched and still deferred.** `isLive`,
+`isPending` and `cascadeScope.live` answer it independently. That half is a
+harder question — liveness depends on the run's own discovery, not only on the
+manifest — and nothing here reduces it.
+
+Verified: full suite green, the 7/1 rename counts unmoved, eval floors
+unmoved, and the disagreeing case pinned by a test that fails under the old
+answer.
+
+
 ### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
 
 Found during the §14 manual-checklist setup, from reading rather than from a

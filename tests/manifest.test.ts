@@ -91,8 +91,21 @@ describe("ingest manifest", () => {
 });
 
 describe("readablePathOf (§7.1)", () => {
-  it("is the source itself when no derivative was recorded", () => {
+  it("is the source itself when it is markdown and no derivative was recorded", () => {
     expect(readablePathOf("raw/note.md", { hash: "h" })).toBe("raw/note.md");
+    expect(readablePathOf("raw/notes.txt", { hash: "h" })).toBe("raw/notes.txt");
+  });
+
+  it("is nothing for a converting source whose derivative was never recorded", () => {
+    // §7.1 says "the source itself if `.md`/`.txt`, else its derivative", and a
+    // PDF is not its own readable markdown. This is the case three functions
+    // used to answer differently: two handed back the source path, which makes
+    // a PDF a graph node and puts its raw bytes into a Call B prompt under the
+    // label of its extracted text. They now share one rule, and it says no.
+    expect(readablePathOf("raw/paper.pdf", { hash: "h" })).toBe(null);
+    expect(readablePathOf("raw/data.csv", { hash: "h" })).toBe(null);
+    // A path of no known format is not readable markdown either.
+    expect(readablePathOf("raw/archive.zip", { hash: "h" })).toBe(null);
   });
 
   it("is the derivative when one was recorded", () => {

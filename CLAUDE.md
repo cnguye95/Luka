@@ -77,8 +77,13 @@ to break something" — review fix diffs harder than feature diffs.
   counts above are the tripwire.
 - **The readable/live seam** (`readable`, `bodyOfSource`, `isLive`,
   `readableFromManifest`, `readablePathFor`, `readablePathOf`,
-  `cascadeScope.live`). Seven answers to two overlapping questions that
-  disagree at the edges; deferred to its own milestone. Local fixes here
+  `cascadeScope.live`). *Half resolved 2026-09-05.* "Where is a source's
+  readable markdown" now has one answer, `readableMarkdown` in
+  `src/core/readable.ts`; the three functions that used to decide it separately
+  all call it, and the case they disagreed on — a converting source with no
+  derivative recorded — is pinned by test. The second question, "is this source
+  still live", is still answered by `isLive`, `isPending` and
+  `cascadeScope.live` independently, and remains deferred. Local fixes there
   drift the siblings — change all or none.
 - **Compile's write phase ↔ the graph cache.** `runCompile` marks its write
   boundaries through `WritePhase`; a walk overlapping them publishes nothing

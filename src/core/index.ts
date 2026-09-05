@@ -43,17 +43,12 @@ import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
 import {
   CASCADE_PENDING,
-  isPending,
   isSameManifest,
   loadManifest,
+  readablePathOf,
   saveManifest,
 } from "./manifest";
-import {
-  derivativeOrigin,
-  formatForPath,
-  isPassthrough,
-  normalizeSource,
-} from "./normalize/index";
+import { derivativeOrigin, normalizeSource } from "./normalize/index";
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
@@ -1627,16 +1622,15 @@ async function readableFromManifest(
   // of the manifest object and be read as a manifested source.
   if (!Object.hasOwn(manifest, path)) return null;
   const entry = manifest[path] as ManifestEntry;
-  // A pending source has left the vault entirely; there is nothing to read.
-  if (isPending(entry)) return null;
+  // Where §7.1 says the markdown is — including its `null`s, which are a
+  // pending source (gone from the vault) and a converting source whose
+  // derivative was never located. Handing back the source itself for the
+  // second would put a PDF's raw bytes into a Call B prompt under the label of
+  // its extracted text.
+  const target = readablePathOf(path, entry);
+  if (target === null) return null;
 
-  if (entry.derivative === undefined) {
-    // Only a passthrough source is its own readable markdown. A *converting*
-    // source with no pointer is an entry written before ownership was recorded,
-    // so its derivative has not been located — and handing back the source
-    // itself would put a PDF's raw bytes in a Call B prompt under its label.
-    const format = formatForPath(path);
-    if (format === null || !isPassthrough(format)) return null;
+  if (target === path) {
     // A file, checked — not assumed. Reading a path that has gone would throw
     // an error no caller classifies as an unreadable citer, and that blocks
     // every *other* citer of the page rather than costing this one. A `stat`
@@ -1657,7 +1651,7 @@ async function readableFromManifest(
   // would reach the caller as an unclassified error, which blocks every *other*
   // citer of the page instead.
   try {
-    return (await derivativeOrigin(fs, entry.derivative)) === path ? entry.derivative : null;
+    return (await derivativeOrigin(fs, target)) === path ? target : null;
   } catch {
     return null;
   }
