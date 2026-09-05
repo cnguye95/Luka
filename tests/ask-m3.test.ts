@@ -257,6 +257,75 @@ describe("invariant 9: the key never reaches the vault", () => {
   });
 });
 
+describe("§8.3's `## Add next` section", () => {
+  /** A vault whose one page reaches for an article nobody has written. */
+  async function gappy(): Promise<MemFs> {
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const provider = new StubProvider((request) => {
+      if (request.task === "page-generation") return "Ranking rests on [[Convergence]].";
+      return inventoryReply("A note about ranking.", [
+        { title: "PageRank", kind: "concept", summary: "A walk." },
+      ]);
+    });
+    await core(fs, provider).compile();
+    return fs;
+  }
+
+  const answering = (missing: string[]) =>
+    new StubProvider((request) =>
+      request.task === "seed-selection"
+        ? { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] }
+        : answerWith("Ranking uses [[PageRank]].", missing),
+    );
+
+  it("names both what synthesis lacked and what the pages reached for", async () => {
+    const fs = await gappy();
+
+    const result = await core(fs, answering(["the 1998 paper"]), {
+      // Off, so the reported item is the one the note carries: with the round
+      // on, a match would replace the list under test.
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    }).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note).toContain("## Add next");
+    expect(note).toContain("- **the 1998 paper** — the wiki could not answer this");
+    expect(note).toContain("- **Convergence** — wanted by 1 of the pages consulted: PageRank");
+    // The picture, drawn from what the answer already held.
+    expect(note).toContain("```mermaid");
+    expect(note).toContain('a(["This answer"])');
+    expect(note).toContain("-.- g0");
+    // And the section says the same thing the frontmatter does.
+    expect(note).toContain("missing:\n  - the 1998 paper");
+  });
+
+  it("writes no section for an answer that ran into nothing", async () => {
+    const { fs, provider } = await compiled();
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(fs.text(result.path)).not.toContain("gaps:start");
+  });
+
+  it("leaves nothing behind when the answer is filed", async () => {
+    const fs = await gappy();
+    const instance = core(fs, answering(["the 1998 paper"]), {
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    });
+    const result = await instance.ask("How does ranking work?");
+
+    await instance.fileBack(result.path);
+    const filed = fs.text("raw/answers/2026-08-20-1007 how-does-ranking-work.md");
+
+    expect(filed).not.toContain("## Add next");
+    // A name the section recommended must not become an edge, or the next
+    // compile inventories a page out of the suggestion to write one.
+    expect(linkTargets(filed)).not.toContain("Convergence");
+    expect(filed).toContain("missing:\n  - the 1998 paper");
+    expect(filed).toContain("## Sources consulted");
+  });
+});
+
 describe("determinism", () => {
   it("writes byte-identical notes for the same question and vault", async () => {
     const one = await compiled();

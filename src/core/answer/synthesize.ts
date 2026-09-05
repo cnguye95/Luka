@@ -16,9 +16,10 @@ import { linkOutsideRetrievedSet } from "../markers";
 import { comparePaths } from "../paths";
 import { serializeFrontmatter } from "../yaml";
 import type { LLMProvider } from "../provider/types";
-import type { PageMeta, RetrievalMode } from "../types";
+import type { GraphSnapshot, PageMeta, RetrievalMode } from "../types";
 import type { AssembledNode } from "../retrieve/assemble";
 import { writeTrace, type Trace } from "./trace";
+import { answerGaps, renderGapsBlock } from "./addnext";
 
 const SOURCES_START = "<!-- sources:start -->";
 const SOURCES_END = "<!-- sources:end -->";
@@ -225,9 +226,12 @@ export function validateAnswerLinks(
  *      pattern is deliberately more permissive about surrounding whitespace, so
  *      that a near-miss a parser might one day accept is already gone.
  *
- * Two families, not three. `compile/citations.ts` has a third `BLOCK`, for
- * `citations:start`/`end`, and it was briefly added here on the reasoning that
- * §8.4 files an answer into `raw/answers/` where the next compile reads it.
+ * Three families, not four. `sources`, `trace` and `gaps` are the blocks code
+ * writes into an answer note and a parser reads back out of one — `stripTrace`
+ * and `stripGaps` both run at filing. `compile/citations.ts` has a fourth
+ * `BLOCK`, for `citations:start`/`end`, and it was briefly added here on the
+ * reasoning that §8.4 files an answer into `raw/answers/` where the next
+ * compile reads it.
  * That reasoning is wrong: all three `parseCitationBlock` call sites iterate
  * the wiki page table, and `loadPageTable` seeds its walk with `wiki/` alone,
  * so a filed answer's text never reaches that parser. With no parse harm on
@@ -236,7 +240,7 @@ export function validateAnswerLinks(
  * lines. Rule 2 above is scoped to the parsers that read an answer note.
  */
 const CODE_OWNED_SENTINEL =
-  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
+  /^[ \t]*<!--[ \t]*(?:sources|trace|gaps):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
 
 /**
  * Removes code-owned sentinels from the model's prose.
@@ -299,6 +303,11 @@ export interface AnswerNote {
   consulted: readonly AssembledNode[];
   /** The page table, so an alias of a retrieved page still resolves (§4). */
   pages?: readonly PageMeta[];
+  /**
+   * §7.1's snapshot, for the solid edges in the `## Add next` diagram — what
+   * the wiki already holds, against which the dashed additions read.
+   */
+  graph?: GraphSnapshot;
   trace: Trace;
 }
 
@@ -327,6 +336,13 @@ export function renderAnswerNote(note: AnswerNote): string {
     "",
   );
   parts.push(renderSourcesBlock(note.consulted), "");
+  // Computed here rather than passed in, so the section and the `missing:` key
+  // are two renderings of one list and cannot report different things.
+  const addNext = renderGapsBlock(
+    answerGaps({ missing, consulted: note.consulted, pages: note.pages ?? [] }),
+    note.graph,
+  );
+  if (addNext !== "") parts.push(addNext, "");
   parts.push(writeTrace(note.trace));
 
   return `${frontmatter}${parts.join("\n")}\n`;

@@ -7,15 +7,20 @@
 //
 // Nothing here teaches compile about answers, and nothing needs to: §4's
 // discovery already walks `raw/` recursively and names `raw/answers/` outright,
-// and a `.md` source is passthrough. The one deliberate asymmetry is which
-// block survives — the trace is this run's working, while the sources block's
-// links become real graph edges (§7.1), which is how filing densifies the
-// graph rather than just archiving prose.
+// and a `.md` source is passthrough. The deliberate asymmetry is which block
+// survives. The sources block's links become real graph edges (§7.1), which is
+// how filing densifies the graph rather than just archiving prose. Two blocks
+// go: the trace, which is this run's working, and `## Add next`, which names
+// pages that do not exist — kept, the next compile's inventory would read
+// those names as things a source asserts, and the wiki would grow a page out
+// of a recommendation to write one. The `missing:` frontmatter key stays, and
+// is the durable form of that signal.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { basename, dirname, isUnder } from "../paths";
 import { parseFrontmatter } from "../yaml";
 import { stripTrace } from "./trace";
+import { stripGaps } from "./addnext";
 
 export const FILED_ANSWERS_FOLDER = "raw/answers";
 
@@ -46,7 +51,7 @@ export async function fileBack(fs: FsAdapter, answerPath: string): Promise<strin
     throw new Error(`${answerPath} is already filed`);
   }
 
-  const filed = `${stripTrace(text)}\n`;
+  const filed = `${stripTrace(stripGaps(text))}\n`;
   const target = await freePath(fs, `${FILED_ANSWERS_FOLDER}/${basename(answerPath)}`);
 
   await fs.mkdir(dirname(target));

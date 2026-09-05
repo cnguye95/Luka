@@ -2286,6 +2286,86 @@ now share a scan. The narrower claim is the true one, and the comment in
   outside core needs the scan now that the section is written inside the
   answer.)
 
+**The section is written into the answer.** `renderAnswerNote` gains a third
+code-written block, `## Add next`, between the sources block and the trace: a
+bullet per gap and a Mermaid diagram drawing each as a dashed ghost beside the
+pages that wanted it. Two signals, both already in hand when the note is
+written, so it costs no model call — §8.2's own `missing_information` list, and
+the wikilink targets on the consulted pages that resolve to nothing. The
+ungrounded case needs no special wording: nothing was consulted, so the section
+is synthesis's items alone, each dashed to the answer.
+
+- **W15** — the block sits between the sources and the trace. It is about the
+  answer rather than about the run: a reader who has just seen what was
+  consulted is being told what was not. The trace stays last, as §8.3 has it.
+  §8.3 enumerates the code-written region as two blocks and this makes it
+  three, which is the deviation.
+- **W16** — §8.4 strips it, with the trace. §8.4 splits that region two ways —
+  strip the trace, keep the sources — and has no vocabulary for a third block,
+  so this is a decision rather than a reading. Kept, it would be the worst kind
+  of survival: the section names pages that do not exist, and the next
+  compile's inventory reads a filed answer as a source, so the wiki would grow
+  a page out of a recommendation to write one. The `missing:` key survives and
+  is the durable form of the same signal.
+- **W17** — the diagram is a fenced `mermaid` block, the first fenced block
+  Luka writes into a vault. Obsidian renders it in reading view with no help
+  from the plugin, so the picture costs no asset, no second file and no
+  `loadMermaid()` call. In source mode the bullets carry the same facts, so
+  nothing is only in the picture.
+- **W18** — no node shape in the diagram uses `[[ ]]`, and `[`/`]` are escaped
+  inside every label. Mermaid's subroutine shape is spelled exactly like a
+  wikilink, and `linkTargets` is fence-blind: a `[[X]]` inside the fence would
+  be a §7.1 edge to a page that does not exist, which is the reverse of what a
+  recommendation to write it should do. Escaping the brackets makes "the
+  diagram contains no link" true by construction rather than by the label
+  happening not to contain one. Labels are cut to 40 code points *before*
+  escaping, so a cut never lands inside an entity.
+- **W19** — one gate, both of §4's namespace rules: `handleOf(titleStem(x)) ===
+  handleOf(x)`. `titleStem` answers both — it sanitizes, which strips the
+  characters a filename cannot carry and the reserved `_` prefix, and it bounds
+  to `MAX_TITLE_BYTES` — and comparing under `handleOf` stops the first rule
+  being applied twice. The predecessor compared bytes against `sanitizeTitle`,
+  which normalizes to NFC, and since the shown spelling is the
+  `comparePaths`-minimum and NFD sorts first, that refused every accented name:
+  an actionable recommendation dropped for a reason that was not about the
+  name. It also never applied the length rule at all, which is what W9's
+  correction refers to. CLAUDE.md's coupling note asks that both rules move
+  together, and here they are one expression.
+- **W20** — a name that reads as code is dropped, not demoted: underscores,
+  camelCase, or no letters at all. Page generation invites the model to "link
+  freely… write the natural name", and on the measured vaults it produced
+  `link_pairs`, `linkTargets`, `degrees` and `double-bracket`. With five slots
+  a demotion is a distinction without a difference, and nobody is going to
+  write an article called `link_pairs`.
+- **W21** — five links at most, synthesis's items uncapped. The items are the
+  `missing:` key, and a section showing fewer than the key records would be the
+  second of two answers to one question. The links are a scan's output and run
+  long on a page that gestures at everything.
+- **W22** — demand of one is enough here, where the pane needed two. The scans
+  *are* the pages this answer was built from, so a single page reaching for
+  something is already this question running into it. The pane's threshold was
+  a vault-wide filter and went with the pane.
+- **W23** — no block at all when there is nothing to say, matching the
+  `missing:` key. The fixed wording also avoids the word "missing", because a
+  test asserts that substring is absent from a whole note that lacked nothing,
+  and a section saying it would be a false positive on a real property.
+- **W24** — the section is computed inside `renderAnswerNote` rather than
+  passed in. It has everything already, and computing it there makes the
+  section and the `missing:` key two renderings of one list rather than two
+  lists that can disagree. The only new field is `graph`, for the solid edges.
+- **W25** — the diagram's solid edges come from §7.1's snapshot, and only
+  between pages the diagram already draws. They are what the wiki holds, which
+  is what makes the dashes read as the addition to it; an edge to a page not
+  drawn would name a node Mermaid has never heard of.
+- **W26** — the section reads the text synthesis read, which for an oversized
+  first page is tail-cut. It reports on the answer that was given, so a link
+  the model was never shown is not a gap this answer ran into. Pinned by a test
+  that says outright it pins a decision rather than catching a mutation.
+- **W27** — `unresolvedTargets` takes a `LinkScan` over a `PageRef`, narrower
+  than a `PageMeta`, so the section can ask §10's question about text it
+  already holds without forging a page-table entry. The health check is
+  unchanged by it.
+
 ## §14 manual check — fixes made during the pass
 
 ### Fenced JSON is stripped before parsing (§11)

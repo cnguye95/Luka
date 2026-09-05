@@ -211,6 +211,32 @@ describe("§8.3's note is written by code (invariant 5)", () => {
     expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
   });
 
+  it("writes the Add next section between the sources and the trace", () => {
+    // Between them because it is about the answer rather than about the run:
+    // a reader who has just seen what was consulted is being told what was
+    // not. The trace stays last, as §8.3 has it.
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [node("PageRank", { text: "Ranking needs [[Convergence]]." })],
+      missing: ["the dates"],
+    });
+
+    expect(note).toContain("## Add next");
+    expect(note).toContain("- **the dates** — the wiki could not answer this");
+    expect(note).toContain("- **Convergence** — wanted by 1 of the pages consulted: PageRank");
+    expect(note).toContain("```mermaid");
+    expect(note.indexOf("sources:start")).toBeLessThan(note.indexOf("gaps:start"));
+    expect(note.indexOf("gaps:start")).toBeLessThan(note.indexOf("trace:start"));
+    expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
+  });
+
+  it("writes no section when the answer ran into nothing", () => {
+    // The same rule the `missing:` key follows: an answer that lacked nothing
+    // should not carry a heading saying so.
+    expect(renderAnswerNote(base)).not.toContain("gaps:start");
+    expect(renderAnswerNote(base)).not.toContain("Add next");
+  });
+
   it("puts the ungrounded callout first, before the answer", () => {
     const note = renderAnswerNote({ ...base, grounded: false, consulted: [] });
     const body = note.slice(note.indexOf("---\n", 4) + 4);
@@ -471,6 +497,8 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
     "<!-- trace:end -->",
     "<!-- sources:start -->",
     "<!-- sources:end -->",
+    "<!-- gaps:start -->",
+    "<!-- gaps:end -->",
   ];
 
   /**

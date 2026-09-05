@@ -670,6 +670,9 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     missing: cleanMissing(reply.missing),
     body: reply.body,
     consulted: assembly.nodes,
+    // For the solid edges in `## Add next`: what the wiki already holds, so
+    // the dashed additions read against it.
+    graph,
     pages,
     trace: {
       mode,
