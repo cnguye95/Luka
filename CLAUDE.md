@@ -76,3 +76,12 @@ to break something" — review fix diffs harder than feature diffs.
   `cascadeScope.live`). Seven answers to two overlapping questions that
   disagree at the edges; deferred to its own milestone. Local fixes here
   drift the siblings — change all or none.
+- **Compile's write phase ↔ the graph cache.** `runCompile` marks its write
+  boundaries through `WritePhase`; a walk overlapping them publishes nothing
+  and is not returned to its caller. Moving `writes.begin()` past the first
+  write, or dropping the `finally` around `writes.end()`, changes which
+  snapshots are trusted, and nothing outside `tests/graph.test.ts` notices.
+  The predecessor asked `lock.busyWith` at walk start instead and was wrong
+  four ways at once — the lock is a proxy for "writes are in flight" that is
+  both too coarse (it covers the scope preview, which writes nothing) and too
+  narrow (it cannot see a walk already running).
