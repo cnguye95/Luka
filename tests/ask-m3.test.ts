@@ -15,6 +15,7 @@ import {
   type Trace,
 } from "../src/core/index";
 import { decodeUtf8 } from "../src/core/hash";
+import { linkTargets } from "../src/core/compile/links";
 import { BusyError } from "../src/core/lock";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
@@ -380,6 +381,32 @@ describe("§8.2's follow-up round", () => {
     // The strongest gap signal there is: the wiki had nothing to expand with,
     // so what synthesis said it lacked is what the vault still lacks.
     expect(fs.text(result.path)).toContain("missing:\n  - photosynthesis in deep sea vents");
+  });
+
+  it("cleans what the model wrote before it reaches the note, and the graph", async () => {
+    // The unit tests pin `cleanMissing`; this pins that `runAsk` calls it. A
+    // bracketed item survives filing into `raw/answers/`, where §7.1 scans the
+    // whole file — frontmatter included — for links, so an uncleaned item is
+    // an edge the model chose rather than one the wiki has.
+    const fs = await twoPages();
+    const provider = expanding(["[[Convergence]]\n  rate"]);
+
+    const instance = core(fs, provider, {
+      // Off, so the item under test is the one that reaches the note: with the
+      // round on, "Convergence" matches a page and the second reply replaces it.
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    });
+    const result = await instance.ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note).toContain("missing:\n  - Convergence rate");
+    expect(note).not.toContain("[[Convergence]]");
+
+    await instance.fileBack(result.path);
+    const filed = fs.text("raw/answers/2026-08-20-1007 how-does-ranking-work.md");
+    // The function §7.1 reads edges with, asked the question the graph asks.
+    expect(linkTargets(filed)).not.toContain("Convergence");
+    expect(linkTargets(filed)).toContain("PageRank");
   });
 
   it("persists the last round's missing list, not the first's", async () => {

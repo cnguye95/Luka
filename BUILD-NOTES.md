@@ -2194,7 +2194,12 @@ is a §4 deviation and the user approved it as one.
   model-written summary; the brackets are this key's own problem, because
   `buildGraph` scans a node's whole file for links including frontmatter, so a
   filed answer carrying `[[X]]` in this list would manufacture an edge the
-  model chose — or, unresolved, an article candidate in §10 that nobody wrote.
+  model chose. (Corrected 2026-09-05: this first claimed such an item could
+  also become an article candidate in §10. It cannot — candidates are read off
+  the wiki page table, which `loadPageTable` seeds with `wiki/` alone, and a
+  filed answer lives under `raw/`. The edge is real; the candidate was not.
+  Corrected too: the strip runs to a fixpoint, because one pass turns
+  `[]][X][[]` into `[[X]]` — a link the strip manufactured itself.)
 - **W2** — the list persisted is the *last* synthesis's, not the first's. The
   follow-up round is the wiki's own attempt to close the gap, so what is still
   reported after it is what the wiki could not answer. When no second round
@@ -2468,6 +2473,14 @@ reached under vitest:
       the cache and does not walk.
 - [ ] Press **Refresh** on an unchanged vault: the counts stay the same and the
       layout does not move (this is the guard above, on the new trigger).
+- [ ] Press **Refresh** three times quickly: the counts update once and the
+      layout settles once, not once per press.
+- [ ] Press **Refresh** while a compile is running in this window: nothing
+      changes until the compile finishes, and then the counts are the
+      compile's.
+- [ ] With a graph drawn, make a walk fail (lock a file under `wiki/` from
+      another program) and press **Refresh**: the notice appears and the graph
+      stays on screen rather than being replaced by "No graph yet".
 
 ## Open findings — not yet addressed
 
@@ -2547,11 +2560,28 @@ degree and summary onto the nodes already held — a compile can rewrite a page'
 prose without changing the topology, and the tooltip reads that metadata — then
 returns without touching alpha. Every other snapshot reheats exactly as before.
 
-`replace` returns whether it reheated because there was no other way to observe
-it: `heldAlpha` reads d3's `alphaTarget`, which a reheat never sets, and
-`alpha()` itself decays on d3's own timer from the moment `restart()` runs —
-the timer every sim test passes `() => undefined` to keep out of assertions.
-The view ignores the boolean; it exists for the suite.
+`replace` returns whether it reheated. The view ignores the boolean; it exists
+for the suite.
+
+**Correction (2026-09-05).** The paragraph here first said the boolean was the
+only way to observe a reheat, because `alpha()` "decays on d3's own timer from
+the moment `restart()` runs". That is wrong, and the review that found it was
+right to say so. `simulation.alpha(x)` is a synchronous assignment and
+`restart()` only schedules d3's timer, which fires on a later turn — so `alpha`
+read straight after `replace` is exactly what `replace` left. It is now on the
+`Sim` interface, with `tick()` beside it to cool the walk off its starting
+value without waiting for that timer.
+
+The distinction was not academic. Asserting the boolean asserts what `replace`
+*says*, and the mutation that matters is a `replace` that reheats and still
+reports `false` — the original defect, wearing a correct answer. That mutation
+passed all 996 tests. Against `alpha` it fails. This is the shape this log has
+recorded before under a different name: an oracle computed by the code under
+test is not an oracle. Mutation now: deleting the guard fails 3, inserting a
+reheat before its `return false` fails 1, and deleting the `title` or `degree`
+carry fails 1 each — the last two were previously unobserved, so the earlier
+claim that "deleting the four metadata assignments fails 1" was true only of
+the four together.
 
 Taken with the force path below rather than alone, and after the click fix was
 verified by hand (that condition is met — see Verification owed). The pairing is
@@ -2608,6 +2638,43 @@ tests, deleting the `invalidateGraph()` inside it fails 1.
 
 Paired with the reheat guard above, which is what keeps a press on an unchanged
 vault from stirring a settled layout.
+
+**Two races found by review, fixed 2026-09-05.** Retiring the in-flight slot is
+what makes a refresh a refresh, and it is also what stops `building` from
+collapsing two presses: the second press retired the first, whose walk then
+lost its generation and was handed the *pre-refresh* cache by `currentOrNewer`
+— an answer older than the vault it asked about, plus a second full walk for
+one gesture. Forced reads now coalesce on a `forcing` slot of their own. A
+button gets pressed twice; that is not an edge case.
+
+The second is the compile window. A forced walk that both starts and finishes
+while a compile is rewriting `wiki/` reads pages the compile has written
+against a manifest it has not yet committed — a snapshot of a vault that never
+existed, cached and published, and left there if the compile then fails. A
+forced read while the lock says `compile` now answers from the cache and leaves
+the publishing to the compile's own rebuild, which is the only walk that can
+see the vault whole. Narrowed to `compile` deliberately: `ask` writes
+`answers/` and the health check writes a `_`-prefixed file, and neither is ever
+a node, so a walk during those is sound and refusing it would make Refresh do
+nothing for no reason. §9's "never blocked by the lock" holds either way —
+nothing waits, the call returns at once with what is known.
+
+Mutation: deleting the `forcing` slot fails 1, deleting the compile guard fails
+1.
+
+Two residuals are accepted rather than fixed, and named here so the next reader
+does not think they were missed. A superseded walk publishes nothing, which is
+right whenever its successor publishes — every case but one: a compile whose
+own rebuild then fails leaves the cache at the pre-compile snapshot with
+nothing to correct it. The recovery is a Refresh, which by then is not busy.
+And an *unforced* build begun mid-compile with an empty cache can still publish
+a torn snapshot; that predates this branch and is corrected by the compile's
+rebuild on every path but the same failing one.
+
+The pane keeps its drawn graph when a walk rejects, rather than replacing it
+with the empty state. The walk failed, not the snapshot on screen, and
+reporting an emptiness that is not true is the worse half of a failure the
+notice has already described.
 
 Found by the §14 manual pass. A page written into `wiki/concepts/` from outside
 Obsidian left the pane reading `37 nodes, 74 edges`; pressing **Refresh**

@@ -57,15 +57,32 @@ export interface Sim {
    */
   readonly heldAlpha: number;
   /**
+   * How hot the walk is — d3's `alpha`.
+   *
+   * A plain field read, and the reheat's own witness: `alpha(x)` assigns
+   * synchronously and `restart()` only schedules d3's timer, which fires on a
+   * later turn, so a test that reads this straight after `replace` sees
+   * exactly what `replace` left. `heldAlpha` cannot serve — `alphaTarget` is
+   * what a drag holds and a reheat never touches it.
+   */
+  readonly alpha: number;
+  /**
+   * One synchronous step of the walk — d3's own static-layout API.
+   *
+   * Here so a test can cool the layout off its starting alpha without waiting
+   * on the timer; nothing in the view calls it, because the view lets d3 tick
+   * on its own.
+   */
+  tick(): void;
+  /**
    * Positions for a fresh snapshot, keeping what survived (§9's refresh).
    *
    * Returns whether the walk was reheated. A snapshot whose nodes and edges
    * match the current ones changes no layout, so it carries the new titles,
    * kinds, degrees and summaries onto the nodes already held and leaves alpha
-   * alone; everything else reheats as before. The boolean is the only way to
-   * observe that: `heldAlpha` reads d3's `alphaTarget`, which a reheat never
-   * touches, and `alpha()` itself decays on d3's own timer from the moment
-   * `restart()` runs — the timer these tests exist to keep out of assertions.
+   * alone; everything else reheats as before. The boolean says what it did;
+   * `alpha` shows it, which is the assertion that would have caught a reheat
+   * smuggled in beside a `false`.
    */
   replace(graph: GraphSnapshot): boolean;
   stop(): void;
@@ -216,6 +233,12 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     },
     get heldAlpha() {
       return simulation.alphaTarget();
+    },
+    get alpha() {
+      return simulation.alpha();
+    },
+    tick: () => {
+      simulation.tick();
     },
     replace,
     nodeAt: (path: string) => byPath.get(path),

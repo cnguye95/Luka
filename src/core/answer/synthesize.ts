@@ -121,13 +121,25 @@ export function stripMissingBlock(reply: string): SynthesisReply {
  * scalar, and invariant 5 gives structure to code. Stripping `[[`/`]]` is the
  * one this key adds: `buildGraph` scans a node's whole file for links,
  * frontmatter included, so once an answer is filed a bracketed item would
- * become an edge the model chose — or, unresolved, an article candidate in
- * §10's report that nobody wrote.
+ * become an edge the model chose. §10's candidates are safe either way — they
+ * are read off the wiki page table, which `loadPageTable` seeds with `wiki/`
+ * alone, and a filed answer lives under `raw/`.
+ *
+ * The strip runs to a fixpoint. One pass is not enough: removing the `]]` from
+ * `[]][X][[]` splices the surviving brackets into `[[X]]`, a link the strip
+ * manufactured itself. Each pass is strictly shorter than the last, so this
+ * terminates.
  */
 export function cleanMissing(list: readonly string[]): string[] {
   const out: string[] = [];
   for (const item of list) {
-    const flat = item.replace(/\[\[|\]\]/g, "").replace(/\s+/g, " ").trim();
+    let stripped = item;
+    for (;;) {
+      const next = stripped.replace(/\[\[|\]\]/g, "");
+      if (next === stripped) break;
+      stripped = next;
+    }
+    const flat = stripped.replace(/\s+/g, " ").trim();
     if (flat !== "") out.push(flat);
   }
   return out;

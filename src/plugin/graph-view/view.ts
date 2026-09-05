@@ -273,22 +273,29 @@ export class LukaGraphView extends ItemView {
   /**
    * Re-reads the snapshot and redraws.
    *
-   * A rejection is reported and leaves the pane in its empty state rather than
-   * throwing into Obsidian's event loop: `getGraph` walks the vault, and one
-   * unreadable file under `wiki/` is enough to reject it. That is a known
-   * compile-side gap logged against its own milestone; what the pane owes is
-   * to say so instead of rendering a blank surface with no explanation.
+   * A rejection is reported rather than thrown into Obsidian's event loop:
+   * `getGraph` walks the vault, and one unreadable file under `wiki/` is
+   * enough to reject it. That is a known compile-side gap logged against its
+   * own milestone; what the pane owes is to say so.
+   *
+   * A pane already drawing a graph keeps it. The walk failed, not the snapshot
+   * on screen, and replacing a drawn vault with "no graph yet" would report an
+   * emptiness that is not true — the worse half of a failure the notice has
+   * already told the user about. A pane with nothing drawn yet still shows the
+   * empty state, because that one is accurate.
    *
    * Forced only from the Refresh button. Opening the pane reads the cache:
    * §15's "opens under a second" is a promise about the cached snapshot, and
    * the plugin already walked the vault at load.
    */
   private async reload(force = false): Promise<void> {
-    let next: GraphSnapshot | null = null;
+    let next: GraphSnapshot;
     try {
       next = await this.core.getGraph(force ? { force: true } : {});
     } catch (error) {
       new Notice(`Luka: could not read the graph — ${message(error)}`, 6000);
+      if (!this.closed && this.graph === null) this.render();
+      return;
     }
     // The view may have closed while that walk ran.
     if (this.closed) return;

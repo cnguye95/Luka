@@ -227,6 +227,11 @@ export interface GetGraphOptions {
    * vault sync, and neither fires this window's rebuild event. Any build in
    * flight is retired first, so the answer describes the vault as it stands
    * now rather than as it stood when an earlier walk began.
+   *
+   * Two forced reads at once join one walk. One taken while a compile holds
+   * the lock does not walk at all: it answers from the cache and leaves the
+   * publishing to the compile's own rebuild, which is the only walk that can
+   * see the vault whole. Neither waits on anything.
    */
   force?: boolean;
 }
@@ -295,8 +300,12 @@ export interface Core {
    */
   gaps(): Promise<GapReport>;
   /**
-   * §7.1: "Built in memory at plugin load and after compile." Returns an
-   * unsubscribe, so a view that closes stops hearing about rebuilds.
+   * §7.1: "Built in memory at plugin load and after compile" — and published
+   * again after a forced read, §9's Refresh, which §5 does not list because
+   * the force path is this branch's addition (BUILD-NOTES, 2026-09-02). A
+   * listener therefore hears from a gesture as well as from a compile.
+   * Returns an unsubscribe, so a view that closes stops hearing about
+   * rebuilds.
    */
   onGraphRebuilt(callback: (graph: GraphSnapshot) => void): () => void;
   readonly busyWith: OperationName | null;
@@ -306,9 +315,22 @@ export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
   // §7.1's graph lives here and nowhere on disk: "built in memory at plugin
   // load and after compile; no cache file". `building` collapses concurrent
-  // callers onto one build rather than letting two walk the vault at once.
+  // callers onto one build rather than letting two walk the vault at once —
+  // unforced callers here, forced ones on `forcing` below, and between them
+  // no gesture starts a second walk of the same vault.
   let graph: GraphSnapshot | null = null;
   let building: Promise<GraphSnapshot> | null = null;
+  /**
+   * The forced walk in flight, if any.
+   *
+   * `building` cannot collapse these: forcing retires the slot before it asks,
+   * which is the whole point of the flag, so two presses would start two walks
+   * and the first would be handed the *pre-refresh* cache by `currentOrNewer`
+   * — an answer older than the vault it was asked about. A second press joins
+   * the first walk instead. Refresh is a button, and a button gets pressed
+   * twice.
+   */
+  let forcing: Promise<GraphSnapshot> | null = null;
   const listeners = new Set<(graph: GraphSnapshot) => void>();
 
   /**
@@ -370,6 +392,12 @@ export function createCore(deps: CoreDeps): Core {
    * for, and the pane assigns whatever it is given. So a refresh racing a
    * compile overwrote the fresh graph it had just been notified of with the
    * older one it was awaiting, and stayed stale until the next compile.
+   *
+   * Accepted, and worth stating because it is not free: this drops what a
+   * superseded walk read. That is right when the walk that superseded it
+   * publishes, which is every case but one — a compile whose own rebuild then
+   * fails leaves the cache at the pre-compile snapshot with nothing to correct
+   * it. The recovery is a Refresh, which by then is not busy and walks.
    */
   function currentOrNewer(built: GraphSnapshot, mine: number): GraphSnapshot {
     return mine === generation || graph === null ? built : graph;
@@ -405,12 +433,29 @@ export function createCore(deps: CoreDeps): Core {
       ),
     getGraph: (options: GetGraphOptions = {}) => {
       if (options.force === true) {
+        // One walk per gesture, however many times the button is pressed.
+        if (forcing !== null) return forcing;
+        // A compile is rewriting `wiki/` and has not yet committed the
+        // manifest. A walk that both starts and finishes inside that window
+        // publishes new pages against the old manifest — a snapshot of a vault
+        // that never existed — and nothing corrects it if the compile then
+        // fails. The compile's own rebuild publishes the vault as it left it,
+        // which is what the press was asking for; until then the cache is the
+        // truest answer available. This is not the lock blocking a reader:
+        // nothing waits, the call returns at once with what is known, and §9's
+        // pane stays responsive throughout.
+        if (lock.busyWith === "compile") {
+          return graph === null ? rebuildGraph() : Promise.resolve(graph);
+        }
         // Retire first, exactly as `compile` does above: joining a walk that
         // began before this moment would answer a Refresh with the past, and
         // the point of the flag is that the caller has reason to think the
         // vault moved without this window hearing about it.
         invalidateGraph();
-        return rebuildGraph();
+        forcing = rebuildGraph().finally(() => {
+          forcing = null;
+        });
+        return forcing;
       }
       return graph === null ? rebuildGraph() : Promise.resolve(graph);
     },

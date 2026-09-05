@@ -376,4 +376,103 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     expect(seen[0]).toBe(fresh);
     expect(await core.getGraph()).toBe(fresh);
   });
+
+  it("joins two presses onto one walk, and answers the first with what it read", async () => {
+    // Refresh is a button, and a button gets pressed twice. Forcing retires
+    // the in-flight slot before it asks — that is what makes it a refresh —
+    // so without a slot of its own the second press retires the first, whose
+    // walk then loses its generation and is handed the *pre-refresh* cache by
+    // `currentOrNewer`: an answer older than the vault it asked about, plus a
+    // second walk of the whole vault for one gesture.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("A", "concept", "Body."),
+      [MANIFEST]: "{}",
+    });
+    const core = coreOver(fs);
+    const stale = await core.getGraph();
+    await fs.write("wiki/concepts/B.md", page("B", "concept", "Links [[A]]."));
+
+    // Park the walk both presses should share, so they are provably concurrent.
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let manifestReads = 0;
+    const originalRead = fs.read.bind(fs);
+    fs.read = async (path: string) => {
+      if (path === MANIFEST) {
+        manifestReads += 1;
+        await parked;
+      }
+      return originalRead(path);
+    };
+
+    const first = core.getGraph({ force: true });
+    const second = core.getGraph({ force: true });
+    while (manifestReads === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+
+    const [one, two] = [await first, await second];
+
+    // One walk: the manifest is read once, not once per press.
+    expect(manifestReads).toBe(1);
+    // And the first press is told about the page it pressed the button for.
+    expect(nodePaths(one)).toEqual(["wiki/concepts/A.md", "wiki/concepts/B.md"]);
+    expect(two).toBe(one);
+    expect(one).not.toBe(stale);
+  });
+
+  it("answers from the cache while a compile holds the lock, without walking", async () => {
+    // A walk that starts and finishes inside a compile's write window reads
+    // pages the compile has already written against a manifest it has not yet
+    // committed — a snapshot of a vault that never existed, cached and
+    // published, and left there if the compile then fails. The compile's own
+    // rebuild is the walk that can see the vault whole, so the press waits for
+    // it rather than racing it. Nothing blocks: the call returns at once.
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const replies = (request: { task: string }) =>
+      request.task === "page-generation"
+        ? "Prose about [[PageRank]]."
+        : inventoryReply("A note about ranking.", [{ title: "PageRank", kind: "concept" }]);
+
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parkedOnce = false;
+    const stalling = new StubProvider(async (request) => {
+      if (request.task === "inventory" && !parkedOnce) {
+        parkedOnce = true;
+        await parked;
+      }
+      return replies(request);
+    });
+
+    const core = createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+      provider: stalling,
+    });
+
+    const warm = await core.getGraph();
+    const compiling = core.compile();
+    while (core.busyWith === null) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(core.busyWith).toBe("compile");
+
+    fs.resetCounters();
+    const during = await core.getGraph({ force: true });
+
+    // The cache, unchanged, and not one file opened to produce it.
+    expect(during).toBe(warm);
+    expect(fs.reads).toBe(0);
+    expect(core.busyWith).toBe("compile");
+
+    release();
+    await compiling;
+
+    // The compile's own rebuild published the vault as it left it.
+    expect(await core.getGraph()).not.toBe(warm);
+  });
 });

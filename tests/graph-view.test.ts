@@ -461,13 +461,13 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
   const snapshot = (
     paths: string[],
     edges: [string, string][] = [],
-    over: Partial<{ kind: string; summary: string; title: string }> = {},
+    over: Partial<{ kind: string; summary: string; title: string; degree: number }> = {},
   ): GraphSnapshot => ({
     nodes: paths.map((path) => ({
       path,
       title: over.title ?? path,
       kind: (over.kind ?? "concept") as "concept",
-      degree: 1,
+      degree: over.degree ?? 1,
       summary: over.summary ?? "",
     })),
     edges: edges.map(([a, b]) => ({ a, b })),
@@ -529,26 +529,61 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
     sim.stop();
   });
 
-  it("does not reheat for a snapshot with the same nodes and edges", () => {
+  it("leaves a settled layout at the temperature it had settled to", () => {
     // §14's finding: a compile reporting "nothing to do" rearranged a settled
-    // layout. The return value is the only observable — `heldAlpha` reads
-    // `alphaTarget`, which a reheat never sets.
-    const sim = createSim(snapshot(["a.md", "b.md"], [["a.md", "b.md"]]), () => undefined);
+    // layout. Asserted on `alpha` rather than on the return value, because a
+    // `replace` that reheats and reports `false` is the same defect wearing a
+    // correct answer — and that is exactly what the boolean cannot see.
+    // `alpha(x)` assigns synchronously and `restart()` only schedules d3's
+    // timer for a later turn, so this reads what `replace` left.
+    const same = () => snapshot(["a.md", "b.md"], [["a.md", "b.md"]]);
+    const sim = createSim(same(), () => undefined);
+    const fresh = sim.alpha;
+    // Cool it off its starting value, so a reheat has something to undo.
+    sim.tick();
+    const settled = sim.alpha;
+    expect(settled).toBeLessThan(fresh);
 
-    expect(sim.replace(snapshot(["a.md", "b.md"], [["a.md", "b.md"]]))).toBe(false);
+    expect(sim.replace(same())).toBe(false);
+
+    expect(sim.alpha).toBe(settled);
     sim.stop();
   });
 
   it("reheats when a node arrives, a node leaves, or an edge changes", () => {
     const sim = createSim(snapshot(["a.md", "b.md"], [["a.md", "b.md"]]), () => undefined);
+    const fresh = sim.alpha;
 
-    expect(sim.replace(snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]))).toBe(true);
-    expect(sim.replace(snapshot(["a.md", "b.md"], [["a.md", "b.md"]]))).toBe(true);
-    expect(sim.replace(snapshot(["a.md", "b.md"]))).toBe(true);
+    for (const next of [
+      snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]),
+      snapshot(["a.md", "b.md"], [["a.md", "b.md"]]),
+      snapshot(["a.md", "b.md"]),
+    ]) {
+      sim.tick();
+      expect(sim.alpha).toBeLessThan(fresh);
+      expect(sim.replace(next)).toBe(true);
+      expect(sim.alpha).toBe(fresh);
+    }
     sim.stop();
   });
 
-  it("carries a rewritten summary and kind onto a node it did not reheat", () => {
+  it("reheats for a rename: the same counts, a different path", () => {
+    // A §6.5 rename retitles one page: one node leaves and one arrives, so the
+    // counts match and only the paths differ. It is a new layout and must be
+    // treated as one — and it is the only shape that reaches `sameTopology`'s
+    // node comparison, since every other case is caught by the length guard.
+    const sim = createSim(snapshot(["a.md", "b.md"]), () => undefined);
+    sim.tick();
+
+    expect(sim.replace(snapshot(["a.md", "c.md"]))).toBe(true);
+
+    expect(sim.nodeAt("c.md")).toBeDefined();
+    expect(sim.nodeAt("b.md")).toBeUndefined();
+    expect(sameTopology(snapshot(["a.md", "b.md"]), snapshot(["a.md", "c.md"]))).toBe(false);
+    sim.stop();
+  });
+
+  it("carries every field the tooltip reads onto a node it did not reheat", () => {
     // A compile that rewrote prose changes what the tooltip should say without
     // changing the topology. Skipping the reheat must not also skip the update.
     const sim = createSim(snapshot(["a.md"], []), () => undefined);
@@ -556,12 +591,16 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
     before.x = 123;
     before.y = 456;
 
-    const reheated = sim.replace(snapshot(["a.md"], [], { kind: "entity", summary: "Rewritten." }));
+    const reheated = sim.replace(
+      snapshot(["a.md"], [], { kind: "entity", summary: "Rewritten.", title: "Renamed", degree: 7 }),
+    );
 
     const after = sim.nodeAt("a.md") as SimNode;
     expect(reheated).toBe(false);
     expect(after.summary).toBe("Rewritten.");
     expect(after.kind).toBe("entity");
+    expect(after.title).toBe("Renamed");
+    expect(after.degree).toBe(7);
     expect(after.x).toBe(123);
     expect(after.y).toBe(456);
     sim.stop();
@@ -586,7 +625,10 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
       const one = snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]);
 
       expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]))).toBe(true);
+      // Each end separately: an edge pair is two values and comparing one of
+      // them would pass every fixture that only ever varies the other.
       expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["a.md", "c.md"]]))).toBe(false);
+      expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["c.md", "b.md"]]))).toBe(false);
     });
 
     it("is false when the counts differ", () => {

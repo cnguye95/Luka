@@ -150,6 +150,17 @@ describe("what the model said was missing enters frontmatter as one line each", 
     expect(cleanMissing(["[[PageRank]] convergence rate"])).toEqual(["PageRank convergence rate"]);
   });
 
+  it("strips to a fixpoint, so it cannot manufacture the link it removes", () => {
+    // One pass is not enough: taking `]]` out of the middle splices the
+    // brackets that surrounded it into a working link. The strip has to run
+    // until the string stops changing, or it writes the very edge it exists to
+    // prevent.
+    // One pass leaves `[[X]]`, which `linkTargets` reads as a link to X.
+    expect(cleanMissing(["[]][X][[]"])).toEqual(["X"]);
+    // The mirror shape: removing `[[` closes a `]]` behind it.
+    expect(cleanMissing(["funding][[]sources"])).toEqual(["fundingsources"]);
+  });
+
   it("drops an item that is empty once cleaned", () => {
     expect(cleanMissing(["   ", "[[]]", "dates"])).toEqual(["dates"]);
   });
