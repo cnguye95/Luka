@@ -2624,3 +2624,36 @@ filesystems everywhere else); that a `graph pane` link stayed a dangling
 candidate because a hand-written page without `kind` frontmatter is not a page;
 that the health report is byte-identical across runs but only once you stop
 moving the vault between them.
+
+### A destructive setup step whose cleanup was promised rather than performed
+
+Recorded because it nearly left the vault in a state no reader would have
+diagnosed.
+
+§8.7 asks for a file under `wiki/` that exists and cannot be read. The
+checklist's own suggestion — make it a directory — does not produce that
+through Obsidian's adapter, so the condition was created the other way the item
+names: a deny-read ACL on one page, `icacls <file> /deny <user>:(R)`. The check
+passed, the notice named the file and the error, and the pane fell back to its
+empty state exactly as §8.7 asks.
+
+The ACL was never removed. The intention was stated in the same breath as the
+setup — unlock it immediately, either way — and then the pass moved to the next
+item and the promise went with it. What cleaned it up was §13.4's cascade
+deleting that page four sections later, for reasons having nothing to do with
+the lock. Had `Damping factor` not happened to cite `page.html` alone, the file
+would still be unreadable, and the next compile would have failed with an EPERM
+naming a file nobody had touched in hours.
+
+The general form is worth naming: **a setup step that changes state outside the
+repository should carry its own teardown, in the same action, not in a later
+intention.** The vault edits in this pass were safe because they were
+reversible by writing a file back — a checksum could prove it. A permission
+change is not that: nothing in the vault records it, no later check would
+notice it, and the only evidence it ever happened is a sentence in a
+conversation.
+
+Two other setup steps in this pass had the same shape and got away with it for
+the same reason — the hand-written `graph pane.md` under `wiki/` for §14.3, and
+the `Refresh Probe.md` for §5.5. Both were deleted, but both were deleted
+because the next message happened to remember them.
