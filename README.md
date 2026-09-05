@@ -549,12 +549,12 @@ two items here the highest-value pair in the list.
 
 ### 15. Settings detail
 
-- [ ] The settings tab shows a **Retrieval** section: context budget, pages per
+- [x] The settings tab shows a **Retrieval** section: context budget, pages per
       answer, both graph-mode thresholds, and a follow-up toggle.
-- [ ] **Advanced (PageRank)** is collapsed by default and expands to damping,
+- [x] **Advanced (PageRank)** is collapsed by default and expands to damping,
       maximum iterations, and a convergence threshold that is visible but not
       editable.
-- [ ] Editing a numeric field and reloading Obsidian keeps the new value;
+- [x] Editing a numeric field and reloading Obsidian keeps the new value;
       typing nonsense into one and reloading falls back to the documented
       default rather than breaking compile.
 
