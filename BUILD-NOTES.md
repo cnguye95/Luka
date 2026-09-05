@@ -2235,6 +2235,13 @@ is a §4 deviation and the user approved it as one.
   Nothing reads it yet, and that is deliberate: today every vault has zero of
   these, so a card type built on it would have had nothing to show.
 
+  *(Overtaken 2026-09-05.)* Twice. The card type went with the pane, and the
+  data stopped waiting for a later decision: `## Add next` reads the same list
+  in the same run that produces it. What survives of this decision is the part
+  that turned out to matter most — the key is written whether or not anything
+  reads it, and it is now the *record* against which the section is the
+  advice. W24 has the distinction.
+
 **One page scan serves both reports.** `articleCandidates` read every page and
 grouped unresolved targets inside `health.ts`, privately; `danglingCitations`
 opened every page again for the citation blocks. The gap report needs the same
@@ -2436,6 +2443,27 @@ is synthesis's items alone, each dashed to the answer.
   one has the block stripped. The real reason is the one the checklist tests:
   Obsidian renders `[[X]]` as a live link in the note the user is reading, and
   a recommendation to write a page should not look like the page.
+
+**What the branch ends at.** Suite 1001 passed / 4 skipped. Boundary (43 files
+in `src/core`), lint, typecheck and eval all green; eval floors unmoved at
+recall@5 0.7604, recall@10 1.0000, MRR 0.7277. The 7/1 rename mutation counts
+are unmoved, checked after every commit that touched `src/core`.
+
+Two whole-branch reviews ran, three lanes each. The first found 34 issues in
+the pane and is why the pane is not here. The second found six live defects,
+fifteen tests that passed for the wrong reason, and thirteen false claims — the
+last of which is the number worth remembering, because eleven of the thirteen
+were written in this log or in a comment beside working code. The count is
+consistent with what this file already says about itself: prose about mechanism
+is where this project's defects live, and the code was in better shape than the
+sentences describing it.
+
+**What §14 leaves to the user:** five README checklist items for the section —
+that it renders, that its diagram is not a set of links, that an answer lacking
+nothing has none, that filing removes it and the next compile grows no page
+from it, and that no bullet names a page the wiki already has. Plus the earlier
+items still owed for the reheat guard and the force path. The pure halves carry
+the automated assertions; what needs Obsidian is what the checklist is for.
 
 ## §14 manual check — fixes made during the pass
 
