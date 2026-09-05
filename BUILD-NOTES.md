@@ -2042,6 +2042,29 @@ click-PPR and trace replay carry on unchanged.
 
 ### Known limitations, accepted (M4)
 
+- **RESOLVED 2026-09-05 — a page whose title contains a comma is now replayed
+  correctly.** The limitation below stands as the record of why three parser
+  fixes failed, and its own closing sentence named the way out: "recovering the
+  label itself needs `writeTrace` to emit an unambiguous grammar, which is a
+  §8.3 format decision rather than a parser one." That decision is taken.
+  `writeTrace` now puts one entry to a line under the field name, indented.
+  §8.3 shows both lists inline, so this is a recorded deviation from its
+  example, and it is the whole point: `,` is legal in a title and in a raw
+  path, `]]` is legal in a raw path, and a newline is legal in neither, because
+  `sanitizeTitle` collapses whitespace. The delimiter is now something the
+  content cannot contain, so the grammar has one reading rather than two and
+  `Trace.unparsed` is empty for every note written from here.
+
+  The old reader is kept, not replaced: notes written before today exist, and
+  §9's replay opens them. A field with a value after the colon is read the old
+  way, with the comma split and the losses it counts; a field with nothing
+  after the colon opens a list. Both are pinned, including a label carrying a
+  comma *and* brackets, which is the input neither old reading survived.
+
+  What this does not do: it changes nothing about notes already on disk. Their
+  comma-bearing labels are still unrecoverable, because the information was
+  destroyed when they were written, not when they are read.
+
 - **A page whose title contains a comma cannot be replayed from a trace.**
   §8.3 renders `seeds:` and `top:` as comma-separated lists of `[[label]]`, and
   `,` is not in `pagetable.ts`'s FORBIDDEN set — so `Newton, Isaac` is a legal

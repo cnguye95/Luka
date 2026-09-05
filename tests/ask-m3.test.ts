@@ -23,6 +23,20 @@ import { MemFs } from "./helpers/memfs";
 import { StubProvider, fatalError, inventoryReply, retryableError } from "./helpers/provider";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
+
+/** A trace list field's entries — one to a line, under the field name. */
+function traceList(note: string, field: "seeds" | "top"): string[] {
+  const lines = note.split("\n");
+  const at = lines.indexOf(`- ${field}:`);
+  if (at === -1) return [];
+  const out: string[] = [];
+  for (const line of lines.slice(at + 1)) {
+    const item = /^\s+-\s+(.+)$/.exec(line);
+    if (item === null) break;
+    out.push((item[1] as string).trim());
+  }
+  return out;
+}
 const ASKED = new Date("2026-08-20T10:07:00Z");
 
 /** §8.2's reply shape: prose, then exactly one fenced JSON block. */
@@ -611,9 +625,9 @@ describe("§8.3's trace names things one way", () => {
     const result = await core(fs, provider).ask("How does ranking work?");
     const note = fs.text(result.path);
 
-    const seeds = /^- seeds: (.*)$/m.exec(note)?.[1] ?? "";
-    expect(seeds).toContain("[[PageRank]]");
-    expect(seeds).not.toContain("wiki/concepts/");
+    const seeds = traceList(note, "seeds");
+    expect(seeds.join(" ")).toContain("[[PageRank]]");
+    expect(seeds.join(" ")).not.toContain("wiki/concepts/");
   });
 
   it("records the scores it actually ranked with", async () => {
@@ -621,9 +635,9 @@ describe("§8.3's trace names things one way", () => {
     const { fs, provider } = await compiled();
     const result = await core(fs, provider).ask("How does ranking work?");
 
-    const top = /^- top: (.*)$/m.exec(fs.text(result.path))?.[1] ?? "";
-    expect(top).not.toBe("(none)");
-    const scores = [...top.matchAll(/\]\]\s+([0-9.]+)/g)].map((m) => Number(m[1]));
+    const top = traceList(fs.text(result.path), "top");
+    expect(top).not.toEqual([]);
+    const scores = top.map((entry) => Number(/\]\]\s+([0-9.]+)$/.exec(entry)?.[1]));
     expect(scores.length).toBeGreaterThan(0);
     expect(scores.some((score) => score > 0)).toBe(true);
   });

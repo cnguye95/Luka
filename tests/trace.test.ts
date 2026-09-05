@@ -29,15 +29,22 @@ const trace = (over: Partial<Trace> = {}): Trace => ({
 });
 
 describe("what §8.3's example shows is what is written", () => {
-  it("renders the four lines in order, inside the fences", () => {
+  it("renders the four fields in order, inside the fences", () => {
+    // §8.3 shows the two lists inline and comma-separated; they are written one
+    // entry to a line instead, which is the recorded deviation that makes the
+    // grammar unambiguous.
     expect(writeTrace(trace())).toBe(
       [
         "<!-- trace:start -->",
         "## Retrieval trace",
         "- mode: B",
-        "- seeds: [[Alpha]], [[Beta]]",
+        "- seeds:",
+        "  - [[Alpha]]",
+        "  - [[Beta]]",
         "- round2: no",
-        "- top: [[Xylem]] 0.0812, [[Yarrow]] 0.0631",
+        "- top:",
+        "  - [[Xylem]] 0.0812",
+        "  - [[Yarrow]] 0.0631",
         "<!-- trace:end -->",
       ].join("\n"),
     );
@@ -310,44 +317,53 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
     expect(parseTrace(hand).trace?.top).toEqual([]);
   });
 
-  it("loses a comma-bearing label, and says so rather than losing it quietly", () => {
-    // `,` is not forbidden in a title, so Luka can name a page `Newton, Isaac`
-    // and this parser cannot recover it — the accepted side of an ambiguity
-    // that no parser over this grammar escapes. What is *not* accepted is
-    // silence: the fragments the split leaves behind are carried through so the
-    // count downstream is honest. An earlier version of this comment claimed a
-    // lost label was already visible as an unresolved count. It was not.
-    const written = writeTrace(trace({ seeds: ["Alpha", "Newton, Isaac", "Beta"], top: [] }));
+  it("round-trips a comma-bearing label, which the inline grammar could not", () => {
+    // `,` is not forbidden in a title, so Luka can name a page `Newton, Isaac`,
+    // and inline that is genuinely two readings — one label `Newton` and a
+    // fragment, or one label carrying a comma. A newline cannot occur in a
+    // title at all, so one entry to a line has no second reading.
+    const written = writeTrace(
+      trace({ seeds: ["Alpha", "Newton, Isaac", "Beta"], top: [{ label: "A, B, C", score: 0.5 }] }),
+    );
 
     const parsed = parseTrace(written).trace as Trace;
 
+    expect(parsed.seeds).toEqual(["Alpha", "Newton, Isaac", "Beta"]);
+    expect(parsed.top).toEqual([{ label: "A, B, C", score: 0.5 }]);
+    expect(parsed.unparsed).toEqual([]);
+  });
+
+  it("round-trips a label carrying brackets and a comma together", () => {
+    // The input neither reading could survive: `labelFor` emits a raw source's
+    // path verbatim, and `raw/[draft] notes, v2.md` carries both the `]` that
+    // broke bracket-matching and the `,` that broke the split.
+    const written = writeTrace(trace({ seeds: ["raw/[draft] notes, v2.md"], top: [] }));
+
+    const parsed = parseTrace(written).trace as Trace;
+
+    expect(parsed.seeds).toEqual(["raw/[draft] notes, v2.md"]);
+    expect(parsed.unparsed).toEqual([]);
+  });
+
+  it("still reads a note written in the inline grammar, losses and all", () => {
+    // Notes written before the grammar changed exist, and §9 replays them. The
+    // comma reading is kept for exactly those, with the loss it always had —
+    // counted rather than silent, which is what `unparsed` is for.
+    const old = [
+      "<!-- trace:start -->",
+      "## Retrieval trace",
+      "- mode: B",
+      "- seeds: [[Alpha]], [[Newton, Isaac]], [[Beta]]",
+      "- round2: no",
+      "- top: [[Xylem]] 0.0812",
+      "<!-- trace:end -->",
+    ].join("\n");
+
+    const parsed = parseTrace(old).trace as Trace;
+
     expect(parsed.seeds).toEqual(["Alpha", "Beta"]);
-    // One label lost, counted once. The split leaves `[[Newton` and `Isaac]]`
-    // behind and rejoining them is what keeps the count from overstating —
-    // reporting two losses for one missing page would defeat the purpose of
-    // counting at all.
     expect(parsed.unparsed).toEqual(["[[Newton, Isaac]]"]);
-  });
-
-  it("keeps two lost labels apart rather than fusing them into one", () => {
-    // With a single lost label the trailing flush alone produces the right
-    // answer, so nothing distinguishes a run that closes at `]]` from one that
-    // never closes. Two lost labels do: fused, they report as one loss.
-    const written = writeTrace(trace({ seeds: ["Newton, Isaac", "Curie, Marie"], top: [] }));
-
-    const parsed = parseTrace(written).trace as Trace;
-
-    expect(parsed.seeds).toEqual([]);
-    expect(parsed.unparsed).toEqual(["[[Newton, Isaac]]", "[[Curie, Marie]]"]);
-  });
-
-  it("counts a label carrying several commas once, not once per fragment", () => {
-    const written = writeTrace(trace({ seeds: ["Alpha", "A, B, C", "Beta"], top: [] }));
-
-    const parsed = parseTrace(written).trace as Trace;
-
-    expect(parsed.seeds).toEqual(["Alpha", "Beta"]);
-    expect(parsed.unparsed).toEqual(["[[A, B, C]]"]);
+    expect(parsed.top).toEqual([{ label: "Xylem", score: 0.0812 }]);
   });
 
   it("reports the fragments in the replay's unresolved count", () => {
