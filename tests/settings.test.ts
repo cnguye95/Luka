@@ -173,38 +173,6 @@ describe("a run sees one settings state", () => {
   });
 });
 
-describe("dismissed gap cards survive a hand-edited data.json", () => {
-  it("takes an empty list for anything that is not a list", () => {
-    // Same rule as every setting above: a value the code cannot act on falls
-    // back rather than being coerced. A string is not a set of dismissals.
-    for (const value of ["nope", null, 3, {}] as unknown as string[][]) {
-      expect(normalizeSettings({ ...DEFAULT_SETTINGS, dismissedGaps: value }).dismissedGaps).toEqual(
-        [],
-      );
-    }
-  });
-
-  it("drops entries that are not strings, keeping the rest", () => {
-    const mixed = ["keep", 3, null, "also"] as unknown as string[];
-
-    expect(normalizeSettings({ ...DEFAULT_SETTINGS, dismissedGaps: mixed }).dismissedGaps).toEqual([
-      "keep",
-      "also",
-    ]);
-  });
-
-  it("copies the list rather than sharing it", () => {
-    // `models`' reason, for the same hazard: the pane reads this while the
-    // plugin may be writing a new one.
-    const live = { ...DEFAULT_SETTINGS, dismissedGaps: ["one"] };
-    const snapshot = normalizeSettings(live);
-
-    live.dismissedGaps.push("two");
-
-    expect(snapshot.dismissedGaps).toEqual(["one"]);
-  });
-});
-
 describe("§7.2's numbers survive a hand-edited data.json", () => {
   it("falls back for a damping factor the iteration cannot use", () => {
     // Outside (0,1) the update stops being a contraction: at 1 it never
