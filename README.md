@@ -594,12 +594,12 @@ you have not written. On the demo vault, *"How are decorative images filtered
 out?"* does it: two pages link `[[decorative image filtering]]`, which does not
 exist.
 
-- [ ] The answer note ends with `## Add next`, sitting between
+- [x] The answer note ends with `## Add next`, sitting between
       `## Sources consulted` and `## Retrieval trace`.
-- [ ] Each gap is one bullet, its **name in bold**, and the sentence says how
+- [x] Each gap is one bullet, its **name in bold**, and the sentence says how
       many of the consulted pages wanted it and names them — or says the wiki
       could not answer it, for something synthesis reported rather than a link.
-- [ ] Below the bullets, a diagram **renders in reading view** rather than
+- [x] Below the bullets, a diagram **renders in reading view** rather than
       showing a fenced code block or an error. Switch to source mode and back:
       the bullets carry the same facts in words, so nothing is only in the
       picture.
@@ -607,7 +607,7 @@ exist.
       are solid ones, joined to it by dashed lines. Where the wiki already
       links two of those pages, a solid line joins them — that is what the
       dashes are read against.
-- [ ] **Nothing in the diagram is a link.** Hover a box: no page preview
+- [x] **Nothing in the diagram is a link.** Hover a box: no page preview
       appears. Ctrl/Cmd-click one: nothing opens. (The labels are escaped for
       this reason — a recommendation to write a page must not look like the
       page.)
