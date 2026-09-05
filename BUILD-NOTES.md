@@ -2217,8 +2217,15 @@ grouped unresolved targets inside `health.ts`, privately; `danglingCitations`
 opened every page again for the citation blocks. The gap report needs the same
 two facts about the same pages, and a second implementation of "does this link
 resolve" is a second answer that can disagree with §10's. `scanPages`,
-`unresolvedTargets` and `wikiDegrees` now live in `src/core/gaps.ts` and serve
-both — §10 literally does the one vault scan its own sentence claims.
+`unresolvedTargets` now live in `src/core/gaps.ts`, and the answer note's
+`## Add next` section resolves against the same pair.
+
+(Corrected 2026-09-05: this first said §10 "literally does the one vault scan
+its own sentence claims". It does not — the page table and the graph build read
+every page on their own account, so the report still opens each one four times.
+What the extraction removed was one of those, and the two link-reading sections
+now share a scan. The narrower claim is the true one, and the comment in
+`health.ts` says so too.)
 
 - **W5** — grouping moved from the raw target string to `handleOf`, so
   `[[Zeppelin]]` and `[[zeppelin]]` are one candidate rather than two wanted
@@ -2227,10 +2234,10 @@ both — §10 literally does the one vault scan its own sentence claims.
   capitalized form first. This is the one visible change to §10's output;
   health's other bytes are identical, its 15 tests were not touched, and a
   test in `gaps.test.ts` asserts the two reports name the same targets.
-- **W6** — §10 still lists *every* candidate. The pane's extra filters —
+- **W6** — *(struck with the pane, 2026-09-05.)* §10 still lists *every* candidate. The pane's extra filters —
   demand of two, sanitizable names, demotion — are the pane's, applied on top.
   Diagnosis reports everything; a prescription is allowed to be selective.
-- **W7** — centrality is wiki-only degree: edges whose both ends are wiki
+- **W7** — *(struck with the pane, 2026-09-05.)* centrality is wiki-only degree: edges whose both ends are wiki
   pages, counted off the snapshot. `GraphNode.degree` counts citation edges
   too, and on the measured vaults roughly half of every degree was those, so
   "wanted by pages carrying N links" would have been a claim about how many
@@ -2238,29 +2245,32 @@ both — §10 literally does the one vault scan its own sentence claims.
   façade reads `pprAlpha` live from settings, so card order would move when a
   user tuned retrieval, and pinning α would be a §17 deviation for a number
   nobody would see.
-- **W8** — `gaps()` is lock-free like `previewCompile` and `inspect`, and reads
+- **W8** — *(struck with the pane, 2026-09-05.)* `gaps()` is lock-free like `previewCompile` and `inspect`, and reads
   the page table fresh rather than from the snapshot, because §7.1 *drops*
   unresolved targets — the gap signal is not in the graph to be read. The
   consequence is accepted rather than fixed: `loadPageTable`'s read is
   unguarded, so the call can reject while a compile rewrites `wiki/`. The
   per-page scan does guard, and reports an `unreadable` count.
-- **W9** — a card's key is the gap plus its evidence: the target handle and the
+- **W9** — *(struck with the pane, 2026-09-05.)* a card's key is the gap plus its evidence: the target handle and the
   sorted paths of the pages wanting it. Dismissal expiry then needs no code at
   all — when another page starts wanting the same target the key is a different
-  string, so the card returns. No hash: the data is already short, bounded by
-  §4's title length, and a third copy of FNV-1a (there are two private ones
-  already) would be a copy that can disagree.
-- **W10** — thin evidence is "exactly one citation entry", counted from the
+  string, so the card returns. No hash: a third copy of FNV-1a (there are two
+  private ones already) would be a copy that can disagree. The reason given for
+  the length being safe was wrong — "bounded by §4's title length" is not true
+  of anything the gate applied, since `sanitizeTitle` deliberately does not
+  bound length. The successor gate in W-series below applies both of the
+  namespace's rules instead of one.
+- **W10** — *(struck with the pane, 2026-09-05.)* thin evidence is "exactly one citation entry", counted from the
   block, with no liveness test. Entries are manifest paths and a dangling or
   pending one is §10's business; deciding liveness here would mean an eighth
   answer on the readable/live seam CLAUDE.md says to change all-or-none.
   Source pages are excluded: §4 has each cite exactly its own raw file, so
   including them would describe the schema rather than the wiki.
-- **W11** — the thin list is capped at five, ranked by wiki degree. On both
+- **W11** — *(struck with the pane, 2026-09-05.)* the thin list is capped at five, ranked by wiki degree. On both
   fixture vaults *most* non-source pages cite exactly one source, so uncapped
   this signal is a list of nearly every page. The cap is what makes it a
   recommendation; it is not a display detail and does not belong in the plugin.
-- **W12** — identifier-shaped names (`link_pairs`, `linkTargets`) and names
+- **W12** — *(struck with the pane, 2026-09-05.)* identifier-shaped names (`link_pairs`, `linkTargets`) and names
   already contained in an existing title (`vault` under "vault nodes") are
   sorted last, not dropped. Call B tells the model to link freely with natural
   names and these are what that produced; "usually noise" is not a reason for
@@ -2270,9 +2280,11 @@ both — §10 literally does the one vault scan its own sentence claims.
   would refuse the sanitize test refuses first — verified by mutation, and the
   redundant check was removed rather than left as code no input could make
   decide anything.
-- **W14** — `getGraph(options)` and `gaps()` are additions to §5's contract
-  list, which §5 states without saying it is closed. Same precedent as
-  `inspect`, added to it in M4.
+- **W14** — `getGraph(options)` is an addition to §5's contract list, which §5
+  states without saying it is closed. Same precedent as `inspect`, added to it
+  in M4. (`gaps()` was a second addition and went with the pane; nothing
+  outside core needs the scan now that the section is written inside the
+  answer.)
 
 ## §14 manual check — fixes made during the pass
 

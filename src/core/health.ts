@@ -36,10 +36,11 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
   const pages = await loadPageTable(fs);
   const manifest = await loadManifest(fs, manifestPath);
   const graph = await buildGraph({ fs, manifestPath });
-  // "One vault scan" (§10), now literally one: both link-reading sections read
-  // from this rather than opening every page again for each of them. The same
-  // scan feeds the "what to add next" report, so the two cannot disagree about
-  // what resolves.
+  // One scan for both link-reading sections, which each opened every page
+  // before. Not §10's "one vault scan" in full — the page table and the graph
+  // build read the files on their own account — but the report's own reads are
+  // now one pass, and this is the same scan the answer note's `## Add next`
+  // section resolves against, so the two cannot disagree about what resolves.
   const { scans } = await scanPages(fs, pages);
   const now = (deps.now ?? (() => new Date()))();
 
@@ -73,9 +74,9 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
  * and the ones many pages reach for come first.
  */
 function articleCandidates(pages: readonly PageMeta[], scans: readonly PageScan[]): string[] {
-  // Grouping and resolution now live in `gaps.ts`, shared with the "what to
-  // add next" report. §10 keeps its own presentation, and its own scope: every
-  // candidate, not the ranked and filtered subset that report shows.
+  // Grouping and resolution live in `gaps.ts`, shared with the answer note's
+  // `## Add next` section. §10 keeps its own presentation, and its own scope:
+  // every candidate, not the few an answer names.
   const targets = unresolvedTargets(pages, scans);
 
   if (targets.length === 0) return ["## Article candidates", "", "None — every link resolves."];
