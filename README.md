@@ -569,7 +569,7 @@ Least likely to matter, and the 500-node item needs a vault you may not have.
 - [x] A markdown source with **two or more** reachable remote images localizes
       all of them on its *first* compile, with no source failing. (§6.3 fetches
       four at a time into a `raw/assets/` folder none of them has created yet.)
-- [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
+- [x] Hand-editing `.obsidian/plugins/luka/data.json` to
       `"contextBudgetTokens": 0`, `"compileConcurrency": "two"` or
       `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
       pages keep their grounding, and nothing is rewritten from an empty

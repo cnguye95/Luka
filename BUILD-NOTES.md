@@ -2571,3 +2571,56 @@ what re-reading the render path would not have.
 
 No code change is implied. The honest fix is to the wording — state the AC in
 edges, or in both — and that is a §15 decision rather than a §9 one.
+
+## §14 closeout — what the manual pass found
+
+95 items. **92 ticked, 2 failed, 1 N/A.** Both failures are logged with a cause
+and a named fix; the N/A is §13.6's vault-local `.trash/`, which cannot arise on
+a platform whose deletes reach a system trash.
+
+**Three defects were fixed during the pass**, two of them merged from parallel
+branches and confirmed by hand afterwards. The third was fixed immediately
+because nothing else could run until it was: with the recorded default models,
+`inventory` replies arrived inside a ```` ```json ```` fence, the repair retry
+re-asked the same model and got the same fence, and **compile could not complete
+at all** — no manifest, no `wiki/`, seven failure notices. The checklist's first
+paid item found it in its first minute.
+
+**Four defects remain open**, none blocking: the context budget drops ranked
+pages silently, a title-duplicating heading survived into one page in
+twenty-nine, a no-op compile still reheats a settled layout, and Refresh cannot
+re-read the vault. The last two are fixed on `claude/what-to-add-next` and will
+need the same hand-verification the graph fixes got before they can be closed.
+
+**Three of the findings are about §14 itself**, and they share a shape worth
+naming. §8.7 says to make a file unreadable by turning it into a directory —
+Obsidian's adapter classifies by type, so the page table skips it and no read is
+ever attempted. §8.1, §8.4, §11.5 and §12.1 say to watch the developer tools
+network panel — the plugin reaches the API through `requestUrl`, which runs in
+Electron's main process, so no request ever appears there whatever happens.
+§13.3 says to trigger Compile while the scope modal is open — a modal captures
+the keyboard scope, so the command cannot be dispatched. In each case the
+property held and the *method* could not reach it.
+
+The common fault: each names a **mechanism** rather than an **outcome** — "a
+directory", "the network panel", "trigger it again" — and a mechanism is a
+guess about the platform underneath. §16.1 fails the same way for a different
+reason: it measures node count when the frame budget is spent on edges. The
+items that survived this pass untouched are the ones that say what should be
+true and leave the reader to find a way to see it.
+
+**Two findings came from tests that could not fail.** `inventory.test.ts` had a
+case named for the fenced-JSON failure whose stub complied on the retry, so it
+asserted recovery works *when the model cooperates* — the one condition under
+which the bug is invisible. The click-pins fix arrived with eight new tests,
+and reverting `view.ts` — the file that held the defect — left all 51 passing,
+because every one of them exercised the extracted module and none the wiring.
+That is the tenth and eleventh instance of the shape this log has been
+counting since M3.
+
+**What only a human could have found:** that deletes reach the Windows Recycle
+Bin with their original paths intact (§13.5, tested against in-memory and Node
+filesystems everywhere else); that a `graph pane` link stayed a dangling
+candidate because a hand-written page without `kind` frontmatter is not a page;
+that the health report is byte-identical across runs but only once you stop
+moving the vault between them.
