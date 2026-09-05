@@ -258,10 +258,14 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 101 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 108 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
+
+§17 is the exception to that order and sits last on purpose. It is newer than
+the pane and just as uncovered, but it needs an ask to reach, so it is grouped
+with the paid checks rather than the free ones.
 
 ### 1. Start here — does it load at all
 
@@ -454,24 +458,6 @@ Needs a real API key. One question costs a few cents.
 - [x] The note reads as prose with `[[links]]`, then `## Sources consulted`,
       then `## Retrieval trace` — and its frontmatter carries `kind: answer`,
       `question`, `asked`, `mode` and `grounded`.
-- [ ] An answer whose synthesis still reported something missing carries a
-      `missing:` list in its frontmatter, each entry on one line with no
-      `[[brackets]]`; an answer that reported nothing has no such key.
-- [ ] That same answer ends with `## Add next` between `## Sources consulted`
-      and `## Retrieval trace`: a bullet per gap with its name in bold, and
-      below them a diagram that **renders in reading view** — dashed boxes for
-      what is not written, dashed lines to the pages that reached for it, and a
-      dashed line from "This answer" for what synthesis said it lacked.
-- [ ] Nothing in that diagram is a link: hovering a box shows no page preview,
-      and Ctrl/Cmd-clicking one opens nothing.
-- [ ] An answer that lacked nothing, over pages whose links all resolve, has no
-      `## Add next` section at all.
-- [ ] Filing the answer that *did* name gaps drops `## Add next` along with the
-      trace, keeps `missing:` and `## Sources consulted`, and the next
-      **Compile** creates no page named after a gap the section listed.
-- [ ] No bullet in `## Add next` names a page the wiki already has — check one
-      against `## Sources consulted` in the same note. The `missing:` key may
-      still list it: the key is the record, the section is the advice.
 - [x] Ctrl/Cmd-clicking a link in the answer opens the page it names.
 - [x] Asking something the wiki says nothing about produces a note whose first
       line is the `> [!warning] Not grounded in your wiki` callout, rendered as
@@ -593,3 +579,70 @@ Least likely to matter, and the 500-node item needs a vault you may not have.
       `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
       pages keep their grounding, and nothing is rewritten from an empty
       context. Restore the file afterwards.
+
+### 17. What the answer says to add next
+
+The newest thing here, and the only section whose subject is a picture — so
+most of it can only be checked by looking. Everything below is about one answer
+note; ask once and work down.
+
+Nothing in this section costs a model call except the ask itself.
+
+**Getting an answer that has something to say.** The section only appears when
+the answer ran into something, so pick a question whose pages reach for a page
+you have not written. On the demo vault, *"How are decorative images filtered
+out?"* does it: two pages link `[[decorative image filtering]]`, which does not
+exist.
+
+- [ ] The answer note ends with `## Add next`, sitting between
+      `## Sources consulted` and `## Retrieval trace`.
+- [ ] Each gap is one bullet, its **name in bold**, and the sentence says how
+      many of the consulted pages wanted it and names them — or says the wiki
+      could not answer it, for something synthesis reported rather than a link.
+- [ ] Below the bullets, a diagram **renders in reading view** rather than
+      showing a fenced code block or an error. Switch to source mode and back:
+      the bullets carry the same facts in words, so nothing is only in the
+      picture.
+- [ ] In that diagram, a gap is a **dashed** box and the pages that wanted it
+      are solid ones, joined to it by dashed lines. Where the wiki already
+      links two of those pages, a solid line joins them — that is what the
+      dashes are read against.
+- [ ] **Nothing in the diagram is a link.** Hover a box: no page preview
+      appears. Ctrl/Cmd-click one: nothing opens. (The labels are escaped for
+      this reason — a recommendation to write a page must not look like the
+      page.)
+- [ ] Ask something the wiki answers well, over pages whose links all resolve.
+      That note has **no `## Add next` section at all** — not an empty one.
+- [ ] No bullet names a page the wiki already has: check each against
+      `## Sources consulted` in the same note. If synthesis never names an
+      existing page on your run, leave this unticked rather than ticking it on
+      inference — the `missing:` key may still list one, and that is correct.
+      The key is the record of what the answer lacked; the section is advice
+      about what to write.
+
+**The frontmatter half.** The section is drawn from a list the note also
+records, and the two have different jobs.
+
+- [ ] An answer whose synthesis reported something missing carries a `missing:`
+      list in its frontmatter, each entry on one line with no `[[brackets]]`.
+      An answer that reported nothing carries no such key.
+
+**Filing, which is where the section is supposed to disappear.**
+
+- [ ] **File this answer** on the note that named gaps. `## Add next` is gone,
+      along with the trace; `missing:` and `## Sources consulted` remain.
+- [ ] Run **Compile**. No page appears named after a gap the section listed —
+      check `wiki/` for one. (The section names pages that do not exist; kept,
+      the next compile would read those names as things the source asserts.)
+
+**The trace, which changed shape.** Its two lists are now written one entry to
+a line rather than comma-separated, so a page whose title contains a comma
+survives being written down.
+
+- [ ] In a **newly written** answer, `- seeds:` and `- top:` are followed by
+      indented `  - [[Name]]` lines rather than one comma-separated line.
+- [ ] Open an answer note written **before** this change, if you have one, and
+      run **Show retrieval on graph**. It still replays: the old shape is still
+      read, and only the writing changed.
+- [ ] **Show retrieval on graph** on a new answer lights the same nodes the
+      note lists, and reports nothing missing.

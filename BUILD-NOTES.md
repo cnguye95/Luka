@@ -2458,12 +2458,15 @@ consistent with what this file already says about itself: prose about mechanism
 is where this project's defects live, and the code was in better shape than the
 sentences describing it.
 
-**What §14 leaves to the user:** five README checklist items for the section —
-that it renders, that its diagram is not a set of links, that an answer lacking
-nothing has none, that filing removes it and the next compile grows no page
-from it, and that no bullet names a page the wiki already has. Plus the earlier
-items still owed for the reheat guard and the force path. The pure halves carry
-the automated assertions; what needs Obsidian is what the checklist is for.
+**What §14 leaves to the user:** README §17, thirteen items, the only checklist
+section whose subject is a picture — that the diagram renders at all, that its
+gaps are dashed and its links are not links, that an answer lacking nothing
+carries no section, that filing removes it and the next compile grows no page
+from it, that no bullet names a page the wiki already has, and that the trace's
+new shape is written while the old one is still read. Plus the items still owed
+for the reheat guard and the force path, which live in §5 with the pane they
+are about. The pure halves carry the automated assertions; what needs Obsidian
+is what the checklist is for.
 
 ## §14 manual check — fixes made during the pass
 
