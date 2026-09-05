@@ -2540,3 +2540,34 @@ than an *outcome* — "a directory", "the network panel", "trigger it again" —
 and mechanisms are what rot when the platform underneath them differs from the
 one the author had in mind. The items that survived this pass unchanged are the
 ones that name what should be true, and leave how to see it to the reader.
+
+### The pane's rendering limit is edges, not nodes (checklist §16.1, §15's AC)
+
+Measured while running §16.1 against two generated vaults of identical node
+count. Both had 520 pages; only the link density differed.
+
+| edges | per node | panning |
+|---|---|---|
+| 2080 | 4.00 | visibly delayed |
+| 1040 | 2.00 | smooth |
+
+Standing labels dropped correctly in both, and hover kept labelling the node
+under the cursor — §9's "drop labels first" degradation works as specified, and
+that half of §16.1 passes outright.
+
+What does not hold is the variable the item measures. §16.1 says "on a vault of
+500+ nodes" and §15's AC says "target smooth pan/zoom at 500+ nodes", but node
+count is not what the frame budget is spent on: `draw` strokes every edge in
+one pass before painting any node, so a 300-node vault at four links each would
+stutter where a 900-node vault at 1.5 would not. The demo corpus sits at 2.46
+per node, so a realistic vault reaches the node threshold long before the edge
+one — which is presumably why the wording has survived.
+
+Worth recording that the first run looked like a defect and was not. The vault
+was generated at 4.00 links per node, 1.6x the demo's own density and 2.7x
+§7.3's predicate floor, because the spec states no density and the number was
+picked without thinking about it. Re-running at 2.00 answered in one attempt
+what re-reading the render path would not have.
+
+No code change is implied. The honest fix is to the wording — state the AC in
+edges, or in both — and that is a §15 decision rather than a §9 one.

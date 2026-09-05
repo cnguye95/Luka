@@ -562,11 +562,11 @@ two items here the highest-value pair in the list.
 
 Least likely to matter, and the 500-node item needs a vault you may not have.
 
-- [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
+- [x] On a vault of 500+ nodes the standing labels disappear and panning stays
       smooth. (§9's "drop labels first".)
 - [x] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
       pairs per node). After the refresh, the banner disappears.
-- [ ] A markdown source with **two or more** reachable remote images localizes
+- [x] A markdown source with **two or more** reachable remote images localizes
       all of them on its *first* compile, with no source failing. (§6.3 fetches
       four at a time into a `raw/assets/` folder none of them has created yet.)
 - [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
