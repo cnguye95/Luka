@@ -56,8 +56,35 @@ export interface Sim {
    * the reheat can be asserted without running d3's timer.
    */
   readonly heldAlpha: number;
-  /** Positions for a fresh snapshot, keeping what survived (§9's refresh). */
-  replace(graph: GraphSnapshot): void;
+  /**
+   * How hot the walk is — d3's `alpha`.
+   *
+   * A plain field read, and the reheat's own witness: `alpha(x)` assigns
+   * synchronously and `restart()` only schedules d3's timer, which fires on a
+   * later turn, so a test that reads this straight after `replace` sees
+   * exactly what `replace` left. `heldAlpha` cannot serve — `alphaTarget` is
+   * what a drag holds and a reheat never touches it.
+   */
+  readonly alpha: number;
+  /**
+   * One synchronous step of the walk — d3's own static-layout API.
+   *
+   * Here so a test can cool the layout off its starting alpha without waiting
+   * on the timer; nothing in the view calls it, because the view lets d3 tick
+   * on its own.
+   */
+  tick(): void;
+  /**
+   * Positions for a fresh snapshot, keeping what survived (§9's refresh).
+   *
+   * Returns whether the walk was reheated. A snapshot whose nodes and edges
+   * match the current ones changes no layout, so it carries the new titles,
+   * kinds, degrees and summaries onto the nodes already held and leaves alpha
+   * alone; everything else reheats as before. The boolean says what it did;
+   * `alpha` shows it, which is the assertion that would have caught a reheat
+   * smuggled in beside a `false`.
+   */
+  replace(graph: GraphSnapshot): boolean;
   stop(): void;
   /** Holds a node under the pointer and keeps the walk warm while it moves. */
   dragStart(node: SimNode): void;
@@ -88,6 +115,28 @@ function hash32(text: string): number {
   return value >>> 0;
 }
 
+/**
+ * Whether two snapshots carry the same nodes and the same edges.
+ *
+ * Compared in order rather than as sets: `buildGraph` sorts both by
+ * `comparePaths` before returning, so two snapshots of one vault agree
+ * position by position, and a snapshot that does not is not one this pane was
+ * given. Paths and edge pairs only — a page whose summary was rewritten is the
+ * same topology, and moving the layout for it is the reheat this guards.
+ */
+export function sameTopology(a: GraphSnapshot, b: GraphSnapshot): boolean {
+  if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
+  for (let at = 0; at < a.nodes.length; at++) {
+    if (a.nodes[at]?.path !== b.nodes[at]?.path) return false;
+  }
+  for (let at = 0; at < a.edges.length; at++) {
+    const one = a.edges[at];
+    const other = b.edges[at];
+    if (one?.a !== other?.a || one?.b !== other?.b) return false;
+  }
+  return true;
+}
+
 /** A deterministic point on a disc, from two independent slices of the hash. */
 function seedPosition(path: string): { x: number; y: number } {
   const h = hash32(path);
@@ -101,6 +150,8 @@ function seedPosition(path: string): { x: number; y: number } {
 export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
   let nodes: SimNode[] = [];
   const byPath = new Map<string, SimNode>();
+  /** The snapshot the current layout was built for, to compare the next against. */
+  let current: GraphSnapshot | null = null;
 
   const simulation: Simulation<SimNode, SimLink> = forceSimulation<SimNode>([])
     .force("charge", forceManyBody<SimNode>().strength(CHARGE_STRENGTH))
@@ -109,7 +160,26 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     .alphaMin(ALPHA_MIN)
     .on("tick", onTick);
 
-  function replace(next: GraphSnapshot): void {
+  function replace(next: GraphSnapshot): boolean {
+    if (current !== null && sameTopology(current, next)) {
+      // A compile that changed nothing, or changed only prose. There is no new
+      // layout to find, and reheating would drift a settled one the user has
+      // been reading — the §14 finding this guard closes. What can still have
+      // moved is a page's own metadata, which the tooltip reads, so it is
+      // carried onto the nodes already held. Degree cannot differ: `buildGraph`
+      // derives it from the edges just compared.
+      for (const node of next.nodes) {
+        const held = byPath.get(node.path);
+        if (held === undefined) continue;
+        held.title = node.title;
+        held.kind = node.kind;
+        held.degree = node.degree;
+        held.summary = node.summary;
+      }
+      current = next;
+      return false;
+    }
+
     const survivors = new Map(byPath);
     byPath.clear();
 
@@ -150,7 +220,9 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
         .id((node) => node.path)
         .distance(LINK_DISTANCE),
     );
+    current = next;
     simulation.alpha(REHEAT_ALPHA).restart();
+    return true;
   }
 
   replace(graph);
@@ -161,6 +233,12 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     },
     get heldAlpha() {
       return simulation.alphaTarget();
+    },
+    get alpha() {
+      return simulation.alpha();
+    },
+    tick: () => {
+      simulation.tick();
     },
     replace,
     nodeAt: (path: string) => byPath.get(path),

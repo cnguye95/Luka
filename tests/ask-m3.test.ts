@@ -15,6 +15,7 @@ import {
   type Trace,
 } from "../src/core/index";
 import { decodeUtf8 } from "../src/core/hash";
+import { linkTargets } from "../src/core/compile/links";
 import { BusyError } from "../src/core/lock";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { StubHttp } from "./helpers/http";
@@ -22,6 +23,20 @@ import { MemFs } from "./helpers/memfs";
 import { StubProvider, fatalError, inventoryReply, retryableError } from "./helpers/provider";
 
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
+
+/** A trace list field's entries — one to a line, under the field name. */
+function traceList(note: string, field: "seeds" | "top"): string[] {
+  const lines = note.split("\n");
+  const at = lines.indexOf(`- ${field}:`);
+  if (at === -1) return [];
+  const out: string[] = [];
+  for (const line of lines.slice(at + 1)) {
+    const item = /^\s+-\s+(.+)$/.exec(line);
+    if (item === null) break;
+    out.push((item[1] as string).trim());
+  }
+  return out;
+}
 const ASKED = new Date("2026-08-20T10:07:00Z");
 
 /** §8.2's reply shape: prose, then exactly one fenced JSON block. */
@@ -256,6 +271,75 @@ describe("invariant 9: the key never reaches the vault", () => {
   });
 });
 
+describe("§8.3's `## Add next` section", () => {
+  /** A vault whose one page reaches for an article nobody has written. */
+  async function gappy(): Promise<MemFs> {
+    const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
+    const provider = new StubProvider((request) => {
+      if (request.task === "page-generation") return "Ranking rests on [[Convergence]].";
+      return inventoryReply("A note about ranking.", [
+        { title: "PageRank", kind: "concept", summary: "A walk." },
+      ]);
+    });
+    await core(fs, provider).compile();
+    return fs;
+  }
+
+  const answering = (missing: string[]) =>
+    new StubProvider((request) =>
+      request.task === "seed-selection"
+        ? { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] }
+        : answerWith("Ranking uses [[PageRank]].", missing),
+    );
+
+  it("names both what synthesis lacked and what the pages reached for", async () => {
+    const fs = await gappy();
+
+    const result = await core(fs, answering(["the 1998 paper"]), {
+      // Off, so the reported item is the one the note carries: with the round
+      // on, a match would replace the list under test.
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    }).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note).toContain("## Add next");
+    expect(note).toContain("- **the 1998 paper** — the wiki could not answer this");
+    expect(note).toContain("- **Convergence** — wanted by 1 of the pages consulted: PageRank");
+    // The picture, drawn from what the answer already held.
+    expect(note).toContain("```mermaid");
+    expect(note).toContain('a(["This answer"])');
+    expect(note).toContain("-.- g0");
+    // And the section says the same thing the frontmatter does.
+    expect(note).toContain("missing:\n  - the 1998 paper");
+  });
+
+  it("writes no section for an answer that ran into nothing", async () => {
+    const { fs, provider } = await compiled();
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+
+    expect(fs.text(result.path)).not.toContain("gaps:start");
+  });
+
+  it("leaves nothing behind when the answer is filed", async () => {
+    const fs = await gappy();
+    const instance = core(fs, answering(["the 1998 paper"]), {
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    });
+    const result = await instance.ask("How does ranking work?");
+
+    await instance.fileBack(result.path);
+    const filed = fs.text("raw/answers/2026-08-20-1007 how-does-ranking-work.md");
+
+    expect(filed).not.toContain("## Add next");
+    // A name the section recommended must not become an edge, or the next
+    // compile inventories a page out of the suggestion to write one.
+    expect(linkTargets(filed)).not.toContain("Convergence");
+    expect(filed).toContain("missing:\n  - the 1998 paper");
+    expect(filed).toContain("## Sources consulted");
+  });
+});
+
 describe("determinism", () => {
   it("writes byte-identical notes for the same question and vault", async () => {
     const one = await compiled();
@@ -377,6 +461,70 @@ describe("§8.2's follow-up round", () => {
 
     expect(result.round2).toBe(false);
     expect(provider.stats().byTask.synthesis).toBe(1);
+    // The strongest gap signal there is: the wiki had nothing to expand with,
+    // so what synthesis said it lacked is what the vault still lacks.
+    expect(fs.text(result.path)).toContain("missing:\n  - photosynthesis in deep sea vents");
+  });
+
+  it("cleans what the model wrote before it reaches the note, and the graph", async () => {
+    // The unit tests pin `cleanMissing`; this pins that `runAsk` calls it. A
+    // bracketed item survives filing into `raw/answers/`, where §7.1 scans the
+    // whole file — frontmatter included — for links, so an uncleaned item is
+    // an edge the model chose rather than one the wiki has.
+    const fs = await twoPages();
+    const provider = expanding(["[[Convergence]]\n  rate"]);
+
+    const instance = core(fs, provider, {
+      // Off, so the item under test is the one that reaches the note: with the
+      // round on, "Convergence" matches a page and the second reply replaces it.
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", followUpEnabled: false },
+    });
+    const result = await instance.ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note).toContain("missing:\n  - Convergence rate");
+    expect(note).not.toContain("[[Convergence]]");
+
+    await instance.fileBack(result.path);
+    const filed = fs.text("raw/answers/2026-08-20-1007 how-does-ranking-work.md");
+    // The function §7.1 reads edges with, asked the question the graph asks.
+    expect(linkTargets(filed)).not.toContain("Convergence");
+    expect(linkTargets(filed)).toContain("PageRank");
+  });
+
+  it("persists the last round's missing list, not the first's", async () => {
+    // The follow-up round is the wiki's own attempt to close the gap. What it
+    // still reports afterwards is the answer; the first round's list has been
+    // acted on already.
+    const fs = await twoPages();
+    const provider = new StubProvider((request, index) => {
+      if (request.task === "seed-selection") {
+        return { seeds: ["wiki/concepts/PageRank.md"], keywords: ["ranking"] };
+      }
+      if (request.task === "synthesis") {
+        return index === 0
+          ? answerWith("Ranking uses [[PageRank]].", ["convergence"])
+          : answerWith("Ranking uses [[PageRank]] and [[Convergence]].", ["the proof"]);
+      }
+      return "";
+    });
+
+    const result = await core(fs, provider).ask("How does ranking work?");
+    const note = fs.text(result.path);
+    const frontmatter = note.slice(0, note.indexOf("\n---\n", 4));
+
+    expect(result.round2).toBe(true);
+    expect(frontmatter).toContain("missing:\n  - the proof");
+    expect(frontmatter).not.toContain("convergence");
+  });
+
+  it("writes no missing key when the answer reported nothing missing", async () => {
+    const fs = await twoPages();
+
+    const result = await core(fs, expanding([])).ask("How does ranking work?");
+    const note = fs.text(result.path);
+
+    expect(note.slice(0, note.indexOf("\n---\n", 4))).not.toContain("missing");
   });
 
   it("does not spend a call when the pages it found have nothing to read", async () => {
@@ -477,9 +625,9 @@ describe("§8.3's trace names things one way", () => {
     const result = await core(fs, provider).ask("How does ranking work?");
     const note = fs.text(result.path);
 
-    const seeds = /^- seeds: (.*)$/m.exec(note)?.[1] ?? "";
-    expect(seeds).toContain("[[PageRank]]");
-    expect(seeds).not.toContain("wiki/concepts/");
+    const seeds = traceList(note, "seeds");
+    expect(seeds.join(" ")).toContain("[[PageRank]]");
+    expect(seeds.join(" ")).not.toContain("wiki/concepts/");
   });
 
   it("records the scores it actually ranked with", async () => {
@@ -487,9 +635,9 @@ describe("§8.3's trace names things one way", () => {
     const { fs, provider } = await compiled();
     const result = await core(fs, provider).ask("How does ranking work?");
 
-    const top = /^- top: (.*)$/m.exec(fs.text(result.path))?.[1] ?? "";
-    expect(top).not.toBe("(none)");
-    const scores = [...top.matchAll(/\]\]\s+([0-9.]+)/g)].map((m) => Number(m[1]));
+    const top = traceList(fs.text(result.path), "top");
+    expect(top).not.toEqual([]);
+    const scores = top.map((entry) => Number(/\]\]\s+([0-9.]+)$/.exec(entry)?.[1]));
     expect(scores.length).toBeGreaterThan(0);
     expect(scores.some((score) => score > 0)).toBe(true);
   });

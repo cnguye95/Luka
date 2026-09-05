@@ -2042,6 +2042,29 @@ click-PPR and trace replay carry on unchanged.
 
 ### Known limitations, accepted (M4)
 
+- **RESOLVED 2026-09-05 — a page whose title contains a comma is now replayed
+  correctly.** The limitation below stands as the record of why three parser
+  fixes failed, and its own closing sentence named the way out: "recovering the
+  label itself needs `writeTrace` to emit an unambiguous grammar, which is a
+  §8.3 format decision rather than a parser one." That decision is taken.
+  `writeTrace` now puts one entry to a line under the field name, indented.
+  §8.3 shows both lists inline, so this is a recorded deviation from its
+  example, and it is the whole point: `,` is legal in a title and in a raw
+  path, `]]` is legal in a raw path, and a newline is legal in neither, because
+  `sanitizeTitle` collapses whitespace. The delimiter is now something the
+  content cannot contain, so the grammar has one reading rather than two and
+  `Trace.unparsed` is empty for every note written from here.
+
+  The old reader is kept, not replaced: notes written before today exist, and
+  §9's replay opens them. A field with a value after the colon is read the old
+  way, with the comma split and the losses it counts; a field with nothing
+  after the colon opens a list. Both are pinned, including a label carrying a
+  comma *and* brackets, which is the input neither old reading survived.
+
+  What this does not do: it changes nothing about notes already on disk. Their
+  comma-bearing labels are still unrecoverable, because the information was
+  destroyed when they were written, not when they are read.
+
 - **A page whose title contains a comma cannot be replayed from a trace.**
   §8.3 renders `seeds:` and `top:` as comma-separated lists of `[[label]]`, and
   `,` is not in `pagetable.ts`'s FORBIDDEN set — so `Newton, Isaac` is a legal
@@ -2155,6 +2178,292 @@ which one needs a real API key (the Inspect call count). The pane's pure halves
 — `sim.ts`, `render.ts`, `overlay.ts` — carry 43 automated assertions the plan
 did not expect to exist, because both were written with no Obsidian import and
 what is readable in isolation is testable in isolation.
+
+## What to add next — user-directed (2026-09-04 / 2026-09-05)
+
+§15 assigns no milestone to a recommendation surface and §9 describes no second
+pane, so nothing here follows from the spec being silent — §0 forbids reading
+silence as permission. It is the user's decision, taken after a viability
+assessment against the code as built, the way the health check was "included in
+M3 on the user's decision".
+
+**The section lives in the answer, not in a pane (2026-09-05).** The first
+build was a vault-wide pane of recommendation cards. A whole-branch review of
+it — three lanes over two scopes, six reviewers — returned 34 findings, and
+reading them the user changed the execution rather than the idea: a pane
+recommends against the whole vault, which spends its five slots on material
+nobody has ever asked about. The recommendation belongs where the question is.
+So the pane commit is reverted here, and the idea returns in the last commit of
+this branch as `## Add next`, a code-written section inside each answer note
+naming what would have strengthened *that* answer. Its decisions are W24
+onward.
+
+Commits 1–3 stay and are reused: the `missing:` key is half the signal, the
+shared page scan is the other half, and the Refresh force path was always an
+independent fix. Their review findings are fixed in the two commits after this
+one, and the core only the pane used is trimmed there too, where W6–W12 are
+struck. W1–W14 below stand as written except where a later line corrects them.
+Built on branch `claude/what-to-add-next`, core first. Decisions in commit
+order.
+
+**Answer notes persist what synthesis said was missing.** §4 lists an answer's
+frontmatter as exact keys — kind, question, asked, mode, grounded — and §8.2's
+`missing_information` list was read once, used as the follow-up round's
+keywords, and dropped. It is now written as `missing:` after `grounded`. This
+is a §4 deviation and the user approved it as one.
+
+- **W1** — items are flattened to one line and stripped of `[[`/`]]` before
+  they are written. The flattening is `inventory.ts`'s existing rule for a
+  model-written summary; the brackets are this key's own problem, because
+  `buildGraph` scans a node's whole file for links including frontmatter, so a
+  filed answer carrying `[[X]]` in this list would manufacture an edge the
+  model chose. (Corrected 2026-09-05: this first claimed such an item could
+  also become an article candidate in §10. It cannot — candidates are read off
+  the wiki page table, which `loadPageTable` seeds with `wiki/` alone, and a
+  filed answer lives under `raw/`. The edge is real; the candidate was not.
+  Corrected too: the strip runs to a fixpoint, because one pass turns
+  `[]][X][[]` into `[[X]]` — a link the strip manufactured itself.)
+- **W2** — the list persisted is the *last* synthesis's, not the first's. The
+  follow-up round is the wiki's own attempt to close the gap, so what is still
+  reported after it is what the wiki could not answer. When no second round
+  runs, the last reply is the first one and the rule is the same sentence.
+- **W3** — the key is omitted entirely when the list is empty. An answer that
+  lacked nothing should carry no key saying so.
+- **W4** — the "open question" card type this data would feed is **deferred**;
+  the user chose to ship the two structural signals. The key lands now anyway,
+  so notes written from today accumulate the evidence a later decision needs.
+  Nothing reads it yet, and that is deliberate: today every vault has zero of
+  these, so a card type built on it would have had nothing to show.
+
+  *(Overtaken 2026-09-05.)* Twice. The card type went with the pane, and the
+  data stopped waiting for a later decision: `## Add next` reads the same list
+  in the same run that produces it. What survives of this decision is the part
+  that turned out to matter most — the key is written whether or not anything
+  reads it, and it is now the *record* against which the section is the
+  advice. W24 has the distinction.
+
+**One page scan serves both reports.** `articleCandidates` read every page and
+grouped unresolved targets inside `health.ts`, privately; `danglingCitations`
+opened every page again for the citation blocks. The gap report needs the same
+two facts about the same pages, and a second implementation of "does this link
+resolve" is a second answer that can disagree with §10's. `scanPages`,
+`unresolvedTargets` now live in `src/core/gaps.ts`, and the answer note's
+`## Add next` section resolves against the same pair.
+
+(Corrected 2026-09-05: this first said §10 "literally does the one vault scan
+its own sentence claims". It does not — the page table and the graph build read
+every page on their own account, so the report still opens each one four times.
+What the extraction removed was one of those, and the two link-reading sections
+now share a scan. The narrower claim is the true one, and the comment in
+`health.ts` says so too.)
+
+- **W5** — grouping moved from the raw target string to `handleOf`, so
+  `[[Zeppelin]]` and `[[zeppelin]]` are one candidate rather than two wanted
+  once each. §4's namespace folds case, so the vault could never hold both.
+  The spelling shown is the `comparePaths`-minimum variant seen, which puts a
+  capitalized form first. This is the one visible change to §10's output;
+  health's other bytes are identical, its 15 tests were not touched, and a
+  test in `gaps.test.ts` asserts the two reports name the same targets.
+- **W6** — *(struck with the pane, 2026-09-05.)* §10 still lists *every* candidate. The pane's extra filters —
+  demand of two, sanitizable names, demotion — are the pane's, applied on top.
+  Diagnosis reports everything; a prescription is allowed to be selective.
+- **W7** — *(struck with the pane, 2026-09-05.)* centrality is wiki-only degree: edges whose both ends are wiki
+  pages, counted off the snapshot. `GraphNode.degree` counts citation edges
+  too, and on the measured vaults roughly half of every degree was those, so
+  "wanted by pages carrying N links" would have been a claim about how many
+  files a page cites. PageRank was the alternative and was rejected: the
+  façade reads `pprAlpha` live from settings, so card order would move when a
+  user tuned retrieval, and pinning α would be a §17 deviation for a number
+  nobody would see.
+- **W8** — *(struck with the pane, 2026-09-05.)* `gaps()` is lock-free like `previewCompile` and `inspect`, and reads
+  the page table fresh rather than from the snapshot, because §7.1 *drops*
+  unresolved targets — the gap signal is not in the graph to be read. The
+  consequence is accepted rather than fixed: `loadPageTable`'s read is
+  unguarded, so the call can reject while a compile rewrites `wiki/`. The
+  per-page scan does guard, and reports an `unreadable` count.
+- **W9** — *(struck with the pane, 2026-09-05.)* a card's key is the gap plus its evidence: the target handle and the
+  sorted paths of the pages wanting it. Dismissal expiry then needs no code at
+  all — when another page starts wanting the same target the key is a different
+  string, so the card returns. No hash: a third copy of FNV-1a (there are two
+  private ones already) would be a copy that can disagree. The reason given for
+  the length being safe was wrong — "bounded by §4's title length" is not true
+  of anything the gate applied, since `sanitizeTitle` deliberately does not
+  bound length. The successor gate in W-series below applies both of the
+  namespace's rules instead of one.
+- **W10** — *(struck with the pane, 2026-09-05.)* thin evidence is "exactly one citation entry", counted from the
+  block, with no liveness test. Entries are manifest paths and a dangling or
+  pending one is §10's business; deciding liveness here would mean an eighth
+  answer on the readable/live seam CLAUDE.md says to change all-or-none.
+  Source pages are excluded: §4 has each cite exactly its own raw file, so
+  including them would describe the schema rather than the wiki.
+- **W11** — *(struck with the pane, 2026-09-05.)* the thin list is capped at five, ranked by wiki degree. On both
+  fixture vaults *most* non-source pages cite exactly one source, so uncapped
+  this signal is a list of nearly every page. The cap is what makes it a
+  recommendation; it is not a display detail and does not belong in the plugin.
+- **W12** — *(struck with the pane, 2026-09-05.)* identifier-shaped names (`link_pairs`, `linkTargets`) and names
+  already contained in an existing title (`vault` under "vault nodes") are
+  sorted last, not dropped. Call B tells the model to link freely with natural
+  names and these are what that produced; "usually noise" is not a reason for
+  code to decide the user may not see them.
+- **W13** — there is no separate invariant-8 check on a candidate name.
+  `sanitizeTitle` strips the reserved `_` prefix, so every target invariant 8
+  would refuse the sanitize test refuses first — verified by mutation, and the
+  redundant check was removed rather than left as code no input could make
+  decide anything.
+- **W14** — `getGraph(options)` is an addition to §5's contract list, which §5
+  states without saying it is closed. Same precedent as `inspect`, added to it
+  in M4. (`gaps()` was a second addition and went with the pane; nothing
+  outside core needs the scan now that the section is written inside the
+  answer.)
+
+**The section is written into the answer.** `renderAnswerNote` gains a third
+code-written block, `## Add next`, between the sources block and the trace: a
+bullet per gap and a Mermaid diagram drawing each as a dashed ghost beside the
+pages that wanted it. Two signals, both already in hand when the note is
+written, so it costs no model call — §8.2's own `missing_information` list, and
+the wikilink targets on the consulted pages that resolve to nothing. The
+ungrounded case needs no special wording: nothing was consulted, so the section
+is synthesis's items alone, each dashed to the answer.
+
+- **W15** — the block sits between the sources and the trace. It is about the
+  answer rather than about the run: a reader who has just seen what was
+  consulted is being told what was not. The trace stays last, as §8.3 has it.
+  §8.3 enumerates the code-written region as two blocks and this makes it
+  three, which is the deviation.
+- **W16** — §8.4 strips it, with the trace. §8.4 splits that region two ways —
+  strip the trace, keep the sources — and has no vocabulary for a third block,
+  so this is a decision rather than a reading. Kept, it would be the worst kind
+  of survival: the section names pages that do not exist, and the next
+  compile's inventory reads a filed answer as a source, so the wiki would grow
+  a page out of a recommendation to write one. The `missing:` key survives and
+  is the durable form of the same signal.
+- **W17** — the diagram is a fenced `mermaid` block, the first fenced block
+  Luka writes into a vault. Obsidian renders it in reading view with no help
+  from the plugin, so the picture costs no asset, no second file and no
+  `loadMermaid()` call. In source mode the bullets carry the same facts, so
+  nothing is only in the picture.
+- **W18** — no node shape in the diagram uses `[[ ]]`, and `[`/`]` are escaped
+  inside every label. Mermaid's subroutine shape is spelled exactly like a
+  wikilink, and `linkTargets` is fence-blind: a `[[X]]` inside the fence would
+  be a §7.1 edge to a page that does not exist, which is the reverse of what a
+  recommendation to write it should do. Escaping the brackets makes "the
+  diagram contains no link" true by construction rather than by the label
+  happening not to contain one. Labels are cut to 40 code points *before*
+  escaping, so a cut never lands inside an entity.
+- **W19** — one gate, both of §4's namespace rules: `handleOf(titleStem(x)) ===
+  handleOf(x)`. `titleStem` answers both — it sanitizes, which strips the
+  characters a filename cannot carry and the reserved `_` prefix, and it bounds
+  to `MAX_TITLE_BYTES` — and comparing under `handleOf` stops the first rule
+  being applied twice. The predecessor compared bytes against `sanitizeTitle`,
+  which normalizes to NFC, and since the shown spelling is the
+  `comparePaths`-minimum and NFD sorts first, that refused every accented name:
+  an actionable recommendation dropped for a reason that was not about the
+  name. It also never applied the length rule at all, which is what W9's
+  correction refers to. CLAUDE.md's coupling note asks that both rules move
+  together, and here they are one expression.
+- **W20** — a name that reads as code is dropped, not demoted: an underscore,
+  or no letters at all. Page generation invites the model to "link freely…
+  write the natural name", and on the measured vaults it produced `link_pairs`
+  alongside real names. With five slots a demotion is a distinction without a
+  difference.
+
+  *(Corrected 2026-09-05, after review.)* This first also refused any lowercase
+  letter followed by an uppercase one. That is the shape of `linkTargets` — and
+  of `PageRank`, this project's own canonical page, along with `OpenAI`,
+  `GitHub`, `JavaScript` and every other capitalized compound a wiki is
+  actually about. The section could never have recommended any of them while
+  §10 went on listing them, so the two surfaces disagreed with nothing to
+  explain why. Two of the four names cited above as the rule's motivation,
+  `degrees` and `double-bracket`, were not caught by it either.
+
+  camelCase is now deliberately untested. `linkTargets` and `iPhone` are the
+  same string shape and nothing lexical separates them, so refusing the shape
+  means refusing real product names. The two mistakes do not cost the same: a
+  code-shaped name that survives is one weak line, and it still has to be
+  linked by a consulted page and outrank the others to appear at all, while a
+  real name dropped is advice the user never sees.
+- **W21** — five links at most, synthesis's items uncapped. The items are few
+  by nature — a model reporting on one answer — and each is filtered against
+  the page table, so what survives is worth saying. The links are a scan's
+  output and run long on a page that gestures at everything.
+- **W22** — demand of one is enough here, where the pane needed two. The scans
+  *are* the pages this answer was built from, so a single page reaching for
+  something is already this question running into it. The pane's threshold was
+  a vault-wide filter and went with the pane.
+- **W23** — no block at all when there is nothing to say, matching the
+  `missing:` key. The fixed wording also avoids the word "missing", because a
+  test asserts that substring is absent from a whole note that lacked nothing,
+  and a section saying it would be a false positive on a real property.
+- **W24** — the section is computed inside `renderAnswerNote` rather than
+  passed in. It has everything already, and computing it there means the
+  section and the `missing:` key are drawn from one list at one moment. The
+  only new field is `graph`, for the solid edges.
+
+  *(Amended 2026-09-05, after review.)* They are drawn from one list; they are
+  not the same list. Synthesis reports what its *answer* lacked, which is not
+  the same question as what the wiki lacks — it can name a page it was handed,
+  and the review found a note that said "the wiki could not answer this" about
+  PageRank two blocks below a link to PageRank in its own sources list. The key
+  is the record and keeps that verbatim; the section is advice and drops it,
+  along with a name the model repeated. Two jobs, one list, different filters.
+  The user took that decision explicitly, weighing it against the alternative
+  of leaving the section unfiltered and correcting only the claim.
+- **W25** — the diagram's solid edges come from §7.1's snapshot, and only
+  between pages the diagram already draws. They are what the wiki holds, which
+  is what makes the dashes read as the addition to it; an edge to a page not
+  drawn would name a node Mermaid has never heard of.
+- **W26** — the section reads the text synthesis read, which for an oversized
+  first page is tail-cut. It reports on the answer that was given, so a link
+  the model was never shown is not a gap this answer ran into. Pinned by a test
+  that says outright it pins a decision rather than catching a mutation.
+- **W27** — `unresolvedTargets` takes a `LinkScan` over a `PageRef`, narrower
+  than a `PageMeta`, so the section can ask §10's question about text it
+  already holds without forging a page-table entry. The health check is
+  unchanged by it.
+- **W28** — `src/core/answer/addnext.ts` is added to §3's tree, and
+  `src/core/gaps.ts` with it. Recorded in the form the five earlier additions
+  use (`paths.ts`, `concurrency.ts`, `pagetable.ts`, `scripts/`, and
+  `eval/metrics.ts`, which is recorded as *not* in the tree).
+- **W29** — §5 says `onGraphRebuilt` fires "after compile and after load"; a
+  forced read publishes too, so a listener now hears from a gesture as well.
+  The 2026-09-02 decision that §7.1's trigger list is a floor was argued about
+  where the graph is built, not about who is told, so this is its own line
+  rather than a consequence of that one.
+- **W30** — §16's nearest non-goal to a generated diagram is "Marp/matplotlib/
+  slide outputs", and it does not reach this. That clause names three
+  artifact-generation toolchains; the section adds no dependency, produces no
+  file, and writes plain markdown that the host renders. §9 already establishes
+  drawing the graph as in scope. Named here because the log's habit is to
+  dispose of the adjacent non-goal explicitly rather than leave the reader to
+  wonder — as `addnext.ts` and `gaps.ts` both do for "LLM-driven health
+  checks".
+- **W31** — the escaping in the diagram is worth keeping and the first reason
+  given for it was wrong. It said a `[[X]]` inside the fence would become a
+  §7.1 edge; it would not, because an unfiled note is not a node and a filed
+  one has the block stripped. The real reason is the one the checklist tests:
+  Obsidian renders `[[X]]` as a live link in the note the user is reading, and
+  a recommendation to write a page should not look like the page.
+
+**What the branch ends at.** Suite 1001 passed / 4 skipped. Boundary (43 files
+in `src/core`), lint, typecheck and eval all green; eval floors unmoved at
+recall@5 0.7604, recall@10 1.0000, MRR 0.7277. The 7/1 rename mutation counts
+are unmoved, checked after every commit that touched `src/core`.
+
+Two whole-branch reviews ran, three lanes each. The first found 34 issues in
+the pane and is why the pane is not here. The second found six live defects,
+fifteen tests that passed for the wrong reason, and thirteen false claims — the
+last of which is the number worth remembering, because eleven of the thirteen
+were written in this log or in a comment beside working code. The count is
+consistent with what this file already says about itself: prose about mechanism
+is where this project's defects live, and the code was in better shape than the
+sentences describing it.
+
+**What §14 leaves to the user:** five README checklist items for the section —
+that it renders, that its diagram is not a set of links, that an answer lacking
+nothing has none, that filing removes it and the next compile grows no page
+from it, and that no bullet names a page the wiki already has. Plus the earlier
+items still owed for the reheat guard and the force path. The pure halves carry
+the automated assertions; what needs Obsidian is what the checklist is for.
 
 ## §14 manual check — fixes made during the pass
 
@@ -2330,7 +2639,74 @@ covered under vitest:
 - [x] Raw nodes and edges now share `--text-faint`; confirm grey nodes still
       read as nodes against grey lines
 
+**The reheat guard (2026-09-04, branch `claude/what-to-add-next`)** — the suite
+pins that `replace` reports no reheat and still carries metadata, but whether a
+settled layout *visibly* holds still needs a real vault:
+
+- [ ] §4.7: with the pane open and settled, run a second **Compile** that
+      reports "nothing to do". Nothing moves at all.
+- [ ] §5.4 again: a compile that really changes a source still updates the
+      counts, and the new node appears and settles.
+- [ ] §7.3 again: a drag still reheats and neighbours still resettle — the
+      guard must not have made `replace` the only reheat path.
+- [ ] Edit one page's `summary:` by hand, press **Refresh**: the layout stays
+      still and that node's tooltip shows the new summary.
+
+**The force path (2026-09-04, branch `claude/what-to-add-next`)** — the suite
+covers the core call; the button and the two triggers §5.5 names cannot be
+reached under vitest:
+
+- [ ] §5.5: write a page into `wiki/concepts/` from outside Obsidian — with
+      `kind: concept` in its frontmatter, or `loadPageTable` skips it and the
+      counts correctly do not move — then press **Refresh**. The counts rise by
+      that page and by each of its links that resolves.
+- [ ] §5.2 again: opening the pane is still under a second, i.e. opening reads
+      the cache and does not walk.
+- [ ] Press **Refresh** on an unchanged vault: the counts stay the same and the
+      layout does not move (this is the guard above, on the new trigger).
+- [ ] Press **Refresh** three times quickly: the counts update once and the
+      layout settles once, not once per press.
+- [ ] Press **Refresh** while a compile is running in this window: nothing
+      changes until the compile finishes, and then the counts are the
+      compile's.
+- [ ] With a graph drawn, make a walk fail (lock a file under `wiki/` from
+      another program) and press **Refresh**: the notice appears and the graph
+      stays on screen rather than being replaced by "No graph yet".
+
 ## Open findings — not yet addressed
+
+### Half the readable/live seam is closed (§7.1) — 2026-09-05
+
+The seam was deferred to its own milestone on the reading that it was one
+problem. It is two, and only one of them was ever ambiguous.
+
+**"Where is a source's readable markdown" is now one function.**
+`src/core/readable.ts` owns §7.1's rule and `readablePathOf`,
+`readableFromManifest` and `readablePathFor` all reach it. They used to decide
+it separately and disagreed on one input: a converting source with no
+derivative recorded. Two returned the source path — which makes a PDF a graph
+node §7.1 says is not one, and puts its raw bytes into a Call B prompt under
+the label of its extracted text — while the third refused it, with a comment
+explaining why the others were wrong. Nobody had reconciled them because the
+disagreement is unreachable while invariant 3 holds: the manifest records only
+sources that completed, and a converting source that completed has its pointer.
+It is reachable from an entry written before ownership was recorded, which the
+refusing function names outright.
+
+The rule is now stated once and the two callers that were wrong are right. The
+third, `readablePathFor`, keeps its non-null return because it runs directly
+after a successful normalize and cannot be in the refused case; it says so, and
+points at the shared rule for what happens when the pointer really is missing.
+
+**"Is this source still live" is untouched and still deferred.** `isLive`,
+`isPending` and `cascadeScope.live` answer it independently. That half is a
+harder question — liveness depends on the run's own discovery, not only on the
+manifest — and nothing here reduces it.
+
+Verified: full suite green, the 7/1 rename counts unmoved, eval floors
+unmoved, and the disagreeing case pinned by a test that fails under the old
+answer.
+
 
 ### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
 
@@ -2400,6 +2776,44 @@ rate, not a certainty, and a rerun on the same corpus may not reproduce it.
 
 ### A compile that changes nothing still reheats the layout (§7.1, §9)
 
+**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
+owed.** `sim.replace` now compares the incoming node paths and edge pairs
+against the ones the current layout was built for (`sameTopology`, exported so
+it can be asserted directly). On a match it carries the incoming title, kind,
+degree and summary onto the nodes already held — a compile can rewrite a page's
+prose without changing the topology, and the tooltip reads that metadata — then
+returns without touching alpha. Every other snapshot reheats exactly as before.
+
+`replace` returns whether it reheated. The view ignores the boolean; it exists
+for the suite.
+
+**Correction (2026-09-05).** The paragraph here first said the boolean was the
+only way to observe a reheat, because `alpha()` "decays on d3's own timer from
+the moment `restart()` runs". That is wrong, and the review that found it was
+right to say so. `simulation.alpha(x)` is a synchronous assignment and
+`restart()` only schedules d3's timer, which fires on a later turn — so `alpha`
+read straight after `replace` is exactly what `replace` left. It is now on the
+`Sim` interface, with `tick()` beside it to cool the walk off its starting
+value without waiting for that timer.
+
+The distinction was not academic. Asserting the boolean asserts what `replace`
+*says*, and the mutation that matters is a `replace` that reheats and still
+reports `false` — the original defect, wearing a correct answer. That mutation
+passed the whole suite as it then stood. Against `alpha` it fails. This is the shape this log has
+recorded before under a different name: an oracle computed by the code under
+test is not an oracle. Mutation now: deleting the guard fails 3, inserting a
+reheat before its `return false` fails 1, and deleting the `title` or `degree`
+carry fails 1 each — the last two were previously unobserved, so the earlier
+claim that "deleting the four metadata assignments fails 1" was true only of
+the four together.
+
+Taken with the force path below rather than alone, and after the click fix was
+verified by hand (that condition is met — see Verification owed). The pairing is
+deliberate: once Refresh really re-reads the vault, a press on an unchanged
+vault would stir a settled layout every time, so the guard is what makes the
+force path safe to add. Mutation: deleting the guard fails 3 tests, deleting the
+four metadata assignments fails 1.
+
 Found by the §14 manual pass while checking §4.7: with the pane open, a second
 compile reports "nothing to do — no sources changed" and writes not one byte
 (46 vault files verified byte-identical), yet the graph visibly rearranges.
@@ -2432,6 +2846,83 @@ seam, and stacking a second unverified change on the first is how this project's
 fix rounds have historically gone wrong.
 
 ### The Refresh button cannot refresh (§7.1, §9, checklist §5.5)
+
+**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
+owed.** `getGraph` takes `{ force?: boolean }`. Forced, it retires any build in
+flight and walks the vault, publishing what it finds to `onGraphRebuilt` exactly
+as a compile's own rebuild does; unforced it still answers from the cache, so
+§15's "opens under a second" is untouched and the pane's first load does not
+walk. The button calls `reload(true)`; nothing else forces.
+
+Retiring first is the half that is easy to miss: `rebuildGraph` collapses
+concurrent callers onto one walk, so without `invalidateGraph()` a forced read
+would join a walk that began before the vault moved and answer Refresh with the
+very snapshot it was asked to replace. (Mutation counts for this path are
+stated once, with the 2026-09-05 review below, rather than here where they
+would go stale as tests are added.)
+
+Paired with the reheat guard above, which is what keeps a press on an unchanged
+vault from stirring a settled layout.
+
+**Two races found by review, fixed 2026-09-05.** Retiring the in-flight slot is
+what makes a refresh a refresh, and it is also what stops `building` from
+collapsing two presses: the second press retired the first, whose walk then
+lost its generation and was handed the *pre-refresh* cache by `currentOrNewer`
+— an answer older than the vault it asked about, plus a second full walk for
+one gesture. Forced reads now coalesce on a `forcing` slot of their own. A
+button gets pressed twice; that is not an edge case.
+
+The second is the compile window. A forced walk that runs while a compile is
+rewriting `wiki/` reads pages the compile has written against a manifest it has
+not yet committed — a snapshot of a vault that never existed.
+
+**Superseded 2026-09-05, after a second review.** The first fix for this asked
+`lock.busyWith === "compile"` before starting a walk, and it was wrong in four
+ways at once. It fell through to a full walk when no snapshot was cached; it
+was never consulted when a second press joined a walk already in flight; it
+sampled the lock once at walk start, so a compile beginning a moment later
+reopened the window for the walk's whole duration; and it refused Refresh for
+as long as the scope-preview modal stayed open — the one phase that holds the
+lock, writes nothing, and can last minutes. Three of those want a wider guard
+and the fourth wants a narrower one, which is the tell: the lock is a proxy for
+"writes are in flight" that is too coarse and too narrow at the same time.
+
+The rule is now checked where it can actually be answered — when the walk
+lands, not when it starts. `runCompile` marks the boundaries of its write phase
+through a `WritePhase` the façade hands it, and a walk that was in flight when
+writing began, or began while writing was in flight, publishes nothing and is
+not handed back to its own caller either. A snapshot of a vault that never
+existed is no better an answer for the reader who asked than for anyone else;
+the compile's own rebuild publishes the real one.
+
+Two signals rather than one, because a walk can overlap the phase from either
+side: an epoch sampled at start catches the walk already running, and a flag
+catches the walk that starts inside. `end` runs in a `finally` — a compile that
+throws has still stopped writing, and a flag left set would silence every later
+walk for the rest of the session. The `writing` flag alone would have been
+enough for the second case and the epoch alone for the first; both are load-
+bearing and each has its own failing test.
+
+What this buys beyond correctness: the guard is gone, so Refresh works during
+the preview modal, and nothing in `getGraph` reads the lock any more. §9's
+"never blocked by the lock" is true in the plainer sense that the lock is not
+consulted at all.
+
+Mutation: deleting the `forcing` slot fails 2, releasing it on success rather
+than in a `finally` fails 1, deleting the overlap check fails 1, never setting
+the `writing` flag fails 1, never clearing it fails 3, and moving `writes.end()`
+out of the `finally` fails 1.
+
+One residual is accepted rather than fixed, and named here so the next reader
+does not think it was missed. A forced press landing between the lock's release
+and the compile's own rebuild retires that rebuild; if the forced walk then
+rejects, the cache stays at the pre-compile snapshot. The window is a few
+microseconds and the recovery is another Refresh.
+
+The pane keeps its drawn graph when a walk rejects, rather than replacing it
+with the empty state. The walk failed, not the snapshot on screen, and
+reporting an emptiness that is not true is the worse half of a failure the
+notice has already described.
 
 Found by the §14 manual pass. A page written into `wiki/concepts/` from outside
 Obsidian left the pane reading `37 nodes, 74 edges`; pressing **Refresh**
@@ -2572,11 +3063,45 @@ what re-reading the render path would not have.
 No code change is implied. The honest fix is to the wording — state the AC in
 edges, or in both — and that is a §15 decision rather than a §9 one.
 
+### A page alias can hijack a raw node's handle (§7.1)
+
+Found while sizing the "what to add next" pane against `test-vault`. That
+feature does not touch it and takes the snapshot as given.
+
+`wiki/entities/runs.csv.md` carries the alias `raw/runs.csv` — model-written,
+from Call A, which sees only the body and is asked for "obvious variants"; the
+dataset's own derivative opens with the line `# runs.csv`. `buildGraph` claims
+page titles and aliases before manifest sources, and `claim` keeps the first
+claimant, so the handle `raw/runs.csv` maps to the entity page before the
+manifest loop can claim it for the derivative. And `resolve` applies no `raw/`
+guard — the guard `resolveLinks` and the health check both apply to exactly
+this prefix — so every `[[raw/runs.csv]]` in a citation block or a `source:`
+key resolves to the entity page.
+
+The result on that vault: `raw/runs.md` sits at degree 0 as its own component,
+while the entity page collects the edges §7.1 gives the source. The orphan
+section does not report it either, because that filter excludes `kind: "raw"`.
+Nothing is lost — no write, no data — but the graph says something untrue about
+which file the citations name, and any ranking read off degrees inherits it.
+
+It is systematic rather than a quirk of one vault: any derivative whose
+descriptor page echoes its origin path as an alias does this.
+
+Candidate fixes, unranked: give `resolve` the same `raw/` guard the other two
+resolvers apply, so a source-shaped target is answered from manifest claims
+only; claim manifest handles before page aliases; or refuse an alias beginning
+`raw/` when the page table is loaded. Each touches `build.ts`, which CLAUDE.md
+names as the seam where `GraphNode` changes reach the rename path, so it wants
+its own commit with the 7/1 mutation counts re-run — not a fold into a feature.
+
 ## §14 closeout — what the manual pass found
 
-95 items. **92 ticked, 2 failed, 1 N/A.** Both failures are logged with a cause
-and a named fix; the N/A is §13.6's vault-local `.trash/`, which cannot arise on
-a platform whose deletes reach a system trash.
+95 items at the close of the pass. **92 ticked, 2 failed, 1 N/A.** Both
+failures are logged with a cause and a named fix; the N/A is §13.6's
+vault-local `.trash/`, which cannot arise on a platform whose deletes reach a
+system trash. (This branch has since added five items the pass never saw — one
+for the `missing:` key and four for the `## Add next` section — so the list
+reads 100 here, and the five are unticked.)
 
 **Three defects were fixed during the pass**, two of them merged from parallel
 branches and confirmed by hand afterwards. The third was fixed immediately

@@ -34,7 +34,7 @@ import {
   pressOn,
   type Press,
 } from "../src/plugin/graph-view/press";
-import { createSim, type Sim, type SimNode } from "../src/plugin/graph-view/sim";
+import { createSim, sameTopology, type Sim, type SimNode } from "../src/plugin/graph-view/sim";
 import type { GraphSnapshot } from "../src/core/types";
 
 const THEME: Theme = {
@@ -458,15 +458,19 @@ describe("positions seeded by hashing the page path (§9)", () => {
 });
 
 describe("a refresh keeps the layout the user is reading (§9)", () => {
-  const snapshot = (paths: string[]): GraphSnapshot => ({
+  const snapshot = (
+    paths: string[],
+    edges: [string, string][] = [],
+    over: Partial<{ kind: string; summary: string; title: string; degree: number }> = {},
+  ): GraphSnapshot => ({
     nodes: paths.map((path) => ({
       path,
-      title: path,
-      kind: "concept" as const,
-      degree: 1,
-      summary: "",
+      title: over.title ?? path,
+      kind: (over.kind ?? "concept") as "concept",
+      degree: over.degree ?? 1,
+      summary: over.summary ?? "",
     })),
-    edges: [],
+    edges: edges.map(([a, b]) => ({ a, b })),
   });
 
   it("keeps an unpinned survivor where the simulation had moved it to", () => {
@@ -523,6 +527,136 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
 
     expect(sim.nodes.map((n) => n.path)).toEqual(["a.md"]);
     sim.stop();
+  });
+
+  it("leaves a settled layout at the temperature it had settled to", () => {
+    // §14's finding: a compile reporting "nothing to do" rearranged a settled
+    // layout. Asserted on `alpha` rather than on the return value, because a
+    // `replace` that reheats and reports `false` is the same defect wearing a
+    // correct answer — and that is exactly what the boolean cannot see.
+    // `alpha(x)` assigns synchronously and `restart()` only schedules d3's
+    // timer for a later turn, so this reads what `replace` left.
+    const same = () => snapshot(["a.md", "b.md"], [["a.md", "b.md"]]);
+    const sim = createSim(same(), () => undefined);
+    const fresh = sim.alpha;
+    // Cool it off its starting value, so a reheat has something to undo.
+    sim.tick();
+    const settled = sim.alpha;
+    expect(settled).toBeLessThan(fresh);
+
+    const before = sim.nodes.map((node) => ({ x: node.x, y: node.y }));
+
+    expect(sim.replace(same())).toBe(false);
+
+    expect(sim.alpha).toBe(settled);
+    // And the positions, which are the thing the user is actually reading.
+    //
+    // One gap is left open here on purpose, because closing it would cost
+    // more than it buys: `simulation.restart()` *alone* changes no alpha and
+    // moves nothing synchronously — it schedules a frame on d3's timer — so no
+    // assertion in a synchronous test can see it. Catching it would mean
+    // waiting on that timer, which is the flakiness every sim test is written
+    // to keep out. Alpha catches the reheat, which is the defect §14 found.
+    expect(sim.nodes.map((node) => ({ x: node.x, y: node.y }))).toEqual(before);
+    sim.stop();
+  });
+
+  it("reheats when a node arrives, a node leaves, or an edge changes", () => {
+    const sim = createSim(snapshot(["a.md", "b.md"], [["a.md", "b.md"]]), () => undefined);
+    const fresh = sim.alpha;
+
+    for (const next of [
+      snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]),
+      snapshot(["a.md", "b.md"], [["a.md", "b.md"]]),
+      snapshot(["a.md", "b.md"]),
+    ]) {
+      sim.tick();
+      expect(sim.alpha).toBeLessThan(fresh);
+      expect(sim.replace(next)).toBe(true);
+      expect(sim.alpha).toBe(fresh);
+    }
+    sim.stop();
+  });
+
+  it("reheats for a rename: the same counts, a different path", () => {
+    // A §6.5 rename retitles one page: one node leaves and one arrives, so the
+    // counts match and only the paths differ. It is a new layout and must be
+    // treated as one — and it is the only shape that reaches `sameTopology`'s
+    // node comparison, since every other case is caught by the length guard.
+    const sim = createSim(snapshot(["a.md", "b.md"]), () => undefined);
+    sim.tick();
+
+    expect(sim.replace(snapshot(["a.md", "c.md"]))).toBe(true);
+
+    expect(sim.nodeAt("c.md")).toBeDefined();
+    expect(sim.nodeAt("b.md")).toBeUndefined();
+    expect(sameTopology(snapshot(["a.md", "b.md"]), snapshot(["a.md", "c.md"]))).toBe(false);
+    sim.stop();
+  });
+
+  it("carries every field the tooltip reads onto a node it did not reheat", () => {
+    // A compile that rewrote prose changes what the tooltip should say without
+    // changing the topology. Skipping the reheat must not also skip the update.
+    const sim = createSim(snapshot(["a.md"], []), () => undefined);
+    const before = sim.nodes[0] as SimNode;
+    before.x = 123;
+    before.y = 456;
+
+    const reheated = sim.replace(
+      snapshot(["a.md"], [], { kind: "entity", summary: "Rewritten.", title: "Renamed", degree: 7 }),
+    );
+
+    const after = sim.nodeAt("a.md") as SimNode;
+    expect(reheated).toBe(false);
+    expect(after.summary).toBe("Rewritten.");
+    expect(after.kind).toBe("entity");
+    expect(after.title).toBe("Renamed");
+    expect(after.degree).toBe(7);
+    expect(after.x).toBe(123);
+    expect(after.y).toBe(456);
+    sim.stop();
+  });
+
+  it("keeps a pin across a replace it did not reheat", () => {
+    const sim = createSim(snapshot(["a.md"]), () => undefined);
+    const before = sim.nodes[0] as SimNode;
+    before.fx = 77;
+    before.fy = 88;
+
+    expect(sim.replace(snapshot(["a.md"]))).toBe(false);
+
+    const after = sim.nodeAt("a.md") as SimNode;
+    expect(after.fx).toBe(77);
+    expect(after.fy).toBe(88);
+    sim.stop();
+  });
+
+  describe("sameTopology", () => {
+    it("tells equal snapshots from ones differing only in an edge endpoint", () => {
+      const one = snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]);
+
+      expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["a.md", "b.md"]]))).toBe(true);
+      // Each end separately: an edge pair is two values and comparing one of
+      // them would pass every fixture that only ever varies the other.
+      expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["a.md", "c.md"]]))).toBe(false);
+      expect(sameTopology(one, snapshot(["a.md", "b.md", "c.md"], [["c.md", "b.md"]]))).toBe(false);
+    });
+
+    it("is false when the counts differ", () => {
+      const one = snapshot(["a.md"], []);
+
+      expect(sameTopology(one, snapshot(["a.md", "b.md"], []))).toBe(false);
+      expect(sameTopology(one, snapshot(["a.md"], [["a.md", "a.md"]]))).toBe(false);
+    });
+
+    it("ignores everything the layout does not depend on", () => {
+      // Same paths and pairs, different metadata: still the same topology, so
+      // still no reheat — the carry-over above is what keeps it correct.
+      const one = snapshot(["a.md"], []);
+      const other = snapshot(["a.md"], [], { kind: "entity", summary: "New.", title: "Other" });
+
+      expect(sameTopology(one, other)).toBe(true);
+    });
   });
 });
 

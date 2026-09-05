@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   answerNotePath,
+  cleanMissing,
   renderAnswerNote,
   slugOf,
   stripMissingBlock,
@@ -137,6 +138,41 @@ describe("§8.3's link validation", () => {
   });
 });
 
+describe("what the model said was missing enters frontmatter as one line each", () => {
+  it("flattens an item that spans lines", () => {
+    // A newline would make the item a YAML block scalar — structure, which
+    // invariant 5 gives to code. Same rule `inventory.ts` applies to a summary.
+    expect(cleanMissing(["the\n  publication dates"])).toEqual(["the publication dates"]);
+  });
+
+  it("strips link brackets, so a filed answer manufactures no edge", () => {
+    // `buildGraph` scans a node's whole file for links, frontmatter included.
+    expect(cleanMissing(["[[PageRank]] convergence rate"])).toEqual(["PageRank convergence rate"]);
+  });
+
+  it("strips to a fixpoint, so it cannot manufacture the link it removes", () => {
+    // One pass is not enough: taking `]]` out of the middle splices the
+    // brackets that surrounded it into a working link. The strip has to run
+    // until the string stops changing, or it writes the very edge it exists to
+    // prevent.
+    // One pass leaves `[[X]]`, which `linkTargets` reads as a link to X.
+    expect(cleanMissing(["[]][X][[]"])).toEqual(["X"]);
+    // The mirror shape: removing `[[` closes a `]]` behind it.
+    expect(cleanMissing(["funding][[]sources"])).toEqual(["fundingsources"]);
+    // And deeper than two passes, so the loop is a fixpoint rather than a
+    // second pass bolted onto the first.
+    expect(cleanMissing(["[][[][X][]][]"])).toEqual(["X"]);
+  });
+
+  it("drops an item that is empty once cleaned", () => {
+    expect(cleanMissing(["   ", "[[]]", "dates"])).toEqual(["dates"]);
+  });
+
+  it("leaves an ordinary item alone", () => {
+    expect(cleanMissing(["who funded the study"])).toEqual(["who funded the study"]);
+  });
+});
+
 describe("§8.3's note is written by code (invariant 5)", () => {
   const base = {
     question: "How does ranking work?",
@@ -157,12 +193,90 @@ describe("§8.3's note is written by code (invariant 5)", () => {
     expect(note).toContain("grounded: true");
   });
 
+  it("persists what was still missing, after grounded", () => {
+    const note = renderAnswerNote({ ...base, missing: ["dates", "the author"] });
+
+    expect(note).toContain("grounded: true\nmissing:\n  - dates\n  - the author\n---\n");
+  });
+
+  it("writes no missing key when nothing was missing", () => {
+    // An answer that lacked nothing should not carry a key saying so, and an
+    // empty list in the frontmatter would be a claim of its own.
+    expect(renderAnswerNote(base)).not.toContain("missing");
+    expect(renderAnswerNote({ ...base, missing: [] })).not.toContain("missing");
+  });
+
   it("writes the sources block, then the trace, at the foot", () => {
     const note = renderAnswerNote(base);
 
     expect(note).toContain("<!-- sources:start -->\n## Sources consulted\n- [[PageRank]]");
     expect(note.indexOf("sources:start")).toBeLessThan(note.indexOf("trace:start"));
     expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
+  });
+
+  it("writes the Add next section between the sources and the trace", () => {
+    // Between them because it is about the answer rather than about the run:
+    // a reader who has just seen what was consulted is being told what was
+    // not. The trace stays last, as §8.3 has it.
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [node("PageRank", { text: "Ranking needs [[Convergence]]." })],
+      missing: ["the dates"],
+    });
+
+    expect(note).toContain("## Add next");
+    expect(note).toContain("- **the dates** — the wiki could not answer this");
+    expect(note).toContain("- **Convergence** — wanted by 1 of the pages consulted: PageRank");
+    expect(note).toContain("```mermaid");
+    expect(note.indexOf("sources:start")).toBeLessThan(note.indexOf("gaps:start"));
+    expect(note.indexOf("gaps:start")).toBeLessThan(note.indexOf("trace:start"));
+    expect(note.trimEnd().endsWith("<!-- trace:end -->")).toBe(true);
+  });
+
+  it("gives the section the page table, so a link that resolves is not a gap", () => {
+    // The section is handed `pages` by its caller. Nothing else observes that
+    // it is: the pure function is tested with a page table, and the note is
+    // tested for a section, and between them the argument can be dropped.
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [node("Airships", { text: "Lift from [[PageRank]] and [[Zeppelin]]." })],
+      pages: [
+        {
+          path: "wiki/concepts/PageRank.md",
+          title: "PageRank",
+          kind: "concept",
+          aliases: [],
+          summary: "",
+          updated: "2026-08-20",
+        },
+      ],
+    });
+
+    expect(note).toContain("- **Zeppelin** —");
+    expect(note).not.toContain("- **PageRank** —");
+  });
+
+  it("gives the section the snapshot, so the diagram shows what the wiki holds", () => {
+    const note = renderAnswerNote({
+      ...base,
+      consulted: [
+        node("Airships", { text: "See [[Zeppelin]]." }),
+        node("Hindenburg", { text: "See [[Zeppelin]]." }),
+      ],
+      graph: {
+        nodes: [],
+        edges: [{ a: "wiki/concepts/Airships.md", b: "wiki/concepts/Hindenburg.md" }],
+      },
+    });
+
+    expect(note).toContain("  p0 --- p1");
+  });
+
+  it("writes no section when the answer ran into nothing", () => {
+    // The same rule the `missing:` key follows: an answer that lacked nothing
+    // should not carry a heading saying so.
+    expect(renderAnswerNote(base)).not.toContain("gaps:start");
+    expect(renderAnswerNote(base)).not.toContain("Add next");
   });
 
   it("puts the ungrounded callout first, before the answer", () => {
@@ -425,6 +539,8 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
     "<!-- trace:end -->",
     "<!-- sources:start -->",
     "<!-- sources:end -->",
+    "<!-- gaps:start -->",
+    "<!-- gaps:end -->",
   ];
 
   /**

@@ -43,6 +43,22 @@ describe("article candidates (§10)", () => {
     expect(report.indexOf("**Zeppelin**")).toBeLessThan(report.indexOf("**Aardvark**"));
   });
 
+  it("groups case variants as one candidate, spelled the way a page would be", async () => {
+    // §4's namespace folds case, so the vault cannot hold both spellings —
+    // listing them apart would report two half-wanted articles where there is
+    // one wanted twice. The pane shares this grouping, so the two agree.
+    const fs = new MemFs({
+      "wiki/concepts/A.md": page("concept", "Wants [[zeppelin]]."),
+      "wiki/concepts/B.md": page("concept", "Wants [[Zeppelin]]."),
+      [MANIFEST]: "{}",
+    });
+
+    const report = await run(fs);
+
+    expect(report).toContain("- **Zeppelin** — wanted by 2: A, B");
+    expect(report).not.toContain("zeppelin** —");
+  });
+
   it("does not call a resolved link, a source link or a heading reference a candidate", async () => {
     const fs = new MemFs({
       "wiki/concepts/A.md": page("concept", "[[B]] and [[raw/note.md]] and [[B#Section]]."),

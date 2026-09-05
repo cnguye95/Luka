@@ -3,10 +3,23 @@
 //     <!-- trace:start -->
 //     ## Retrieval trace
 //     - mode: B
-//     - seeds: [[A]], [[B]]
+//     - seeds:
+//       - [[A]]
+//       - [[B]]
 //     - round2: no
-//     - top: [[X]] 0.0812, [[Y]] 0.0631
+//     - top:
+//       - [[X]] 0.0812
+//       - [[Y]] 0.0631
 //     <!-- trace:end -->
+//
+// §8.3 shows those two lists inline and comma-separated. They are written one
+// entry per line instead, which is a recorded deviation and the point of it:
+// a comma is legal inside a title and inside a raw path, so `[[a]], [[b]]` is
+// genuinely two readings and no parser over that grammar is correct. A
+// newline is not legal in either — `sanitizeTitle` collapses whitespace — so
+// one entry per line is a delimiter the content cannot contain. The parser
+// still reads the old form, because notes written before this change exist
+// and §9 replays them.
 //
 // §5 names `writeTrace` and `parseTrace` together, and §9's pane replays a
 // trace it did not write — so parsing must recover exactly what rendering put
@@ -56,22 +69,30 @@ export interface ParsedTrace {
 }
 
 export function writeTrace(trace: Trace): string {
-  const seeds = trace.seeds.map((seed) => `[[${seed}]]`).join(", ");
+  const seeds = trace.seeds.map((seed) => `[[${seed}]]`);
   const top = trace.top
     .slice(0, TOP_LIMIT)
-    .map((entry) => `[[${entry.label}]] ${entry.score.toFixed(SCORE_DECIMALS)}`)
-    .join(", ");
+    .map((entry) => `[[${entry.label}]] ${entry.score.toFixed(SCORE_DECIMALS)}`);
   return [
     START,
     "## Retrieval trace",
     `- mode: ${trace.mode}`,
-    // An empty list renders as a word rather than as nothing, so the line keeps
-    // its shape and a reader can tell "none" from "the writer forgot".
-    `- seeds: ${seeds === "" ? "(none)" : seeds}`,
+    ...list("seeds", seeds),
     `- round2: ${trace.round2 ? "yes" : "no"}`,
-    `- top: ${top === "" ? "(none)" : top}`,
+    ...list("top", top),
     END,
   ].join("\n");
+}
+
+/**
+ * A list field, one entry to a line.
+ *
+ * An empty list stays on one line as a word rather than as nothing, so the
+ * field keeps its shape and a reader can tell "none" from "the writer forgot".
+ */
+function list(field: string, entries: readonly string[]): string[] {
+  if (entries.length === 0) return [`- ${field}: (none)`];
+  return [`- ${field}:`, ...entries.map((entry) => `  - ${entry}`)];
 }
 
 export function parseTrace(text: string): ParsedTrace {
@@ -90,9 +111,27 @@ export function parseTrace(text: string): ParsedTrace {
 
   const authoritative = matches[matches.length - 1] as RegExpMatchArray;
   const fields = new Map<string, string>();
-  for (const line of authoritative[0].split("\n")) {
-    const field = /^-\s*(mode|seeds|round2|top):\s*(.*)$/.exec(line.trim());
-    if (field) fields.set(field[1] as string, (field[2] as string).trim());
+  // Items of the list field currently open, for the one-per-line grammar.
+  const items = new Map<string, string[]>();
+  let open: string | null = null;
+  for (const raw of authoritative[0].split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    const field = /^-\s*(mode|seeds|round2|top):\s*(.*)$/.exec(line);
+    if (field !== null) {
+      const name = field[1] as string;
+      const value = (field[2] as string).trim();
+      fields.set(name, value);
+      // A field with nothing after the colon opens a list; one with a value is
+      // the old inline form, and closes immediately.
+      open = value === "" ? name : null;
+      if (open !== null) items.set(open, []);
+      continue;
+    }
+    // Indented, so it cannot be confused with a field line or with prose that
+    // happens to start with a dash.
+    const item = /^\s+-\s+(.+)$/.exec(line);
+    if (item !== null && open !== null) (items.get(open) as string[]).push((item[1] as string).trim());
+    else if (line.trim() !== "") open = null;
   }
 
   const mode = fields.get("mode");
@@ -101,8 +140,10 @@ export function parseTrace(text: string): ParsedTrace {
   // but nothing is reconstructed from it.
   if (mode !== "A" && mode !== "B") return { trace: null, rest };
 
-  const seeds = parseLinks(fields.get("seeds") ?? "");
-  const top = parseTop(fields.get("top") ?? "");
+  // One entry per line where the writer used it, and the comma split only for
+  // a note written before the grammar changed.
+  const seeds = readLinks(items.get("seeds"), fields.get("seeds") ?? "");
+  const top = readTop(items.get("top"), fields.get("top") ?? "");
   return {
     trace: {
       mode,
@@ -251,6 +292,51 @@ function rejoin(fragments: readonly string[]): string[] {
   if (open.length > 0) out.push(open.join(", "));
   return out;
 }
+
+/**
+ * Labels from whichever grammar the note was written in.
+ *
+ * The line-delimited form is exact: a newline cannot occur inside a title or a
+ * path this module writes, so each line is one label and nothing is lost. The
+ * inline form is the ambiguous one, kept only so a note written before the
+ * change still replays — with the comma reading, and the losses it counts.
+ */
+function readLinks(
+  lines: readonly string[] | undefined,
+  inline: string,
+): { labels: string[]; unparsed: string[] } {
+  if (lines === undefined) return parseLinks(inline);
+  const labels: string[] = [];
+  const unparsed: string[] = [];
+  for (const line of lines) {
+    const link = LINK.exec(line);
+    if (link) labels.push((link[1] as string).trim());
+    else unparsed.push(line);
+  }
+  return { labels, unparsed };
+}
+
+/** `top`'s entries, by the same rule. */
+function readTop(
+  lines: readonly string[] | undefined,
+  inline: string,
+): { entries: { label: string; score: number }[]; unparsed: string[] } {
+  if (lines === undefined) return parseTop(inline);
+  const entries: { label: string; score: number }[] = [];
+  const unparsed: string[] = [];
+  for (const line of lines) {
+    const entry = TOP_ENTRY.exec(line);
+    if (entry) entries.push({ label: (entry[1] as string).trim(), score: Number(entry[2]) });
+    else unparsed.push(line);
+  }
+  return { entries, unparsed };
+}
+
+/**
+ * Anchored: the score sits after the closing brackets, so the link stays
+ * greedy and a label containing `]` still round-trips.
+ */
+const TOP_ENTRY = /^\[\[(.+)\]\]\s+(-?\d+(?:\.\d+)?)$/;
 
 function parseLinks(value: string): { labels: string[]; unparsed: string[] } {
   if (value === "" || value === "(none)") return { labels: [], unparsed: [] };

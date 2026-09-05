@@ -16,9 +16,8 @@ import { loadManifest } from "./manifest";
 import { comparePaths } from "./paths";
 import { parseFrontmatter } from "./yaml";
 import { buildGraph } from "./graph/build";
-import { buildTitleIndex, linkTargets } from "./compile/links";
-import { handleOf, loadPageTable } from "./compile/pagetable";
-import { parseCitationBlock } from "./compile/citations";
+import { scanPages, unresolvedTargets, type PageScan } from "./gaps";
+import { loadPageTable } from "./compile/pagetable";
 import { FILED_ANSWERS_FOLDER } from "./answer/fileback";
 import type { IngestManifest, PageMeta } from "./types";
 
@@ -37,18 +36,26 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
   const pages = await loadPageTable(fs);
   const manifest = await loadManifest(fs, manifestPath);
   const graph = await buildGraph({ fs, manifestPath });
+  // One scan for both link-reading sections, which each opened every page
+  // before. Not §10's "one vault scan" in full — the page table and the graph
+  // build read the files on their own account — but the report's own reads are
+  // now one pass. The answer note's `## Add next` section resolves against the
+  // same *rule* rather than the same scan — it reads the pages one answer was
+  // built from, at the moment it was answered — so the two cannot disagree
+  // about what resolves, only about what they were looking at.
+  const { scans } = await scanPages(fs, pages);
   const now = (deps.now ?? (() => new Date()))();
 
   const report = [
     "# Health",
     "",
-    `Written ${now.toISOString().slice(0, 10)} from one scan of the vault. No model was asked.`,
+    `Written ${now.toISOString().slice(0, 10)} from a scan of the vault. No model was asked.`,
     "",
-    ...(await articleCandidates(fs, pages)),
+    ...articleCandidates(pages, scans),
     "",
     ...orphanPages(graph),
     "",
-    ...(await danglingCitations(fs, pages, manifest)),
+    ...danglingCitations(scans, manifest),
     "",
     ...(await filedAnswers(fs, manifest, now)),
     "",
@@ -68,43 +75,34 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
  * report reads as a list of things worth writing rather than a list of faults —
  * and the ones many pages reach for come first.
  */
-async function articleCandidates(fs: FsAdapter, pages: readonly PageMeta[]): Promise<string[]> {
-  const index = buildTitleIndex(pages);
-  const wanted = new Map<string, Set<string>>();
+function articleCandidates(pages: readonly PageMeta[], scans: readonly PageScan[]): string[] {
+  // Grouping and resolution live in `gaps.ts`, shared with the answer note's
+  // `## Add next` section. §10 keeps its own presentation, and its own scope:
+  // every candidate, not the few an answer names.
+  const targets = unresolvedTargets(pages, scans);
 
-  for (const page of pages) {
-    let text: string;
-    try {
-      text = decodeUtf8(await fs.read(page.path));
-    } catch {
-      continue;
-    }
-    for (const target of linkTargets(text)) {
-      // Links into sources are full-path and are not title-resolved (§4), and
-      // a heading or block reference addresses a place inside a page.
-      if (target.startsWith("raw/") || target.includes("#") || target.includes("^")) continue;
-      if (index.has(handleOf(target))) continue;
-      const citers = wanted.get(target) ?? new Set<string>();
-      citers.add(page.title);
-      wanted.set(target, citers);
-    }
-  }
+  if (targets.length === 0) return ["## Article candidates", "", "None — every link resolves."];
 
-  if (wanted.size === 0) return ["## Article candidates", "", "None — every link resolves."];
+  // Citers are named by title, as this section always has. Counted by title
+  // too: two pages could share a stem, and the line says "wanted by" the names
+  // it then lists.
+  const ordered = targets
+    .map((target) => ({
+      display: target.display,
+      from: [...new Set(target.citers.map((page) => page.title))].sort(comparePaths),
+    }))
+    // Most-wanted first; ties by name, so the order does not depend on scan order.
+    .sort((a, b) => b.from.length - a.from.length || comparePaths(a.display, b.display));
 
-  // Most-wanted first; ties by name, so the order does not depend on scan order.
-  const ordered = [...wanted.entries()].sort(
-    (a, b) => b[1].size - a[1].size || comparePaths(a[0], b[0]),
-  );
   return [
     "## Article candidates",
     "",
     "Links that resolve to nothing yet — §4 calls these future-article signals, not errors.",
     "",
-    ...ordered.map(([target, citers]) => {
-      const from = [...citers].sort(comparePaths);
-      return `- **${target}** — wanted by ${String(from.length)}: ${from.join(", ")}`;
-    }),
+    ...ordered.map(
+      ({ display, from }) =>
+        `- **${display}** — wanted by ${String(from.length)}: ${from.join(", ")}`,
+    ),
   ];
 }
 
@@ -134,21 +132,11 @@ function orphanPages(graph: Awaited<ReturnType<typeof buildGraph>>): string[] {
  * source the manifest does not know is a page claiming grounding that compile
  * cannot account for.
  */
-async function danglingCitations(
-  fs: FsAdapter,
-  pages: readonly PageMeta[],
-  manifest: IngestManifest,
-): Promise<string[]> {
+function danglingCitations(scans: readonly PageScan[], manifest: IngestManifest): string[] {
   const dangling: string[] = [];
 
-  for (const page of pages) {
-    let text: string;
-    try {
-      text = decodeUtf8(await fs.read(page.path));
-    } catch {
-      continue;
-    }
-    for (const entry of parseCitationBlock(text).entries) {
+  for (const { page, citations } of scans) {
+    for (const entry of citations) {
       if (!entry.startsWith("raw/")) continue;
       // `Object.hasOwn`, not `manifest[entry] !== undefined`: a citation entry
       // is free text read off disk, so `constructor` and `toString` are

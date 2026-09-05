@@ -11,6 +11,7 @@
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { sourceWithoutContent, truncatedForContextBudget } from "../markers";
+import { readableMarkdown } from "../readable";
 import { isPassthrough } from "../normalize/index";
 import type { LLMProvider } from "../provider/types";
 import { packUnderBudget } from "../tokens";
@@ -223,13 +224,25 @@ export function renderPage(page: PageToWrite, index: TitleIndex, updated: string
   return frontmatter + body;
 }
 
-/** §7.1's rule: a source's readable markdown is itself, or else its derivative. */
+/**
+ * §7.1's rule, reached from a normalize outcome rather than from a manifest
+ * entry: `readable.ts` owns what the rule says, and this owns the translation.
+ *
+ * Non-null where `readableMarkdown` can be null, and the difference is the
+ * input, not the rule. This runs immediately after a normalize that reported
+ * success, so a converting source has its derivative in hand — the case the
+ * shared rule refuses is one this caller cannot be in. Falling back to the
+ * source path preserves the behaviour every caller here already depends on;
+ * `readable.ts` is the place to look for what happens when the pointer really
+ * is missing.
+ */
 export function readablePathFor(
   sourcePath: string,
   format: SourceFormat,
   derivativePath: string | null,
 ): string {
-  return isPassthrough(format) ? sourcePath : (derivativePath ?? sourcePath);
+  if (isPassthrough(format)) return sourcePath;
+  return readableMarkdown(sourcePath, derivativePath ?? undefined, false) ?? sourcePath;
 }
 
 /** The vault path a page of this kind and title occupies (§4). */

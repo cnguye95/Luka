@@ -186,7 +186,7 @@ icon opens the graph pane.
 |---|---|
 | **Luka: Compile** | Walks `raw/`, normalizes what changed, and rebuilds the wiki. The scope modal appears first when the diff includes deletions or modifications. |
 | **Luka: Ask the wiki** | Opens a modal for one question; writes the answer to `answers/` and opens it. |
-| **Luka: File this answer** | Moves the active answer note to `raw/answers/` so the next compile ingests it as a source. Drops the retrieval trace, keeps the sources block. |
+| **Luka: File this answer** | Moves the active answer note to `raw/answers/` so the next compile ingests it as a source. Drops the retrieval trace and the `## Add next` section, keeps the sources block. |
 | **Luka: Health check** | Writes and opens `wiki/_health.md`: article candidates, orphan pages, citations naming unknown files, filed answers and their ages. Makes no model calls. |
 | **Luka: Open graph** | Opens the graph pane. The ribbon icon opens the same one. |
 | **Luka: Show retrieval on graph** | Replays the active answer note's retrieval trace as an overlay on the graph. Makes no model calls. |
@@ -258,7 +258,7 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 95 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 101 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
@@ -345,8 +345,9 @@ surface in the project, so it comes before the older flows.
       pair and ratio counts, and the counts match what `wiki/_index.md` implies.
 - [x] With the pane open, run **Luka: Compile**. When it finishes, the pane's
       counts update on their own, with no click. (§7.1's rebuild event.)
-- [ ] **FAILED — see BUILD-NOTES.** The **Refresh** button updates the counts after a compile run from another
-      window or a vault sync.
+- [ ] **Fixed on branch, verification owed — see BUILD-NOTES.** The **Refresh**
+      button updates the counts after a compile run from another window or a
+      vault sync.
 - [x] Close the pane and reopen it: it works, and the developer console shows no
       error logged at close. (Invariant 1 — nothing of the view outlives it.)
 - [x] The graph draws: nodes appear, spread out, and the layout comes to rest
@@ -453,6 +454,24 @@ Needs a real API key. One question costs a few cents.
 - [x] The note reads as prose with `[[links]]`, then `## Sources consulted`,
       then `## Retrieval trace` — and its frontmatter carries `kind: answer`,
       `question`, `asked`, `mode` and `grounded`.
+- [ ] An answer whose synthesis still reported something missing carries a
+      `missing:` list in its frontmatter, each entry on one line with no
+      `[[brackets]]`; an answer that reported nothing has no such key.
+- [ ] That same answer ends with `## Add next` between `## Sources consulted`
+      and `## Retrieval trace`: a bullet per gap with its name in bold, and
+      below them a diagram that **renders in reading view** — dashed boxes for
+      what is not written, dashed lines to the pages that reached for it, and a
+      dashed line from "This answer" for what synthesis said it lacked.
+- [ ] Nothing in that diagram is a link: hovering a box shows no page preview,
+      and Ctrl/Cmd-clicking one opens nothing.
+- [ ] An answer that lacked nothing, over pages whose links all resolve, has no
+      `## Add next` section at all.
+- [ ] Filing the answer that *did* name gaps drops `## Add next` along with the
+      trace, keeps `missing:` and `## Sources consulted`, and the next
+      **Compile** creates no page named after a gap the section listed.
+- [ ] No bullet in `## Add next` names a page the wiki already has — check one
+      against `## Sources consulted` in the same note. The `missing:` key may
+      still list it: the key is the record, the section is the advice.
 - [x] Ctrl/Cmd-clicking a link in the answer opens the page it names.
 - [x] Asking something the wiki says nothing about produces a note whose first
       line is the `> [!warning] Not grounded in your wiki` callout, rendered as

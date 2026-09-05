@@ -51,12 +51,16 @@ to break something" — review fix diffs harder than feature diffs.
   deleting the float branch must fail exactly 7 tests; deleting
   `chooseTarget`'s recorded-path fallback exactly 1. If those counts move,
   the rename subsystem was touched.
-- **Trace writer ↔ trace parser** (`writeTrace`/`parseTrace`, §8.3). The
-  comma-separated `[[label]]` grammar is ambiguous by construction; three
-  parser fixes each broke the other side, and the current split-on-comma
-  reading was chosen deliberately (loses comma-bearing labels, counted via
-  `Trace.unparsed`). Do not "fix" the parser without changing `writeTrace`'s
-  grammar first.
+- **Trace writer ↔ trace parser** (`writeTrace`/`parseTrace`, §8.3).
+  *Resolved 2026-09-05 by changing the grammar, which is what three failed
+  parser fixes were each missing.* The writer now emits one entry to a line;
+  a newline cannot occur in a title or a path, so there is no second reading
+  and nothing is lost. The parser still accepts the old comma-separated form,
+  with its known loss counted via `Trace.unparsed`, because notes written
+  before the change exist and §9 replays them. The coupling is now narrower
+  but real: two grammars are read and one is written, so a change to the
+  writer must keep the old reader, and dropping the old reader silently
+  breaks every note already on disk.
 - **The title/alias namespace.** One namespace with two identity rules —
   comparison (NFC fold) and length (200 UTF-8 bytes) — keyed by six tables.
   Fixes unifying one rule have fragmented the other; it took five review
@@ -73,6 +77,20 @@ to break something" — review fix diffs harder than feature diffs.
   counts above are the tripwire.
 - **The readable/live seam** (`readable`, `bodyOfSource`, `isLive`,
   `readableFromManifest`, `readablePathFor`, `readablePathOf`,
-  `cascadeScope.live`). Seven answers to two overlapping questions that
-  disagree at the edges; deferred to its own milestone. Local fixes here
+  `cascadeScope.live`). *Half resolved 2026-09-05.* "Where is a source's
+  readable markdown" now has one answer, `readableMarkdown` in
+  `src/core/readable.ts`; the three functions that used to decide it separately
+  all call it, and the case they disagreed on — a converting source with no
+  derivative recorded — is pinned by test. The second question, "is this source
+  still live", is still answered by `isLive`, `isPending` and
+  `cascadeScope.live` independently, and remains deferred. Local fixes there
   drift the siblings — change all or none.
+- **Compile's write phase ↔ the graph cache.** `runCompile` marks its write
+  boundaries through `WritePhase`; a walk overlapping them publishes nothing
+  and is not returned to its caller. Moving `writes.begin()` past the first
+  write, or dropping the `finally` around `writes.end()`, changes which
+  snapshots are trusted, and nothing outside `tests/graph.test.ts` notices.
+  The predecessor asked `lock.busyWith` at walk start instead and was wrong
+  four ways at once — the lock is a proxy for "writes are in flight" that is
+  both too coarse (it covers the scope preview, which writes nothing) and too
+  narrow (it cannot see a walk already running).

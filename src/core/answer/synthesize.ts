@@ -16,9 +16,10 @@ import { linkOutsideRetrievedSet } from "../markers";
 import { comparePaths } from "../paths";
 import { serializeFrontmatter } from "../yaml";
 import type { LLMProvider } from "../provider/types";
-import type { PageMeta, RetrievalMode } from "../types";
+import type { GraphSnapshot, PageMeta, RetrievalMode } from "../types";
 import type { AssembledNode } from "../retrieve/assemble";
 import { writeTrace, type Trace } from "./trace";
+import { answerGaps, renderGapsBlock } from "./addnext";
 
 const SOURCES_START = "<!-- sources:start -->";
 const SOURCES_END = "<!-- sources:end -->";
@@ -113,6 +114,39 @@ export function stripMissingBlock(reply: string): SynthesisReply {
 }
 
 /**
+ * The model's own words, made safe to write into frontmatter.
+ *
+ * Two rules, both borrowed rather than invented. Flattening to one line is
+ * `inventory.ts`'s rule for a summary — "flattened at the point the model's
+ * words enter the system" — because a newline would turn the item into a block
+ * scalar, and invariant 5 gives structure to code. Stripping `[[`/`]]` is the
+ * one this key adds: `buildGraph` scans a node's whole file for links,
+ * frontmatter included, so once an answer is filed a bracketed item would
+ * become an edge the model chose. §10's candidates are safe either way — they
+ * are read off the wiki page table, which `loadPageTable` seeds with `wiki/`
+ * alone, and a filed answer lives under `raw/`.
+ *
+ * The strip runs to a fixpoint. One pass is not enough: removing the `]]` from
+ * `[]][X][[]` splices the surviving brackets into `[[X]]`, a link the strip
+ * manufactured itself. Each pass is strictly shorter than the last, so this
+ * terminates.
+ */
+export function cleanMissing(list: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const item of list) {
+    let stripped = item;
+    for (;;) {
+      const next = stripped.replace(/\[\[|\]\]/g, "");
+      if (next === stripped) break;
+      stripped = next;
+    }
+    const flat = stripped.replace(/\s+/g, " ").trim();
+    if (flat !== "") out.push(flat);
+  }
+  return out;
+}
+
+/**
  * §8.3: "any link outside the retrieved set is unlinked to plain text plus
  * marker".
  *
@@ -192,9 +226,13 @@ export function validateAnswerLinks(
  *      pattern is deliberately more permissive about surrounding whitespace, so
  *      that a near-miss a parser might one day accept is already gone.
  *
- * Two families, not three. `compile/citations.ts` has a third `BLOCK`, for
- * `citations:start`/`end`, and it was briefly added here on the reasoning that
- * §8.4 files an answer into `raw/answers/` where the next compile reads it.
+ * Three families, not four. `sources`, `trace` and `gaps` are the blocks code
+ * writes into an answer note; `stripTrace` and `stripGaps` read two of them
+ * back at filing, and the sources block is covered because it is code's to
+ * write, not because anything parses it. `compile/citations.ts` has a fourth
+ * `BLOCK`, for `citations:start`/`end`, and it was briefly added here on the
+ * reasoning that §8.4 files an answer into `raw/answers/` where the next
+ * compile reads it.
  * That reasoning is wrong: all three `parseCitationBlock` call sites iterate
  * the wiki page table, and `loadPageTable` seeds its walk with `wiki/` alone,
  * so a filed answer's text never reaches that parser. With no parse harm on
@@ -203,7 +241,7 @@ export function validateAnswerLinks(
  * lines. Rule 2 above is scoped to the parsers that read an answer note.
  */
 const CODE_OWNED_SENTINEL =
-  /^[ \t]*<!--[ \t]*(?:sources|trace):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
+  /^[ \t]*<!--[ \t]*(?:sources|trace|gaps):(?:start|end)[ \t]*-->[ \t]*(?:\r?\n|$)/gm;
 
 /**
  * Removes code-owned sentinels from the model's prose.
@@ -255,11 +293,22 @@ export interface AnswerNote {
   asked: string;
   mode: RetrievalMode;
   grounded: boolean;
+  /**
+   * §8.2's `missing_information` from the last synthesis, already through
+   * `cleanMissing`. Omitted from the note when empty: an answer that lacked
+   * nothing should carry no key saying so.
+   */
+  missing?: readonly string[];
   /** The model's prose, already stripped of its JSON block. */
   body: string;
   consulted: readonly AssembledNode[];
   /** The page table, so an alias of a retrieved page still resolves (§4). */
   pages?: readonly PageMeta[];
+  /**
+   * §7.1's snapshot, for the solid edges in the `## Add next` diagram — what
+   * the wiki already holds, against which the dashed additions read.
+   */
+  graph?: GraphSnapshot;
   trace: Trace;
 }
 
@@ -269,12 +318,15 @@ export interface AnswerNote {
  * everything is decided.
  */
 export function renderAnswerNote(note: AnswerNote): string {
+  const missing = note.missing ?? [];
   const frontmatter = serializeFrontmatter({
     kind: "answer",
     question: note.question,
     asked: note.asked,
     mode: note.mode,
     grounded: note.grounded,
+    // `serializeFrontmatter` drops `undefined`, so an empty list writes no key.
+    ...(missing.length === 0 ? {} : { missing: [...missing] }),
   });
 
   const parts: string[] = [];
@@ -285,6 +337,13 @@ export function renderAnswerNote(note: AnswerNote): string {
     "",
   );
   parts.push(renderSourcesBlock(note.consulted), "");
+  // Computed here rather than passed in, so the section and the `missing:` key
+  // are two renderings of one list and cannot report different things.
+  const addNext = renderGapsBlock(
+    answerGaps({ missing, consulted: note.consulted, pages: note.pages ?? [] }),
+    note.graph,
+  );
+  if (addNext !== "") parts.push(addNext, "");
   parts.push(writeTrace(note.trace));
 
   return `${frontmatter}${parts.join("\n")}\n`;

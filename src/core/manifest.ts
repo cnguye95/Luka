@@ -12,6 +12,7 @@ import type { FsAdapter } from "./adapters";
 import { decodeUtf8 } from "./hash";
 import { comparePaths, dirname } from "./paths";
 import type { IngestManifest, ManifestEntry } from "./types";
+import { readableMarkdown } from "./readable";
 
 /**
  * The hash recorded for a source that left the vault but whose §6.6 cascade
@@ -45,8 +46,7 @@ export function isPending(entry: ManifestEntry): boolean {
  * between two compiles.
  */
 export function readablePathOf(path: string, entry: ManifestEntry): string | null {
-  if (isPending(entry)) return null;
-  return entry.derivative ?? path;
+  return readableMarkdown(path, entry.derivative, isPending(entry));
 }
 
 export async function loadManifest(fs: FsAdapter, path: string): Promise<IngestManifest> {

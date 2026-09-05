@@ -23,7 +23,22 @@ const TRACE = [
 
 const NOTE_PATH = "answers/2026-08-20-1007 how-does-ranking-work.md";
 
-function note(over: { kind?: string } = {}): string {
+const ADD_NEXT = [
+  "<!-- gaps:start -->",
+  "## Add next",
+  "- **the dates** — the wiki could not answer this",
+  "",
+  "```mermaid",
+  "graph LR",
+  '  a(["This answer"])',
+  '  g0["the dates"]:::gap',
+  "  a -.- g0",
+  "  classDef gap stroke-dasharray:5 5,fill:none",
+  "```",
+  "<!-- gaps:end -->",
+].join("\n");
+
+function note(over: { kind?: string; addNext?: boolean } = {}): string {
   return [
     "---",
     `kind: ${over.kind ?? "answer"}`,
@@ -36,6 +51,7 @@ function note(over: { kind?: string } = {}): string {
     "",
     SOURCES,
     "",
+    ...(over.addNext === true ? [ADD_NEXT, ""] : []),
     TRACE,
     "",
   ].join("\n");
@@ -67,6 +83,47 @@ describe("filing moves the note into raw/answers/ (§8.4)", () => {
     expect(text).not.toContain("trace:start");
     expect(text).toContain("## Sources consulted");
     expect(text).toContain("- [[PageRank]]");
+  });
+
+  it("drops the Add next section with the trace", async () => {
+    // The section names pages that do not exist. Kept, the next compile's
+    // inventory would read those names as things this source asserts, and the
+    // wiki would grow a page out of a recommendation to write one.
+    const fs = new MemFs({ [NOTE_PATH]: note({ addNext: true }) });
+
+    const text = fs.text(await fileBack(fs, NOTE_PATH));
+
+    expect(text).not.toContain("## Add next");
+    expect(text).not.toContain("gaps:start");
+    expect(text).not.toContain("```mermaid");
+    // And what filing is for still survives.
+    expect(text).toContain("## Sources consulted");
+    expect(text).toContain("- [[PageRank]]");
+  });
+
+  it("files a note that named gaps to the same bytes as one that did not", async () => {
+    // So nothing downstream can tell the two apart, and the strip cannot leave
+    // a residue that shifts as the section grows.
+    const withSection = new MemFs({ [NOTE_PATH]: note({ addNext: true }) });
+    const without = new MemFs({ [NOTE_PATH]: note() });
+
+    const a = withSection.text(await fileBack(withSection, NOTE_PATH));
+    const b = without.text(await fileBack(without, NOTE_PATH));
+
+    expect(a).toBe(b);
+  });
+
+  it("keeps a missing list the answer carried", async () => {
+    // Filing strips this run's working — the trace and the Add next section —
+    // and nothing else, so the durable half of the gap signal survives into
+    // `raw/answers/`, where a later compile ingests the note as a source.
+    const fs = new MemFs({
+      [NOTE_PATH]: note().replace("grounded: true\n", "grounded: true\nmissing:\n  - the dates\n"),
+    });
+
+    const text = fs.text(await fileBack(fs, NOTE_PATH));
+
+    expect(text).toContain("missing:\n  - the dates");
   });
 
   it("keeps the frontmatter, so compile can still tell what it is", async () => {

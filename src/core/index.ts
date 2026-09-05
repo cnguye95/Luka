@@ -43,17 +43,12 @@ import { decodeUtf8 } from "./hash";
 import { OperationLock } from "./lock";
 import {
   CASCADE_PENDING,
-  isPending,
   isSameManifest,
   loadManifest,
+  readablePathOf,
   saveManifest,
 } from "./manifest";
-import {
-  derivativeOrigin,
-  formatForPath,
-  isPassthrough,
-  normalizeSource,
-} from "./normalize/index";
+import { derivativeOrigin, normalizeSource } from "./normalize/index";
 import { comparePaths, dirname, stem } from "./paths";
 import { createProvider } from "./provider/wrapper";
 import type { LLMProvider } from "./provider/types";
@@ -68,7 +63,7 @@ import {
   selectSeeds,
   type RankedNode,
 } from "./retrieve/pipeline";
-import { answerNotePath, renderAnswerNote, synthesize } from "./answer/synthesize";
+import { answerNotePath, cleanMissing, renderAnswerNote, synthesize } from "./answer/synthesize";
 import { fileBack } from "./answer/fileback";
 import { healthCheck } from "./health";
 import {
@@ -212,6 +207,25 @@ export interface InspectResult {
   ranked: RankedNode[];
 }
 
+export interface GetGraphOptions {
+  /**
+   * Walk the vault again even when a snapshot is cached.
+   *
+   * §7.1's trigger list — "at plugin load and after compile" — was read as a
+   * floor rather than a closed enumeration (BUILD-NOTES, 2026-09-02), because
+   * checklist §5.5 asks Refresh to see a compile run in another window or a
+   * vault sync, and neither fires this window's rebuild event. Any build in
+   * flight is retired first, so the answer describes the vault as it stands
+   * now rather than as it stood when an earlier walk began.
+   *
+   * Two forced reads at once join one walk. One taken while a compile holds
+   * the lock does not walk at all: it answers from the cache and leaves the
+   * publishing to the compile's own rebuild, which is the only walk that can
+   * see the vault whole. Neither waits on anything.
+   */
+  force?: boolean;
+}
+
 export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
   /** §5's read-only scope preview: no lock, no model call, no write. */
@@ -220,8 +234,11 @@ export interface Core {
    * §7.1's graph, built in memory and cached until the next compile. Async
    * because the build reads the vault, and §7.1 asks for one at plugin load —
    * which the plugin starts by calling this.
+   *
+   * `{ force: true }` walks the vault again and publishes what it finds to
+   * `onGraphRebuilt`, exactly as a compile's own rebuild does.
    */
-  getGraph(): Promise<GraphSnapshot>;
+  getGraph(options?: GetGraphOptions): Promise<GraphSnapshot>;
   /**
    * §5's `ask`: §7's retrieval into §8's answer note. Holds the operation lock
    * (invariant 2) and writes the note atomically on success only
@@ -259,8 +276,12 @@ export interface Core {
    */
   inspect(question: string): Promise<InspectResult>;
   /**
-   * §7.1: "Built in memory at plugin load and after compile." Returns an
-   * unsubscribe, so a view that closes stops hearing about rebuilds.
+   * §7.1: "Built in memory at plugin load and after compile" — and published
+   * again after a forced read, §9's Refresh, which §5 does not list because
+   * the force path is this branch's addition (BUILD-NOTES, 2026-09-02). A
+   * listener therefore hears from a gesture as well as from a compile.
+   * Returns an unsubscribe, so a view that closes stops hearing about
+   * rebuilds.
    */
   onGraphRebuilt(callback: (graph: GraphSnapshot) => void): () => void;
   readonly busyWith: OperationName | null;
@@ -270,9 +291,22 @@ export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
   // §7.1's graph lives here and nowhere on disk: "built in memory at plugin
   // load and after compile; no cache file". `building` collapses concurrent
-  // callers onto one build rather than letting two walk the vault at once.
+  // callers onto one build rather than letting two walk the vault at once —
+  // unforced callers here, forced ones on `forcing` below, and between them
+  // no gesture starts a second walk of the same vault.
   let graph: GraphSnapshot | null = null;
   let building: Promise<GraphSnapshot> | null = null;
+  /**
+   * The forced walk in flight, if any.
+   *
+   * `building` cannot collapse these: forcing retires the slot before it asks,
+   * which is the whole point of the flag, so two presses would start two walks
+   * and the first would be handed the *pre-refresh* cache by `currentOrNewer`
+   * — an answer older than the vault it was asked about. A second press joins
+   * the first walk instead. Refresh is a button, and a button gets pressed
+   * twice.
+   */
+  let forcing: Promise<GraphSnapshot> | null = null;
   const listeners = new Set<(graph: GraphSnapshot) => void>();
 
   /**
@@ -290,10 +324,27 @@ export function createCore(deps: CoreDeps): Core {
    */
   let generation = 0;
 
+  /**
+   * Whether a compile is rewriting the vault, and how many times that has
+   * started or stopped.
+   *
+   * `generation` cannot answer this. It is bumped by whoever wants a fresh
+   * walk — including the forced read itself, which retires the old slot and
+   * then matches the value it just set. What a walk needs to know instead is
+   * whether the *vault* was being rewritten at any point while it read, and
+   * that is a question only answerable when it lands.
+   */
+  let writing = false;
+  let writeEpoch = 0;
+
   function rebuildGraph(): Promise<GraphSnapshot> {
     if (building !== null) return building;
 
     const mine = generation;
+    // Sampled at both ends: `writing` catches a walk that began inside the
+    // phase, and a moved epoch catches one the phase began or ended under.
+    const wroteAtStart = writing;
+    const epochAtStart = writeEpoch;
     // A handle on this build's own promise, so the cleanup below can tell
     // whether it still owns the slot.
     const own: { promise: Promise<GraphSnapshot> | null } = { promise: null };
@@ -301,12 +352,19 @@ export function createCore(deps: CoreDeps): Core {
     own.promise = buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath })
       .then((built) => {
         // A newer generation means the vault moved while this walked, so this
-        // is not the cached answer for anyone.
-        if (mine === generation) {
+        // is not the cached answer for anyone. Nor is a walk that overlapped a
+        // compile's writes: `wiki/` and the manifest are committed at
+        // different moments, so such a walk describes a vault that never
+        // existed. The compile's own rebuild publishes the real one.
+        const overlappedWrites = wroteAtStart || epochAtStart !== writeEpoch;
+        if (mine === generation && !overlappedWrites) {
           graph = built;
           for (const listener of listeners) listener(built);
         }
-        return currentOrNewer(built, mine);
+        // Not published, and not handed back either: a snapshot of a vault
+        // that never existed is no better an answer for the caller who asked
+        // than for everyone else.
+        return currentOrNewer(built, mine, overlappedWrites);
       })
       .finally(() => {
         // Only if this build still owns the slot. `invalidateGraph` may have
@@ -334,9 +392,15 @@ export function createCore(deps: CoreDeps): Core {
    * for, and the pane assigns whatever it is given. So a refresh racing a
    * compile overwrote the fresh graph it had just been notified of with the
    * older one it was awaiting, and stayed stale until the next compile.
+   *
+   * Accepted, and worth stating because it is not free: this drops what a
+   * superseded walk read. That is right when the walk that superseded it
+   * publishes, which is every case but one — a compile whose own rebuild then
+   * fails leaves the cache at the pre-compile snapshot with nothing to correct
+   * it. The recovery is a Refresh, which by then is not busy and walks.
    */
-  function currentOrNewer(built: GraphSnapshot, mine: number): GraphSnapshot {
-    return mine === generation || graph === null ? built : graph;
+  function currentOrNewer(built: GraphSnapshot, mine: number, superseded: boolean): GraphSnapshot {
+    return (mine === generation && !superseded) || graph === null ? built : graph;
   }
 
   // `deps` is passed through, not copied. The plugin mutates its settings
@@ -345,7 +409,31 @@ export function createCore(deps: CoreDeps): Core {
   // when the call is made. Each run makes §17's numbers safe for itself.
   return {
     compile: async (options: CompileOptions = {}) => {
-      const result = await lock.run("compile", () => runCompile(deps, options));
+      // Two signals, because a walk can overlap the phase from either side: a
+      // walk already in flight when writing begins is caught by the epoch it
+      // sampled, and one that starts while writing is caught by the flag.
+      // Between them no walk overlapping the phase can publish, whatever its
+      // timing. `end` runs in a `finally` because a compile that throws has
+      // still stopped writing, and a flag left set would silence every later
+      // walk for the rest of the session.
+      const writes: WritePhase = {
+        begin: () => {
+          writing = true;
+          writeEpoch += 1;
+          // A walk already in flight cannot describe what is about to be
+          // written either, so retire it as well.
+          invalidateGraph();
+        },
+        end: () => {
+          writing = false;
+        },
+      };
+      let result: CompileResult;
+      try {
+        result = await lock.run("compile", () => runCompile(deps, options, writes));
+      } finally {
+        writes.end();
+      }
       // "and after compile" (§7.1). A declined preview changed nothing, so
       // there is nothing to rebuild from.
       if (!result.cancelled) {
@@ -367,7 +455,30 @@ export function createCore(deps: CoreDeps): Core {
           ...(deps.now === undefined ? {} : { now: deps.now }),
         }),
       ),
-    getGraph: () => (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+    getGraph: (options: GetGraphOptions = {}) => {
+      if (options.force === true) {
+        // One walk per gesture, however many times the button is pressed.
+        if (forcing !== null) return forcing;
+        // Nothing here asks whether a compile is running. A walk taken during
+        // one is free to go: it will simply not publish, because `compile`
+        // retires the generation at both edges of its write phase. That rule
+        // is checked when the walk lands rather than when it starts, which is
+        // the only point at which "did this overlap the writes" can be
+        // answered — and it leaves the scope preview, which holds the lock and
+        // writes nothing, a perfectly good moment to refresh.
+        //
+        // Retire first, exactly as `compile` does: joining a walk that
+        // began before this moment would answer a Refresh with the past, and
+        // the point of the flag is that the caller has reason to think the
+        // vault moved without this window hearing about it.
+        invalidateGraph();
+        forcing = rebuildGraph().finally(() => {
+          forcing = null;
+        });
+        return forcing;
+      }
+      return graph === null ? rebuildGraph() : Promise.resolve(graph);
+    },
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);
       return computePPR(await (graph === null ? rebuildGraph() : Promise.resolve(graph)), seedPaths, {
@@ -592,8 +703,15 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     asked: asked.toISOString(),
     mode,
     grounded,
+    // The *last* synthesis's list: `reply` is reassigned by the follow-up
+    // round above, and §8.2's one expansion is the wiki's own attempt to close
+    // the gap — so what is still missing afterwards is what it could not.
+    missing: cleanMissing(reply.missing),
     body: reply.body,
     consulted: assembly.nodes,
+    // For the solid edges in `## Add next`: what the wiki already holds, so
+    // the dashed additions read against it.
+    graph,
     pages,
     trace: {
       mode,
@@ -688,7 +806,26 @@ function countingProvider(inner: LLMProvider, onCall: () => void): LLMProvider {
   };
 }
 
-async function runCompile(input: CoreDeps, options: CompileOptions): Promise<CompileResult> {
+/**
+ * How `runCompile` tells the façade that the vault is being rewritten.
+ *
+ * §7.1's graph is read from `wiki/` and the manifest, and the manifest is
+ * committed last — so for the whole write phase those two describe different
+ * moments, and a walk that reads both sees a vault that never existed. The
+ * façade closes that by retiring any walk which overlaps the phase; it cannot
+ * work the boundaries out for itself, because the lock is held across the
+ * scope preview too, where nothing is written and a walk is perfectly safe.
+ */
+interface WritePhase {
+  begin(): void;
+  end(): void;
+}
+
+async function runCompile(
+  input: CoreDeps,
+  options: CompileOptions,
+  writes: WritePhase,
+): Promise<CompileResult> {
   // One consistent settings state for the whole run, taken now rather than at
   // `createCore`, so a key typed since load is seen and a key typed mid-run
   // cannot change the rules underneath a compile already in flight.
@@ -728,6 +865,11 @@ async function runCompile(input: CoreDeps, options: CompileOptions): Promise<Com
     const preview = cascadeScope(pages, citations, discovery);
     if (!(await options.confirm(preview))) return cancelled(discovery);
   }
+
+  // Everything above this line reads. Everything below it writes, and the
+  // manifest that reconciles those writes is not committed until the end, so
+  // this is where a concurrent walk starts seeing a vault that never existed.
+  writes.begin();
 
   const today = (deps.now?.() ?? new Date()).toISOString().slice(0, 10);
   const normalizeDeps = {
@@ -1480,16 +1622,15 @@ async function readableFromManifest(
   // of the manifest object and be read as a manifested source.
   if (!Object.hasOwn(manifest, path)) return null;
   const entry = manifest[path] as ManifestEntry;
-  // A pending source has left the vault entirely; there is nothing to read.
-  if (isPending(entry)) return null;
+  // Where §7.1 says the markdown is — including its `null`s, which are a
+  // pending source (gone from the vault) and a converting source whose
+  // derivative was never located. Handing back the source itself for the
+  // second would put a PDF's raw bytes into a Call B prompt under the label of
+  // its extracted text.
+  const target = readablePathOf(path, entry);
+  if (target === null) return null;
 
-  if (entry.derivative === undefined) {
-    // Only a passthrough source is its own readable markdown. A *converting*
-    // source with no pointer is an entry written before ownership was recorded,
-    // so its derivative has not been located — and handing back the source
-    // itself would put a PDF's raw bytes in a Call B prompt under its label.
-    const format = formatForPath(path);
-    if (format === null || !isPassthrough(format)) return null;
+  if (target === path) {
     // A file, checked — not assumed. Reading a path that has gone would throw
     // an error no caller classifies as an unreadable citer, and that blocks
     // every *other* citer of the page rather than costing this one. A `stat`
@@ -1510,7 +1651,7 @@ async function readableFromManifest(
   // would reach the caller as an unclassified error, which blocks every *other*
   // citer of the page instead.
   try {
-    return (await derivativeOrigin(fs, entry.derivative)) === path ? entry.derivative : null;
+    return (await derivativeOrigin(fs, target)) === path ? target : null;
   } catch {
     return null;
   }

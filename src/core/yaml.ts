@@ -55,7 +55,11 @@ const FENCE = /^(---[ \t]*\r?\n)((?:[\s\S]*?\r?\n)?)(---[ \t]*(?:\r?\n|$))/;
  */
 const OPENING_FENCE = /^---[ \t]*\r?\n/;
 
-/** The order §4 lists these keys in; anything else is appended alphabetically. */
+/**
+ * The order §4 lists these keys in, plus `missing` after `grounded` — a
+ * recorded §4 deviation, not one of its keys. Anything else is appended
+ * alphabetically.
+ */
 const KEY_ORDER = [
   "kind",
   "ingested",
@@ -70,6 +74,7 @@ const KEY_ORDER = [
   "asked",
   "mode",
   "grounded",
+  "missing",
 ];
 
 export function parseFrontmatter(text: string): ParsedFrontmatter {

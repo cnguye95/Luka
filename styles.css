@@ -1,7 +1,8 @@
 /*
- * §9's graph pane. Layout only — every colour the pane draws is sampled from
- * Obsidian's CSS variables at render time, in `graph-view/render.ts`, so a
- * theme switch is picked up without reopening the view.
+ * §9's graph pane. Layout, and no literal colours: what the canvas draws is
+ * sampled from Obsidian's CSS variables at render time in `graph-view/
+ * render.ts`, and everything here goes through `var()`, so a theme switch is
+ * picked up without reopening the view.
  */
 
 .luka-graph-view {
