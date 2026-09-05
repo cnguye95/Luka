@@ -2876,6 +2876,37 @@ and mechanisms are what rot when the platform underneath them differs from the
 one the author had in mind. The items that survived this pass unchanged are the
 ones that name what should be true, and leave how to see it to the reader.
 
+### The pane's rendering limit is edges, not nodes (checklist §16.1, §15's AC)
+
+Measured while running §16.1 against two generated vaults of identical node
+count. Both had 520 pages; only the link density differed.
+
+| edges | per node | panning |
+|---|---|---|
+| 2080 | 4.00 | visibly delayed |
+| 1040 | 2.00 | smooth |
+
+Standing labels dropped correctly in both, and hover kept labelling the node
+under the cursor — §9's "drop labels first" degradation works as specified, and
+that half of §16.1 passes outright.
+
+What does not hold is the variable the item measures. §16.1 says "on a vault of
+500+ nodes" and §15's AC says "target smooth pan/zoom at 500+ nodes", but node
+count is not what the frame budget is spent on: `draw` strokes every edge in
+one pass before painting any node, so a 300-node vault at four links each would
+stutter where a 900-node vault at 1.5 would not. The demo corpus sits at 2.46
+per node, so a realistic vault reaches the node threshold long before the edge
+one — which is presumably why the wording has survived.
+
+Worth recording that the first run looked like a defect and was not. The vault
+was generated at 4.00 links per node, 1.6x the demo's own density and 2.7x
+§7.3's predicate floor, because the spec states no density and the number was
+picked without thinking about it. Re-running at 2.00 answered in one attempt
+what re-reading the render path would not have.
+
+No code change is implied. The honest fix is to the wording — state the AC in
+edges, or in both — and that is a §15 decision rather than a §9 one.
+
 ### A page alias can hijack a raw node's handle (§7.1)
 
 Found while sizing the "what to add next" pane against `test-vault`. That
@@ -2906,3 +2937,92 @@ only; claim manifest handles before page aliases; or refuse an alias beginning
 `raw/` when the page table is loaded. Each touches `build.ts`, which CLAUDE.md
 names as the seam where `GraphNode` changes reach the rename path, so it wants
 its own commit with the 7/1 mutation counts re-run — not a fold into a feature.
+
+## §14 closeout — what the manual pass found
+
+95 items at the close of the pass. **92 ticked, 2 failed, 1 N/A.** Both
+failures are logged with a cause and a named fix; the N/A is §13.6's
+vault-local `.trash/`, which cannot arise on a platform whose deletes reach a
+system trash. (This branch has since added five items the pass never saw — one
+for the `missing:` key and four for the `## Add next` section — so the list
+reads 100 here, and the five are unticked.)
+
+**Three defects were fixed during the pass**, two of them merged from parallel
+branches and confirmed by hand afterwards. The third was fixed immediately
+because nothing else could run until it was: with the recorded default models,
+`inventory` replies arrived inside a ```` ```json ```` fence, the repair retry
+re-asked the same model and got the same fence, and **compile could not complete
+at all** — no manifest, no `wiki/`, seven failure notices. The checklist's first
+paid item found it in its first minute.
+
+**Four defects remain open**, none blocking: the context budget drops ranked
+pages silently, a title-duplicating heading survived into one page in
+twenty-nine, a no-op compile still reheats a settled layout, and Refresh cannot
+re-read the vault. The last two are fixed on `claude/what-to-add-next` and will
+need the same hand-verification the graph fixes got before they can be closed.
+
+**Three of the findings are about §14 itself**, and they share a shape worth
+naming. §8.7 says to make a file unreadable by turning it into a directory —
+Obsidian's adapter classifies by type, so the page table skips it and no read is
+ever attempted. §8.1, §8.4, §11.5 and §12.1 say to watch the developer tools
+network panel — the plugin reaches the API through `requestUrl`, which runs in
+Electron's main process, so no request ever appears there whatever happens.
+§13.3 says to trigger Compile while the scope modal is open — a modal captures
+the keyboard scope, so the command cannot be dispatched. In each case the
+property held and the *method* could not reach it.
+
+The common fault: each names a **mechanism** rather than an **outcome** — "a
+directory", "the network panel", "trigger it again" — and a mechanism is a
+guess about the platform underneath. §16.1 fails the same way for a different
+reason: it measures node count when the frame budget is spent on edges. The
+items that survived this pass untouched are the ones that say what should be
+true and leave the reader to find a way to see it.
+
+**Two findings came from tests that could not fail.** `inventory.test.ts` had a
+case named for the fenced-JSON failure whose stub complied on the retry, so it
+asserted recovery works *when the model cooperates* — the one condition under
+which the bug is invisible. The click-pins fix arrived with eight new tests,
+and reverting `view.ts` — the file that held the defect — left all 51 passing,
+because every one of them exercised the extracted module and none the wiring.
+That is the tenth and eleventh instance of the shape this log has been
+counting since M3.
+
+**What only a human could have found:** that deletes reach the Windows Recycle
+Bin with their original paths intact (§13.5, tested against in-memory and Node
+filesystems everywhere else); that a `graph pane` link stayed a dangling
+candidate because a hand-written page without `kind` frontmatter is not a page;
+that the health report is byte-identical across runs but only once you stop
+moving the vault between them.
+
+### A destructive setup step whose cleanup was promised rather than performed
+
+Recorded because it nearly left the vault in a state no reader would have
+diagnosed.
+
+§8.7 asks for a file under `wiki/` that exists and cannot be read. The
+checklist's own suggestion — make it a directory — does not produce that
+through Obsidian's adapter, so the condition was created the other way the item
+names: a deny-read ACL on one page, `icacls <file> /deny <user>:(R)`. The check
+passed, the notice named the file and the error, and the pane fell back to its
+empty state exactly as §8.7 asks.
+
+The ACL was never removed. The intention was stated in the same breath as the
+setup — unlock it immediately, either way — and then the pass moved to the next
+item and the promise went with it. What cleaned it up was §13.4's cascade
+deleting that page four sections later, for reasons having nothing to do with
+the lock. Had `Damping factor` not happened to cite `page.html` alone, the file
+would still be unreadable, and the next compile would have failed with an EPERM
+naming a file nobody had touched in hours.
+
+The general form is worth naming: **a setup step that changes state outside the
+repository should carry its own teardown, in the same action, not in a later
+intention.** The vault edits in this pass were safe because they were
+reversible by writing a file back — a checksum could prove it. A permission
+change is not that: nothing in the vault records it, no later check would
+notice it, and the only evidence it ever happened is a sentence in a
+conversation.
+
+Two other setup steps in this pass had the same shape and got away with it for
+the same reason — the hand-written `graph pane.md` under `wiki/` for §14.3, and
+the `Refresh Probe.md` for §5.5. Both were deleted, but both were deleted
+because the next message happened to remember them.

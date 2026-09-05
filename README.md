@@ -565,12 +565,12 @@ two items here the highest-value pair in the list.
 
 ### 15. Settings detail
 
-- [ ] The settings tab shows a **Retrieval** section: context budget, pages per
+- [x] The settings tab shows a **Retrieval** section: context budget, pages per
       answer, both graph-mode thresholds, and a follow-up toggle.
-- [ ] **Advanced (PageRank)** is collapsed by default and expands to damping,
+- [x] **Advanced (PageRank)** is collapsed by default and expands to damping,
       maximum iterations, and a convergence threshold that is visible but not
       editable.
-- [ ] Editing a numeric field and reloading Obsidian keeps the new value;
+- [x] Editing a numeric field and reloading Obsidian keeps the new value;
       typing nonsense into one and reloading falls back to the documented
       default rather than breaking compile.
 
@@ -578,14 +578,14 @@ two items here the highest-value pair in the list.
 
 Least likely to matter, and the 500-node item needs a vault you may not have.
 
-- [ ] On a vault of 500+ nodes the standing labels disappear and panning stays
+- [x] On a vault of 500+ nodes the standing labels disappear and panning stays
       smooth. (§9's "drop labels first".)
 - [x] Compile enough sources to pass the predicate (20+ nodes and 1.5+ link
       pairs per node). After the refresh, the banner disappears.
-- [ ] A markdown source with **two or more** reachable remote images localizes
+- [x] A markdown source with **two or more** reachable remote images localizes
       all of them on its *first* compile, with no source failing. (§6.3 fetches
       four at a time into a `raw/assets/` folder none of them has created yet.)
-- [ ] Hand-editing `.obsidian/plugins/luka/data.json` to
+- [x] Hand-editing `.obsidian/plugins/luka/data.json` to
       `"contextBudgetTokens": 0`, `"compileConcurrency": "two"` or
       `"requestTimeoutMs": 0` and compiling still behaves: the run completes,
       pages keep their grounding, and nothing is rewritten from an empty
