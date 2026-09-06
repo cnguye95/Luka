@@ -2713,6 +2713,30 @@ answer.
 
 ### Context-budget exhaustion is not reported to the user (§7.4 step 4, §8.3)
 
+**Status (2026-09-06): one of two losses fixed; the silent drop stands.** The
+follow-up round called `assemble` with the same first-item rule as round one,
+so a remnant of a few tokens tail-truncated the first candidate to little more
+than the marker, `extra.nodes.length > 0` held, and invariant 12's third call
+was spent on a fragment that `## Sources consulted` then listed as read. §7.4's
+exception is for a page over the *whole* budget; §8.2 appends "under the
+remaining" one. `packUnderBudget` takes `truncateFirst`, `assemble` exposes it
+as `wholeOnly`, and only the follow-up round passes it — a remnant that holds no
+page whole appends nothing, and the round does not run. Pinned at the packer
+and end to end. The end-to-end test first passed *without* the fix: in Mode A
+the seed page scores nothing, the page assembled is the source page whose
+summary says "ranking", and it filled the budget exactly, so `remaining` was
+zero and the round was skipped before the rule was reached. It now sizes the
+budget from that page and pins the assumption through `top:` — the same shape
+as the tests this log has counted since M3, caught before it was committed.
+
+The verification pass also found, all still open: the compile side already
+names its drops (`generate.ts`, "Omitted for budget: …"), so retrieval's fix
+need not wait on a trace-grammar decision; `writeTrace`'s `TOP_LIMIT` of 10
+against K = 12 is a third silent channel, mandated by §8.3's "at most 10";
+round-2 entries are written with `score: 0` because `ranked.find` searches
+round one's list; and `parseTrace` ignores an unknown field line without
+counting it in `unparsed`, which any `dropped:` line would have to fix first.
+
 Found during the §14 manual-checklist setup, from reading rather than from a
 failing test. Not yet fixed; recorded so the next pass over §8.3 picks it up.
 

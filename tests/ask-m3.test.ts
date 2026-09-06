@@ -15,6 +15,8 @@ import {
   type Trace,
 } from "../src/core/index";
 import { decodeUtf8 } from "../src/core/hash";
+import { estimateTokens } from "../src/core/tokens";
+import { parseFrontmatter } from "../src/core/yaml";
 import { linkTargets } from "../src/core/compile/links";
 import { BusyError } from "../src/core/lock";
 import { DEFAULT_SETTINGS } from "../src/core/types";
@@ -544,6 +546,34 @@ describe("§8.2's follow-up round", () => {
 
     expect(result.round2).toBe(false);
     expect(provider.stats().byTask.synthesis).toBe(1);
+  });
+
+  it("appends nothing when the remaining budget holds no page whole (§7.4, §8.2)", async () => {
+    // §7.4's tail-truncation is for a page over the *whole* budget. The
+    // follow-up round packs into what the first round left; when that remnant
+    // fits no candidate whole, appending a page cut to a few characters would
+    // spend the third call on a fragment and list the page as read.
+    const fs = await twoPages();
+    const convergence = "wiki/concepts/Convergence.md";
+    await fs.write(convergence, `${fs.text(convergence)}\n${"Iterations. ".repeat(200)}`);
+    // A budget the first round fills to within a few tokens. In Mode A the seed
+    // page itself scores nothing; the page ranked is the source page whose
+    // summary says "ranking", and the `top:` assertion below pins that so the
+    // remnant really is four tokens rather than zero, which would skip the
+    // round before this rule is reached.
+    const first = parseFrontmatter(fs.text("wiki/sources/one.md")).body;
+    const budget = estimateTokens(first) + 4;
+    const provider = expanding(["convergence"]);
+
+    const result = await core(fs, provider, {
+      settings: { ...DEFAULT_SETTINGS, apiKey: "k", contextBudgetTokens: budget },
+    }).ask("How does ranking work?");
+
+    const note = fs.text(result.path);
+    expect(traceList(note, "top")).toEqual(["[[one]] 2.0000"]);
+    expect(result.round2).toBe(false);
+    expect(provider.stats().byTask.synthesis).toBe(1);
+    expect(note).not.toContain("[[Convergence]]");
   });
 
   it("does not append a page the first round already had", async () => {

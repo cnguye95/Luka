@@ -682,7 +682,12 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     const room = deps.settings.assemblyCap - assembly.nodes.length;
 
     if (candidates.length > 0 && remaining > 0 && room > 0) {
-      const extra = await assemble(deps.fs, candidates, remaining, room);
+      // Whole pages only. §7.4 lets a page over the *whole* budget be
+      // tail-truncated; this round packs into what the first left, and a
+      // remnant that holds no page whole must append nothing — a page cut to
+      // a few characters would still count as "something new to read" below
+      // and spend the third call on a fragment while listing the page as read.
+      const extra = await assemble(deps.fs, candidates, remaining, room, { wholeOnly: true });
       // A second synthesis is only worth a model call if it has something new
       // to read. Nothing appended means the round would ask the same question
       // of the same context and spend invariant 12's third call on it.

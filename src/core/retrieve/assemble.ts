@@ -30,6 +30,15 @@ export interface Assembly {
   usedTokens: number;
 }
 
+export interface AssembleOptions {
+  /**
+   * Take only nodes that fit whole. §7.4's tail-truncation is for a page over
+   * the *whole* budget; a round packing into the remainder of one (§8.2) has
+   * no such licence, so a first node that does not fit is dropped instead.
+   */
+  wholeOnly?: boolean;
+}
+
 /**
  * Reads the ranked nodes in order and packs as many whole ones as the budget
  * holds.
@@ -44,6 +53,7 @@ export async function assemble(
   ranked: readonly RankedNode[],
   budgetTokens: number,
   cap: number,
+  options: AssembleOptions = {},
 ): Promise<Assembly> {
   const readable: { node: RankedNode; text: string }[] = [];
   for (const node of ranked) {
@@ -60,7 +70,13 @@ export async function assemble(
     readable.push({ node, text });
   }
 
-  const packed = packUnderBudget(readable, (item) => item.text, budgetTokens, cap);
+  const packed = packUnderBudget(
+    readable,
+    (item) => item.text,
+    budgetTokens,
+    cap,
+    options.wholeOnly !== true,
+  );
 
   const nodes: AssembledNode[] = packed.items.map((item, at) => {
     const text = packed.texts[at] as string;

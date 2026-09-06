@@ -54,12 +54,19 @@ export interface Packed<T> {
  * tail-truncated with the marker" — so the first item is truncated rather
  * than dropped, which is the only way a budget smaller than one page still
  * yields context.
+ *
+ * That exception is for the *whole* budget. A caller packing into what is
+ * left of one — §8.2's follow-up round, which appends "under the remaining
+ * context budget" — passes `truncateFirst: false`, and a first item that does
+ * not fit is dropped like any other: a remnant that holds no page whole yields
+ * nothing, rather than a fragment a model call would then be spent on.
  */
 export function packUnderBudget<T>(
   items: readonly T[],
   getText: (item: T) => string,
   budgetTokens: number,
   maxItems?: number,
+  truncateFirst = true,
 ): Packed<T> {
   const limit = maxItems === undefined ? items.length : Math.max(0, maxItems);
   const chosen: T[] = [];
@@ -78,7 +85,7 @@ export function packUnderBudget<T>(
       continue;
     }
 
-    if (chosen.length === 0) {
+    if (chosen.length === 0 && truncateFirst) {
       const cut = truncateToTokens(text, budgetTokens);
       chosen.push(item);
       texts.push(cut.text);
