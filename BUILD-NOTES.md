@@ -2646,7 +2646,7 @@ covered under vitest:
 pins that `replace` reports no reheat and still carries metadata, but whether a
 settled layout *visibly* holds still needs a real vault:
 
-- [ ] §4.7: with the pane open and settled, run a second **Compile** that
+- [x] §4.7: with the pane open and settled, run a second **Compile** that
       reports "nothing to do". Nothing moves at all.
 - [ ] §5.4 again: a compile that really changes a source still updates the
       counts, and the new node appears and settles.
@@ -2659,7 +2659,7 @@ settled layout *visibly* holds still needs a real vault:
 covers the core call; the button and the two triggers §5.5 names cannot be
 reached under vitest:
 
-- [ ] §5.5: write a page into `wiki/concepts/` from outside Obsidian — with
+- [x] §5.5: write a page into `wiki/concepts/` from outside Obsidian — with
       `kind: concept` in its frontmatter, or `loadPageTable` skips it and the
       counts correctly do not move — then press **Refresh**. The counts rise by
       that page and by each of its links that resolves.
@@ -2667,7 +2667,7 @@ reached under vitest:
       the cache and does not walk.
 - [ ] Press **Refresh** on an unchanged vault: the counts stay the same and the
       layout does not move (this is the guard above, on the new trigger).
-- [ ] Press **Refresh** three times quickly: the counts update once and the
+- [x] Press **Refresh** three times quickly: the counts update once and the
       layout settles once, not once per press.
 - [ ] Press **Refresh** while a compile is running in this window: nothing
       changes until the compile finishes, and then the counts are the
