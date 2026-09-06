@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   forceIncludeSeeds,
   modeOf,
+  rankByScores,
   rankModeA,
   rankModeB,
   selectSeeds,
@@ -170,6 +171,56 @@ describe("§7.4 step 2: force-inclusion", () => {
 });
 
 describe("§7.4 step 3: ranking", () => {
+  // Fed a hand-written score map rather than a walk: the point of the split is
+  // that ranking is a pure function of scores, and deriving the input from
+  // `computePPR` would make this agree with whatever the walk does.
+  it("ranks the nodes a walk reached, carrying title and kind from the graph", () => {
+    const graph: GraphSnapshot = {
+      nodes: [
+        { path: "raw/paper.md", title: "paper.md", kind: "raw", degree: 1, summary: "" },
+        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 1, summary: "" },
+        { path: "wiki/concepts/Z.md", title: "Z", kind: "concept", degree: 0, summary: "" },
+      ],
+      edges: [{ a: "raw/paper.md", b: "wiki/concepts/A.md" }],
+    };
+
+    const ranked = rankByScores(
+      graph,
+      // `Z` was reached with nothing and `ghost` is not on the graph at all.
+      new Map([
+        ["raw/paper.md", 0.5],
+        ["wiki/concepts/A.md", 0.2],
+        ["wiki/concepts/Z.md", 0],
+        ["wiki/concepts/ghost.md", 0.9],
+      ]),
+    );
+
+    expect(ranked).toEqual([
+      { path: "raw/paper.md", title: "paper.md", kind: "raw", score: 0.5 },
+      { path: "wiki/concepts/A.md", title: "A", kind: "concept", score: 0.2 },
+    ]);
+  });
+
+  it("breaks a tie lexicographically by path (§7.2)", () => {
+    const graph: GraphSnapshot = {
+      nodes: [
+        { path: "wiki/concepts/B.md", title: "B", kind: "concept", degree: 0, summary: "" },
+        { path: "wiki/concepts/A.md", title: "A", kind: "concept", degree: 0, summary: "" },
+      ],
+      edges: [],
+    };
+
+    const tied = new Map([
+      ["wiki/concepts/A.md", 0.25],
+      ["wiki/concepts/B.md", 0.25],
+    ]);
+
+    expect(rankByScores(graph, tied).map((node) => node.path)).toEqual([
+      "wiki/concepts/A.md",
+      "wiki/concepts/B.md",
+    ]);
+  });
+
   it("Mode B ranks raw source nodes alongside wiki pages", async () => {
     const graph: GraphSnapshot = {
       nodes: [

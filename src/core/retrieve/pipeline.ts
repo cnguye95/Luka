@@ -13,7 +13,7 @@ import { decodeUtf8 } from "../hash";
 import { comparePaths } from "../paths";
 import { handleOf } from "../compile/pagetable";
 import { parseFrontmatter } from "../yaml";
-import { computePPR } from "../graph/ppr";
+import { computePPR, type PPROptions } from "../graph/ppr";
 import { lexicalScore } from "./lexical";
 import type { LLMProvider } from "../provider/types";
 import type { GraphSnapshot, LukaSettings, PageKind, PageMeta, RetrievalMode } from "../types";
@@ -122,18 +122,26 @@ function byScoreThenPath(a: RankedNode, b: RankedNode): number {
 }
 
 /**
- * §7.4 step 3, Mode B: PPR over the *full* graph — wiki pages and raw source
- * nodes alike, which is what lets step 4 assemble source content in this mode.
+ * §7.2's two settings, as `computePPR` wants them.
+ *
+ * Shared so the three callers that rank a walk — Mode B, the pane's click-PPR,
+ * and §9's query inspection — cannot drift apart on α or the iteration ceiling.
  */
-export function rankModeB(
+export function pprOptions(settings: LukaSettings): PPROptions {
+  return { alpha: settings.pprAlpha, maxIterations: settings.pprMaxIterations };
+}
+
+/**
+ * §7.4 step 3's ranking, given a walk that has already run.
+ *
+ * Split from `rankModeB` so a caller that needs the walk itself — §9's
+ * scrubber wants its per-iteration vectors — can rank the very walk it
+ * retained rather than running a second one and hoping the two agree.
+ */
+export function rankByScores(
   graph: GraphSnapshot,
-  seedPaths: readonly string[],
-  settings: LukaSettings,
+  scores: ReadonlyMap<string, number>,
 ): RankedNode[] {
-  const { scores } = computePPR(graph, seedPaths, {
-    alpha: settings.pprAlpha,
-    maxIterations: settings.pprMaxIterations,
-  });
   const ranked: RankedNode[] = [];
   for (const node of graph.nodes) {
     const score = scores.get(node.path) ?? 0;
@@ -142,6 +150,18 @@ export function rankModeB(
     ranked.push({ path: node.path, title: node.title, kind: node.kind, score });
   }
   return ranked.sort(byScoreThenPath);
+}
+
+/**
+ * §7.4 step 3, Mode B: PPR over the *full* graph — wiki pages and raw source
+ * nodes alike, which is what lets step 4 assemble source content in this mode.
+ */
+export function rankModeB(
+  graph: GraphSnapshot,
+  seedPaths: readonly string[],
+  settings: LukaSettings,
+): RankedNode[] {
+  return rankByScores(graph, computePPR(graph, seedPaths, pprOptions(settings)).scores);
 }
 
 /**

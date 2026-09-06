@@ -58,6 +58,8 @@ import { assemble } from "./retrieve/assemble";
 import {
   forceIncludeSeeds,
   modeOf,
+  pprOptions,
+  rankByScores,
   rankModeA,
   rankModeB,
   selectSeeds,
@@ -205,6 +207,23 @@ export interface InspectResult {
   keywords: string[];
   /** §7.4 step 3's ranking, best first. */
   ranked: RankedNode[];
+  /**
+   * §7.2's per-iteration vectors, for §9's scrubber — Mode B only, and only
+   * when `InspectOptions.snapshots` asked for them.
+   *
+   * These are the walk that produced `ranked`, not a second one seeded the
+   * same way. A re-run would agree today and would stop agreeing the moment
+   * anything about the ranking's inputs moved, which is the class of drift
+   * §9's overlay exists to make visible rather than to introduce.
+   */
+  snapshots?: ReadonlyMap<string, number>[];
+  /** How many iterations that walk took. Present exactly when `snapshots` is. */
+  iterations?: number;
+}
+
+export interface InspectOptions {
+  /** Retain §7.2's per-iteration vectors (≤ 100). Mode B only. */
+  snapshots?: boolean;
 }
 
 export interface GetGraphOptions {
@@ -274,7 +293,7 @@ export interface Core {
    * Takes no lock and writes nothing, so it answers while a compile runs —
    * §9's pane is never blocked by the lock.
    */
-  inspect(question: string): Promise<InspectResult>;
+  inspect(question: string, options?: InspectOptions): Promise<InspectResult>;
   /**
    * §7.1: "Built in memory at plugin load and after compile" — and published
    * again after a forced read, §9's Refresh, which §5 does not list because
@@ -499,15 +518,19 @@ export function createCore(deps: CoreDeps): Core {
     computePPR: async (seedPaths, options = {}) => {
       const settings = normalizeSettings(deps.settings);
       return computePPR(await (graph === null ? rebuildGraph() : Promise.resolve(graph)), seedPaths, {
-        alpha: settings.pprAlpha,
-        maxIterations: settings.pprMaxIterations,
+        ...pprOptions(settings),
         ...(options.snapshots === true ? { snapshots: true } : {}),
       });
     },
     // Outside the lock, like `computePPR` and for the same reason: it writes
     // nothing, and §9's pane is never blocked by the lock.
-    inspect: async (question: string) =>
-      runInspect(deps, await (graph === null ? rebuildGraph() : Promise.resolve(graph)), question),
+    inspect: async (question: string, options?: InspectOptions) =>
+      runInspect(
+        deps,
+        await (graph === null ? rebuildGraph() : Promise.resolve(graph)),
+        question,
+        options,
+      ),
     onGraphRebuilt: (callback: (graph: GraphSnapshot) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);
@@ -542,6 +565,7 @@ async function runInspect(
   input: CoreDeps,
   graph: GraphSnapshot,
   question: string,
+  options: InspectOptions = {},
 ): Promise<InspectResult> {
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
@@ -581,12 +605,30 @@ async function runInspect(
 
   // §7.3: the seed call runs in both modes; the mode governs ranking only.
   const mode = modeOf(graph, deps.settings);
-  const ranked =
-    mode === "B"
-      ? rankModeB(graph, seeds, deps.settings)
-      : await rankModeA(deps.fs, candidates, seeds, chosen.keywords);
 
-  return { mode, seeds, keywords: chosen.keywords, ranked };
+  if (mode !== "B") {
+    const ranked = await rankModeA(deps.fs, candidates, seeds, chosen.keywords);
+    // §9 gives Mode A "seeds and lexical top-K without a PPR heat ramp": there
+    // is no walk, so there is nothing for a scrubber to step through.
+    return { mode, seeds, keywords: chosen.keywords, ranked };
+  }
+
+  // The walk is run here rather than inside `rankModeB` so its per-iteration
+  // vectors survive the ranking. Same options, same seeds, same order.
+  const walk = computePPR(graph, seeds, {
+    ...pprOptions(deps.settings),
+    ...(options.snapshots === true ? { snapshots: true } : {}),
+  });
+
+  return {
+    mode,
+    seeds,
+    keywords: chosen.keywords,
+    ranked: rankByScores(graph, walk.scores),
+    ...(walk.snapshots === undefined
+      ? {}
+      : { snapshots: walk.snapshots, iterations: walk.iterations }),
+  };
 }
 
 /** §5's `previewCompile`. Every step here reads; none of them writes. */

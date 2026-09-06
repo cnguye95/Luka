@@ -270,3 +270,79 @@ describe("a rebuild racing a compile does not hand back a stale graph", () => {
     );
   });
 });
+
+// §9's scrubber: "when an overlay was computed with snapshots, a slider scrubs
+// per-iteration PPR vectors". The vectors have to come from the walk that
+// produced the ranking — a second walk would agree here and would be free to
+// stop agreeing later.
+describe("§9's scrubber frames are the walk that ranked", () => {
+  /** The demo vault is two nodes, so Mode B is reached through the predicate. */
+  function modeB(fs: MemFs, provider: StubProvider) {
+    return core(fs, provider, {
+      settings: {
+        ...DEFAULT_SETTINGS,
+        apiKey: "sk-ant-secret-key",
+        modeMinNodes: 0,
+        modeMinLinkRatio: 0,
+      },
+    });
+  }
+
+  it("returns one vector per iteration, ending on the scores it ranked", async () => {
+    const { fs, provider } = await compiled();
+
+    const result = await modeB(fs, provider).inspect("What ranks pages?", { snapshots: true });
+
+    expect(result.mode).toBe("B");
+    expect(result.ranked.length).toBeGreaterThan(0);
+    expect(result.iterations).toBeGreaterThanOrEqual(1);
+    expect(result.snapshots).toHaveLength(result.iterations ?? -1);
+
+    // The last retained vector is the ranking, node for node and value for
+    // value — that is what makes the slider's rightmost stop the overlay the
+    // user already sees.
+    const last = result.snapshots?.[result.snapshots.length - 1];
+    for (const node of result.ranked) {
+      expect(last?.get(node.path)).toBe(node.score);
+    }
+    const positive = [...(last ?? new Map())].filter(([, score]) => score > 0).map(([path]) => path);
+    expect(positive.sort()).toEqual(result.ranked.map((node) => node.path).sort());
+  });
+
+  it("retains nothing unless the caller asks", async () => {
+    const { fs, provider } = await compiled();
+
+    const result = await modeB(fs, provider).inspect("What ranks pages?");
+
+    expect(result.mode).toBe("B");
+    expect(result.snapshots).toBeUndefined();
+    expect(result.iterations).toBeUndefined();
+  });
+
+  it("retains nothing in Mode A, which runs no walk", async () => {
+    const { fs, provider } = await compiled();
+
+    // §17's shipped predicate over a two-node vault: Mode A.
+    const result = await core(fs, provider).inspect("What ranks pages?", { snapshots: true });
+
+    expect(result.mode).toBe("A");
+    expect(result.snapshots).toBeUndefined();
+    expect(result.iterations).toBeUndefined();
+  });
+
+  it("still costs exactly one model call and writes nothing (invariant 12)", async () => {
+    const { fs, provider } = await compiled();
+    const before = provider.stats().byTask;
+    fs.writes = 0;
+
+    await modeB(fs, provider).inspect("What ranks pages?", { snapshots: true });
+
+    const after = provider.stats().byTask;
+    expect((after["seed-selection"] ?? 0) - (before["seed-selection"] ?? 0)).toBe(1);
+    expect(after["synthesis"] ?? 0).toBe(before["synthesis"] ?? 0);
+    expect(after["inventory"] ?? 0).toBe(before["inventory"] ?? 0);
+    expect(after["page-generation"] ?? 0).toBe(before["page-generation"] ?? 0);
+    expect(after["vision"] ?? 0).toBe(before["vision"] ?? 0);
+    expect(fs.writes).toBe(0);
+  });
+});
