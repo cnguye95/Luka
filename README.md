@@ -646,10 +646,10 @@ records, and the two have different jobs.
 a line rather than comma-separated, so a page whose title contains a comma
 survives being written down.
 
-- [ ] In a **newly written** answer, `- seeds:` and `- top:` are followed by
+- [x] In a **newly written** answer, `- seeds:` and `- top:` are followed by
       indented `  - [[Name]]` lines rather than one comma-separated line.
-- [ ] Open an answer note written **before** this change, if you have one, and
+- [x] Open an answer note written **before** this change, if you have one, and
       run **Show retrieval on graph**. It still replays: the old shape is still
       read, and only the writing changed.
-- [ ] **Show retrieval on graph** on a new answer lights the same nodes the
+- [x] **Show retrieval on graph** on a new answer lights the same nodes the
       note lists, and reports nothing missing.
