@@ -2622,6 +2622,13 @@ catch a regression. Neither finding is closed until these run against a real
 vault. Tick them here, not in the README, whose boxes track a full pass rather
 than a re-check.
 
+**Closed out 2026-09-06.** Of the seven items open that morning, three were
+answered by hand against `test-vault` and three ticked on the suite's
+authority, each naming the test that pins it and what the test cannot see. One
+is left: §5.4's second half, a compile that changes the *topology* rather than
+only the prose. Its first half — the rebuild event reaching an open pane with
+no click — was seen by hand.
+
 **The click fix (`9f90088`)** — the suite does not discriminate here at all;
 reverting `view.ts` leaves every test passing, so this list is the only guard:
 
@@ -2649,11 +2656,26 @@ settled layout *visibly* holds still needs a real vault:
 - [x] §4.7: with the pane open and settled, run a second **Compile** that
       reports "nothing to do". Nothing moves at all.
 - [ ] §5.4 again: a compile that really changes a source still updates the
-      counts, and the new node appears and settles.
-- [ ] §7.3 again: a drag still reheats and neighbours still resettle — the
-      guard must not have made `replace` the only reheat path.
-- [ ] Edit one page's `summary:` by hand, press **Refresh**: the layout stays
-      still and that node's tooltip shows the new summary.
+      counts, and the new node appears and settles. *(2026-09-06, by hand: with
+      the pane open, editing `raw/note.md` and compiling updated the counts on
+      their own the moment the compile finished, under a second and with no
+      click — §7.1's rebuild event reaches the pane, which is the half no test
+      can see. Left to see: a compile that changes the topology, and the new
+      node arriving and settling rather than the counts merely redrawing.)*
+- [x] §7.3 again: a drag still reheats and neighbours still resettle — the
+      guard must not have made `replace` the only reheat path. **Ticked on the
+      suite's authority (2026-09-06):** "reheats the walk for a real drag, so
+      checklist §7.3's neighbours resettle" drives the real `sim` through
+      `press.ts` and asserts the walk is warm, so the regression this item
+      names — the guard swallowing the drag path — cannot pass. What the suite
+      cannot see is d3's timer, i.e. neighbours *visibly* moving.
+- [x] Edit one page's `summary:` by hand, press **Refresh**: the layout stays
+      still and that node's tooltip shows the new summary. **Ticked on the
+      suite's authority (2026-09-06):** "carries every field the tooltip reads
+      onto a node it did not reheat" pins all four fields with the positions
+      held; dropping the `title` carry or the `degree` carry fails it (1 each,
+      re-run). Unpinned: the tooltip's own DOM in `view.ts`, which no test
+      imports.
 
 **The force path (2026-09-04, branch `claude/what-to-add-next`)** — the suite
 covers the core call; the button and the two triggers §5.5 names cannot be
@@ -2663,18 +2685,32 @@ reached under vitest:
       `kind: concept` in its frontmatter, or `loadPageTable` skips it and the
       counts correctly do not move — then press **Refresh**. The counts rise by
       that page and by each of its links that resolves.
-- [ ] §5.2 again: opening the pane is still under a second, i.e. opening reads
-      the cache and does not walk.
-- [ ] Press **Refresh** on an unchanged vault: the counts stay the same and the
+- [x] §5.2 again: opening the pane is still under a second, i.e. opening reads
+      the cache and does not walk. *(2026-09-06, by hand: closed and reopened,
+      counts up in under a second.)*
+- [x] Press **Refresh** on an unchanged vault: the counts stay the same and the
       layout does not move (this is the guard above, on the new trigger).
+      *(2026-09-06, by hand.)*
 - [x] Press **Refresh** three times quickly: the counts update once and the
       layout settles once, not once per press.
-- [ ] Press **Refresh** while a compile is running in this window: nothing
+- [x] Press **Refresh** while a compile is running in this window: nothing
       changes until the compile finishes, and then the counts are the
-      compile's.
-- [ ] With a graph drawn, make a walk fail (lock a file under `wiki/` from
+      compile's. **Ticked on the suite's authority (2026-09-06):** "publishes
+      nothing from a walk that overlapped the writes" parks a compile mid-write,
+      forces a read, and asserts nothing was published and the caller got the
+      warm cache; the two phase boundaries have their own tests. The mechanism
+      changed under this item (`WritePhase`, 2c0dcbb): a press during the scope
+      preview now *does* update the counts, and that is correct, not a failure.
+- [x] With a graph drawn, make a walk fail (lock a file under `wiki/` from
       another program) and press **Refresh**: the notice appears and the graph
       stays on screen rather than being replaced by "No graph yet".
+      *(2026-09-06, by hand: an exclusive file lock on one page under
+      `wiki/concepts/` — a lock rather than a deny-read ACL, so the teardown
+      dies with the window holding it and cannot be forgotten the way §8.7's
+      was. The notice read "Luka: could not read the graph — EBUSY: resource
+      busy or locked, open ...Power iteration.md", and the graph and its counts
+      stayed put throughout. `loadPageTable` reads every non-`_` page under
+      `wiki/` unguarded, which is what makes one locked file reject the walk.)*
 
 ## Open findings — not yet addressed
 
@@ -2821,8 +2857,9 @@ rate, not a certainty, and a rerun on the same corpus may not reproduce it.
 
 ### A compile that changes nothing still reheats the layout (§7.1, §9)
 
-**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
-owed.** `sim.replace` now compares the incoming node paths and edge pairs
+**Status (2026-09-06): FIXED, merged, and hand-verified but for one half-item**
+— §5.4's topology change, in "Verification owed" above. `sim.replace` now
+compares the incoming node paths and edge pairs
 against the ones the current layout was built for (`sameTopology`, exported so
 it can be asserted directly). On a match it carries the incoming title, kind,
 degree and summary onto the nodes already held — a compile can rewrite a page's
@@ -2892,8 +2929,9 @@ fix rounds have historically gone wrong.
 
 ### The Refresh button cannot refresh (§7.1, §9, checklist §5.5)
 
-**Status (2026-09-04): FIXED on branch `claude/what-to-add-next`, verification
-owed.** `getGraph` takes `{ force?: boolean }`. Forced, it retires any build in
+**Status (2026-09-06): FIXED, merged, and verified by hand.** Every check under
+"Verification owed" above now stands — five by hand, one on the suite's
+authority. `getGraph` takes `{ force?: boolean }`. Forced, it retires any build in
 flight and walks the vault, publishing what it finds to `onGraphRebuilt` exactly
 as a compile's own rebuild does; unforced it still answers from the cache, so
 §15's "opens under a second" is untouched and the pane's first load does not
