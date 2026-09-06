@@ -322,8 +322,10 @@ Reading the vault the compile above produced. No further calls.
 - [x] Ctrl/Cmd-clicking a `[[link]]` in a generated page opens the page it
       names, or offers to create it (an unresolved link is a future-article
       signal, not a bug).
-- [ ] **FAILED — see BUILD-NOTES.** No wiki page contains frontmatter, a citation list, or a heading written
-      by the model — code writes all four (invariant 5).
+- [x] No wiki page contains frontmatter, a citation list, or a heading written
+      by the model — code writes all four (invariant 5). The heading half was
+      the one that failed: a page opening with its own title again, which no
+      pass removed until §6.5 gained one.
 - [x] `raw/orphan.md` exists and describes the image, carrying `derived-from`.
 - [x] A second **Luka: Compile** reports "nothing to do" and makes no API calls
       (watch the console or your Anthropic usage page).

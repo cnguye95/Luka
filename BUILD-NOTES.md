@@ -2749,6 +2749,24 @@ bolted on separately.
 
 ### A title-duplicating heading survives into a page (§6.5, invariant 5)
 
+**Status (2026-09-06): FIXED, and verified by hand.** `renderPage` now runs
+`withoutTitleHeading` before the link post-pass — a fifth entry in §6.5's list,
+stripping a leading heading whose text matches the page title under `handleOf`,
+the same fold §4 compares names by. Only the leading one, and only on a match:
+a first heading saying something else is the model organizing its prose, which
+is its job. Mutation: dropping the call from `renderPage` fails 1, comparing
+raw strings instead of folded ones fails 1, stripping any leading heading
+rather than a matching one fails 1, and handling only `#` rather than all six
+levels fails 1. The prompt's claim that such a heading "would be discarded" is
+now true; it was not before, and that was the defect underneath this one.
+
+Verified on the demo vault: the named page regenerated, opened straight into
+prose, and a sweep of all 31 wiki pages found none opening with a heading. One
+limit worth stating — a single run cannot separate the pass stripping a heading
+from the model not writing one, since both give the same page. What the pass
+does is pinned by the four mutations above; the vault check is that the outcome
+holds where the defect was found.
+
 Found by the §14 manual pass, checklist item §4.5, on the demo corpus:
 `wiki/concepts/Knowledge wiki compilation.md` opens its body with
 `# Knowledge wiki compilation`. One page in twenty-nine.
