@@ -13,6 +13,18 @@ export type ProviderTask =
   | "synthesis"
   | "vision";
 
+/**
+ * §11's transports. Anthropic is the default and the one §17's model ids name;
+ * "openai-compatible" is §11's "(M5: OpenAI-compatible adapter, base URL
+ * configurable)" and covers any server speaking the Chat Completions shape.
+ */
+export type ProviderName = "anthropic" | "openai-compatible";
+
+export const PROVIDER_NAMES: readonly ProviderName[] = ["anthropic", "openai-compatible"] as const;
+
+/** Where an OpenAI-compatible transport goes when the user has named nothing else. */
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
 export const PROVIDER_TASKS: readonly ProviderTask[] = [
   "inventory",
   "page-generation",
@@ -94,7 +106,26 @@ export type IngestManifest = Record<string, ManifestEntry>;
 export type OperationName = "compile" | "ask" | "health check";
 
 export interface LukaSettings {
+  /** §12's provider selector. The transport `createProvider` builds. */
+  provider: ProviderName;
+  /**
+   * The Anthropic key.
+   *
+   * It keeps this name rather than becoming `anthropicApiKey`: §16 rules out
+   * settings migration, and a rename would silently empty the key of every
+   * vault that already has one.
+   */
   apiKey: string;
+  /**
+   * The OpenAI-compatible key, kept beside the Anthropic one rather than
+   * sharing a field, so switching provider and back does not lose either.
+   *
+   * May be empty: a local server usually wants no credential, and the
+   * transport then sends no authorization header at all.
+   */
+  openaiApiKey: string;
+  /** Root of a Chat Completions API; `/chat/completions` is appended to it. */
+  openaiBaseUrl: string;
   models: Record<ProviderTask, string>;
   contextBudgetTokens: number;
   /** K: assembly cap (handoff.md §7.4 step 4). */
@@ -114,7 +145,10 @@ export interface LukaSettings {
 
 /** handoff.md §17. Values marked "fixed" there are constants in their own modules, not settings. */
 export const DEFAULT_SETTINGS: LukaSettings = {
+  provider: "anthropic",
   apiKey: "",
+  openaiApiKey: "",
+  openaiBaseUrl: DEFAULT_OPENAI_BASE_URL,
   models: {
     inventory: "claude-haiku-4-5-20251001",
     "seed-selection": "claude-haiku-4-5-20251001",
@@ -160,6 +194,16 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
     // it is what makes "one settings state for the whole run" true rather than
     // true of four values out of five.
     models: { ...settings.models },
+    // A hand-edited `data.json` can name a provider that does not exist; an
+    // unknown one is not a choice, so it takes the default rather than
+    // reaching `createProvider` as a string nothing matches.
+    provider: PROVIDER_NAMES.includes(settings.provider) ? settings.provider : "anthropic",
+    openaiApiKey: trimmed(settings.openaiApiKey, ""),
+    // Empty falls back; malformed does **not**. Replacing an unparseable base
+    // URL with the default would send the user's key to api.openai.com because
+    // they mistyped their own server's address. The transport refuses it
+    // instead, before any request leaves.
+    openaiBaseUrl: trimmed(settings.openaiBaseUrl, DEFAULT_OPENAI_BASE_URL),
     contextBudgetTokens: positive(settings.contextBudgetTokens, DEFAULT_SETTINGS.contextBudgetTokens),
     requestTimeoutMs: positive(settings.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs),
     compileConcurrency: clamp(
@@ -218,6 +262,13 @@ export const MAX_PPR_ITERATIONS = 1000;
  * whole file read into the context budget.
  */
 export const MAX_LIST_CAP = 100;
+
+/** A trimmed string, or the fallback when the value is not a usable one. */
+function trimmed(value: string, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const text = value.trim();
+  return text === "" ? fallback : text;
+}
 
 /** Finite and above zero, or §17's default — there is no useful smaller value. */
 function positive(value: number, fallback: number): number {

@@ -6,6 +6,7 @@ import {
   PPR_EPSILON,
   PROVIDER_TASKS,
   normalizeSettings,
+  type LukaSettings,
 } from "../src/core/types";
 
 // handoff.md §17 — the defaults table is normative.
@@ -32,8 +33,64 @@ describe("default settings", () => {
     }
   });
 
-  it("ships no API key (invariant 9)", () => {
+  it("ships no API key of either kind (invariant 9)", () => {
     expect(DEFAULT_SETTINGS.apiKey).toBe("");
+    expect(DEFAULT_SETTINGS.openaiApiKey).toBe("");
+  });
+
+  it("defaults to Anthropic, with Anthropic model ids to match", () => {
+    // §11 names Anthropic as the adapter and §17's ids are Anthropic's, so the
+    // two have to agree: shipping an OpenAI-compatible default would point
+    // every task at a model the configured endpoint does not have.
+    expect(DEFAULT_SETTINGS.provider).toBe("anthropic");
+    for (const task of PROVIDER_TASKS) {
+      expect(DEFAULT_SETTINGS.models[task]).toMatch(/^claude-/);
+    }
+  });
+
+  it("defaults the OpenAI-compatible base URL to OpenAI's own", () => {
+    expect(DEFAULT_SETTINGS.openaiBaseUrl).toBe("https://api.openai.com/v1");
+  });
+});
+
+describe("a hand-edited provider selection cannot reach the transport unrecognized", () => {
+  const settings = (over: Partial<LukaSettings>): LukaSettings =>
+    normalizeSettings({ ...DEFAULT_SETTINGS, ...over });
+
+  it("falls back to Anthropic for a name that is not one of the two", () => {
+    for (const bad of ["openai", "", "ANTHROPIC", 3, null, undefined]) {
+      expect(settings({ provider: bad as unknown as LukaSettings["provider"] }).provider).toBe(
+        "anthropic",
+      );
+    }
+  });
+
+  it("keeps a name that is one of the two", () => {
+    expect(settings({ provider: "openai-compatible" }).provider).toBe("openai-compatible");
+    expect(settings({ provider: "anthropic" }).provider).toBe("anthropic");
+  });
+
+  it("falls back to the default base URL when the field is empty or absent", () => {
+    for (const blank of ["", "   ", undefined, 7]) {
+      expect(settings({ openaiBaseUrl: blank as unknown as string }).openaiBaseUrl).toBe(
+        DEFAULT_SETTINGS.openaiBaseUrl,
+      );
+    }
+  });
+
+  it("leaves a malformed base URL as typed rather than substituting OpenAI's", () => {
+    // Substituting the default here would send the key of a user who mistyped
+    // their own server's address to api.openai.com. The transport refuses this
+    // value instead, before any request leaves.
+    expect(settings({ openaiBaseUrl: "not a url" }).openaiBaseUrl).toBe("not a url");
+  });
+
+  it("trims the base URL and the key", () => {
+    expect(settings({ openaiBaseUrl: "  http://localhost:11434/v1  " }).openaiBaseUrl).toBe(
+      "http://localhost:11434/v1",
+    );
+    expect(settings({ openaiApiKey: "  sk-oai  " }).openaiApiKey).toBe("sk-oai");
+    expect(settings({ openaiApiKey: 5 as unknown as string }).openaiApiKey).toBe("");
   });
 });
 
