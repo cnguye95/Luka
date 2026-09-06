@@ -603,7 +603,7 @@ exist.
       showing a fenced code block or an error. Switch to source mode and back:
       the bullets carry the same facts in words, so nothing is only in the
       picture.
-- [ ] In that diagram, a gap is a **dashed** box and the pages that wanted it
+- [x] In that diagram, a gap is a **dashed** box and the pages that wanted it
       are solid ones, joined to it by dashed lines. Where the wiki already
       links two of those pages, a solid line joins them — that is what the
       dashes are read against.
