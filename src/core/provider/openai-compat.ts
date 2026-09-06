@@ -107,12 +107,24 @@ function endpointOf(base: string): string {
       { retryable: false },
     );
   }
+  // Everything the user typed is carried, not just the parts this transport
+  // happens to think about. `URL.origin` drops userinfo and `search` is not in
+  // the path, so building from those two alone silently deleted both — an
+  // Azure deployment URL lost the `api-version` query it cannot work without,
+  // and basic-auth credentials vanished, in each case leaving the server to
+  // complain about something the user had in fact configured.
+  const auth =
+    parsed.username === ""
+      ? ""
+      : `${parsed.username}${parsed.password === "" ? "" : `:${parsed.password}`}@`;
+
   // The settings placeholder invites pasting a full endpoint, so a trailing
   // `/chat/completions` is dropped rather than doubled.
-  const root = `${parsed.origin}${parsed.pathname}`
+  const root = `${parsed.protocol}//${auth}${parsed.host}${parsed.pathname}`
     .replace(/\/+$/, "")
     .replace(/\/chat\/completions$/, "");
-  return `${root}/chat/completions`;
+  // The fragment is deliberately not carried: it is never sent to a server.
+  return `${root}/chat/completions${parsed.search}`;
 }
 
 /**

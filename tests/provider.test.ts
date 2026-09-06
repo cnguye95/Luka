@@ -529,6 +529,22 @@ describe("wrapper + openai-compatible end to end over scripted HTTP", () => {
     expect(http.requests).toHaveLength(1);
   });
 
+  it("forces a JSON task to temperature 0 through this transport too (§11)", async () => {
+    // The wrapper sets it, but nothing asserted it survived the second
+    // transport's body builder — and a JSON task is what every compile's
+    // inventory and seed calls are, so this is the temperature that travels.
+    const http = new ScriptedHttp([
+      jsonRoute(200, { choices: [{ finish_reason: "stop", message: { content: '{"ok":true}' } }] }),
+    ]);
+    const { provider } = localProvider(http);
+
+    await expect(
+      provider.complete({ task: "inventory", system: "s", user: "u", json: true }),
+    ).resolves.toEqual({ ok: true });
+    const body = JSON.parse(http.requests[0]?.body ?? "{}") as Record<string, unknown>;
+    expect(body["temperature"]).toBe(0);
+  });
+
   it("still refuses an Anthropic run with no key (the guard is per provider)", async () => {
     const http = new ScriptedHttp([CHAT_OK]);
     const provider = createProvider({ http, settings: { ...SETTINGS, apiKey: "" } });

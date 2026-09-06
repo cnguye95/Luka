@@ -208,10 +208,10 @@ from them, paints the result as an overlay, and stops. No synthesis, no answer,
 and no file: §12.5 pins that an inspection writes nothing anywhere in the vault.
 
 On a graph-ranked vault the overlay arrives with a slider beneath it, which
-steps back through the walk one iteration at a time: drag it left to watch the
-mass start on the seeds and spread outward. Clicking a node gives you the same
-slider for the same reason. Neither costs anything — the iterations were
-retained by the walk that drew the overlay.
+steps back through the walk one iteration at a time: drag it left to watch how
+far the walk had reached that early, and right to watch the ranking settle.
+Clicking a node gives you the same slider for the same reason. Neither costs
+anything — the iterations were retained by the walk that drew the overlay.
 
 That makes it the cheap way to see why an answer surfaced what it did, or to
 sanity-check a question before paying for the real thing. *Ask the wiki* costs
@@ -685,8 +685,13 @@ running locally, and the last item in it is the only one that costs anything.
 - [ ] Click a node. A slider appears beneath the status line, and its label
       reads `iteration N of N` — the last stop, showing exactly the overlay the
       click already produced.
-- [ ] Drag it to the far left. The heat collapses onto the clicked node and
-      everything else goes dark: iteration 1 is the walk before it has spread.
+- [ ] Drag it to the far left. The heat is concentrated close to the clicked
+      node — on it and its immediate neighbours — and the rest of the graph is
+      dark. Do not expect the clicked node itself to be the brightest: stop 1
+      is the walk *after* its first step, where a seed has passed most of its
+      mass to its neighbours and kept only what teleport returns. On a seed of
+      low degree the neighbours are brighter than the seed, and that is
+      correct. What the far-left stop shows is reach, not ranking.
 - [ ] Drag slowly right. The heat spreads outward along links, and the top-K
       stroke moves between nodes as the ranking settles — it is not pinned to
       the final answer.

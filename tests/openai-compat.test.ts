@@ -82,6 +82,38 @@ describe("openai-compatible transport — request shape", () => {
     }
   });
 
+  it("carries a query string the endpoint cannot work without", async () => {
+    // Azure's OpenAI deployments require `api-version`. Built from origin plus
+    // pathname alone, it was dropped and the server complained about something
+    // the user had configured correctly.
+    const azure =
+      "https://r.openai.azure.com/openai/deployments/d/chat/completions?api-version=2024-02-01";
+    const { http, raw } = transport([OK], settingsFor({ openaiBaseUrl: azure }));
+    await raw.complete(REQUEST);
+
+    expect(http.requests[0]?.url).toBe(azure);
+  });
+
+  it("carries credentials written into the base URL", async () => {
+    const { http, raw } = transport(
+      [OK],
+      settingsFor({ openaiBaseUrl: "http://user:pw@gateway.lan:8080/v1" }),
+    );
+    await raw.complete(REQUEST);
+
+    expect(http.requests[0]?.url).toBe("http://user:pw@gateway.lan:8080/v1/chat/completions");
+  });
+
+  it("keeps the port and a path prefix the server is mounted under", async () => {
+    const { http, raw } = transport(
+      [OK],
+      settingsFor({ openaiBaseUrl: "http://10.0.0.4:8000/openai/v1/" }),
+    );
+    await raw.complete(REQUEST);
+
+    expect(http.requests[0]?.url).toBe("http://10.0.0.4:8000/openai/v1/chat/completions");
+  });
+
   it("sends no authorization header when no key is set", async () => {
     // A local server usually wants no credential, and an empty Bearer is worse
     // than none: some servers reject it outright.
@@ -96,6 +128,17 @@ describe("openai-compatible transport — request shape", () => {
     await raw.complete({ ...REQUEST, temperature: undefined });
 
     expect("temperature" in bodyOf(http)).toBe(false);
+  });
+
+  it("sends a temperature of zero, which is the only one §11 mandates", async () => {
+    // §11 fixes JSON tasks at temperature 0, so this is the value that actually
+    // travels on `inventory` and `seed-selection` — every compile's two calls.
+    // Testing 0.5 and undefined leaves the interesting one untested: `if
+    // (request.temperature)` passes both of those and silently drops this.
+    const { http, raw } = transport([OK]);
+    await raw.complete({ ...REQUEST, temperature: 0 });
+
+    expect(bodyOf(http)["temperature"]).toBe(0);
   });
 
   it("sends images as data URIs ahead of the text (§6.1's vision pass)", async () => {

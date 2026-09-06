@@ -3491,6 +3491,53 @@ continue M4's numbering.
   (invariant 9), so an untrimmed base URL typed a moment earlier would otherwise
   reach `new URL`.
 
+### The review pass over M5 — 2026-09-06
+
+Three read-only lanes over `0127e07..HEAD` (correctness, spec, test quality).
+No lane found a failing test; everything below is something the suite did not
+reach. Fixes applied in the order the user approved them.
+
+- **S70** — **stop 1 of the scrubber is the walk after its first update, not
+  the personalization vector**, and README §18 claimed the opposite. §7.2
+  snapshots `v` after `current = next`, so at stop 1 a seed of degree *d* holds
+  only the teleport mass `1−α` while each neighbour holds `α/d`. Under S51's
+  per-frame normalization the seed is the peak only when `d > 5.67`, so on an
+  ordinary node the neighbours paint *brighter* than the node the user clicked.
+  The checklist item said "the heat collapses onto the clicked node", which
+  makes correct behaviour read as a defect — and §18 is the whole of this
+  feature's verification. Two lanes found it independently; the spec lane
+  verified it by bundling `ppr.ts` and running a 4-node walk (seed 0.15,
+  neighbours 0.425). The item now names what is actually true, including why
+  the seed is not the brightest node, and says the far-left stop shows reach
+  rather than ranking.
+  - Worth recording separately: the *tests* did not catch this because they
+    build frames by hand, and the fixture's `FRAMES[0] = {a:4, b:0, c:0}` — "at
+    iteration 1 only the seed carries mass" — is a shape no real α = 0.85 walk
+    produces. The arithmetic those tests pin is right; the premise the prose
+    inherited from them was not. A hand-built fixture is the correct tool for
+    the arithmetic and the wrong source for a claim about what a user sees.
+- **S71** — **the OpenAI-compatible transport had no test sending
+  `temperature: 0`**, which is the only temperature §11 mandates and the one
+  every compile actually sends: the wrapper forces it for JSON tasks, and
+  `inventory` and `seed-selection` are JSON. The fixture covered 0.5 and
+  `undefined`, and `if (request.temperature)` passes both while silently
+  dropping 0. Confirmed by mutation: the whole suite stayed green with JSON
+  tasks running at the server's default temperature. The equivalent mutation on
+  the Anthropic transport was already caught, by `provider-bounds.test.ts` and
+  not by `anthropic.test.ts` — which is why mirroring one transport's test file
+  onto the other left the hole. Two tests added: the value at the transport,
+  and a JSON task through `createProvider` where the wrapper is what sets it.
+- **S72** — **`endpointOf` carries the whole base URL, not the parts this
+  transport thinks about.** It was built from `URL.origin` plus `pathname`,
+  which drops userinfo (origin excludes it) and the query string (not part of
+  the path). An Azure deployment URL therefore lost the `api-version` it cannot
+  work without, and basic-auth credentials vanished — in both cases leaving the
+  server to reject something the user had configured correctly, with a notice
+  naming the vendor's complaint and no hint that Luka had edited the address.
+  S62 refuses to *repair* a malformed URL for exactly this reason, and silently
+  deleting half of a well-formed one was the same fault wearing the other face.
+  The fragment is still dropped, because it is never sent to a server.
+
 ### Known limitations, accepted (M5)
 
 - A server that needs `max_completion_tokens` and is not on `api.openai.com`
