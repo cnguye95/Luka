@@ -3345,3 +3345,158 @@ Two other setup steps in this pass had the same shape and got away with it for
 the same reason — the hand-written `graph pane.md` under `wiki/` for §14.3, and
 the `Refresh Probe.md` for §5.5. Both were deleted, but both were deleted
 because the next message happened to remember them.
+
+## M5 — Iteration scrubber and OpenAI-compatible adapter (2026-09-06)
+
+§15's M5 is three stretch items "in order: hard-PDF paths (layout-aware, OCR,
+vision fallback), iteration scrubber, OpenAI-compatible adapter", and §15's own
+cut order names M5 as the first thing to drop. Everything above the cut line
+shipped, so what happens to M5 is a user decision rather than a schedule
+consequence — the same standing this branch's `## Add next` work has. The user
+took it after an assessment of the three against the code as built: **build the
+scrubber and the adapter, drop the hard-PDF paths.**
+
+Dropped rather than deferred, for four reasons that are facts about the repo
+rather than about effort:
+
+- §3's allowance is "PDF text extraction for M5 may add one library". It was
+  spent at M1 on `unpdf`, because §6.1 and M1's acceptance criteria needed
+  text-layer extraction three milestones before the allowance nominally opened.
+  There is no second library to spend.
+- §6.5's smell test and §6.2's derivative-repair path became the sanctioned
+  answer to a bad extraction between the handoff being written and now. A
+  scanned PDF today yields an empty derivative headed by a `normalization
+  suspect` marker naming the reason, and a source page with no items. That is a
+  labelled degradation with a documented repair, not a silent failure.
+- OCR means `tesseract.js` — WASM plus language data — and a vision fallback
+  means rasterising pages, which needs a canvas: `@napi-rs/canvas` under vitest
+  and the DOM's under Electron. `src/core` touches no DOM at all today, and
+  `check:boundary` is the only thing keeping that true.
+- A per-page vision fallback changes invariant 12 from a closed formula into one
+  with a term nobody can predict from the worklist. A 200-page scan becomes 200
+  vision calls, and under invariant 3 a failure retries all of them next
+  compile. Five tests pin `byTask.vision` counts against the current formula.
+
+The two built are §9's last unbuilt sentence and §11's parenthetical. Decisions
+continue M4's numbering.
+
+### The scrubber
+
+- **S49** — the retained vectors ride on the `Overlay` as an optional `scrub`
+  field, not in a field of their own on the view. Everything that already
+  replaces or clears an overlay — Esc, `reload`, the rebuild subscription, the
+  double-click restore of `beforeClick` — then releases them with it and needs
+  no new path. S22 gives the vault one pane, so one frame set exists at a time,
+  bounded by §7.2's cap of 100 vectors.
+- **S50** — `scrub.ts` is a pure module beside `press.ts`, and `view.ts` holds
+  only the slider and the wiring. §3's tree gains it the way it gained
+  `concurrency.ts` and `press.ts`.
+- **S51** — each frame is normalized against its own peak, which is S32 applied
+  per vector rather than once. The alternative — normalizing every frame against
+  the converged peak — would make the early iterations uniformly dim and answer
+  "how far along is this" instead of "where was the mass then".
+- **S52** — the top-K stroke is re-ranked per frame. Pinned to the converged
+  ranking it would claim iteration 1 had already chosen the winners, which is
+  the opposite of what the slider exists to show.
+- **S53** — the slider's last stop is the walk's *final scores*, which is not
+  always its last retained vector. §7.2 caps retention at 100 while §17's
+  `pprMaxIterations` clamps at 1000, so a raised ceiling produces a walk whose
+  middle was never kept. `stopsOf` adds one stop for the final vector exactly
+  when it is not already the last frame, and `scrubLabel` names the missing
+  range rather than letting the slider imply it stepped through iterations
+  nobody has. Unreachable at §17's defaults, where the ceiling *is* the cap —
+  which is why the tests feed synthetic frames rather than a real walk.
+- **S54** — `runInspect` runs `computePPR` itself and ranks through the new
+  `rankByScores`, so the frames are the walk that produced the ranking. The
+  alternative was a second walk from the pane, seeded the same way: free of
+  model calls, agrees today, and free to stop agreeing the moment anything
+  about the ranking's inputs moved. `rankModeB` is the same two halves composed
+  and is unchanged for `runAsk` and the eval.
+- **S55** — no slider for Mode A or for trace replay. Neither has a walk: Mode A
+  ranks lexically (§9: "without a PPR heat ramp"), and a trace is recorded data
+  S40 forbids re-ranking. The absence is the same sentence in both cases.
+- **S56** — the slider's `input` handler schedules one frame and does nothing
+  else (S24). There is no animation loop and no timer, which invariant 1 would
+  not permit anyway.
+- **S57** — `syncScrub` is called from `render` as well as from `setOverlay`,
+  because `reload` and the rebuild subscription clear the overlay by assignment
+  and then render. Through `setOverlay` alone, a Refresh or a compile left the
+  slider on screen ranging over vectors nothing was drawing.
+- **S58** — the tests cover `scrub.ts` and `runInspect`; the wiring in `view.ts`
+  is covered by README §18 and by nothing else. Said in the test file as well as
+  here, because this log has now counted eleven cases of a test suite that
+  exercised an extracted module while the defect sat in the wiring.
+
+### The OpenAI-compatible adapter
+
+- **S59** — `apiKey` keeps its name and becomes Anthropic's specifically. §16
+  rules out settings migration, so renaming it to `anthropicApiKey` would empty
+  the key of every vault that has one. `openaiApiKey` sits beside it rather than
+  sharing the field: one key per provider, so switching and switching back loses
+  neither.
+- **S60** — Anthropic stays the default, and §17's model ids stay Anthropic's. A
+  default of "openai-compatible" would point all five tasks at models the
+  configured endpoint does not have. The models heading says so on the tab,
+  since nothing else would tell a user who switched that their ids came along.
+- **S61** — an unrecognized `provider` in a hand-edited `data.json` falls back to
+  Anthropic. It is not a choice, and `createProvider` should never see a string
+  nothing matches.
+- **S62** — an empty base URL falls back to the default; a *malformed* one does
+  not. Substituting `api.openai.com` for a mistyped local address would send the
+  user's key to a vendor they never named. The value stands as typed and the
+  transport refuses it before any request leaves. `http` is allowed alongside
+  `https`, because local servers are the case this provider exists for.
+- **S63** — an empty key is legal for this provider and sends no header at all.
+  Local servers usually want none, and an empty `Bearer` is worse than absent:
+  some reject it outright. The wrapper's missing-key guard is therefore gated on
+  the provider being Anthropic; a server that does want a key answers 401, which
+  says more than a guard written for another vendor could.
+- **S64** — the per-task cap has two field names. Current OpenAI models reject
+  `max_tokens` and name `max_completion_tokens` in the 400; most other servers
+  speaking this shape know only the older name; and sending both is itself
+  rejected. So the *host* seeds the choice — `api.openai.com` starts on
+  `max_completion_tokens` and never pays a refusal — and a 400 naming the other
+  field flips a per-transport memo for the rest of the run.
+  - The flip is surfaced as a **retryable** `ProviderError` with
+    `retryAfterMs: 1`, so the wrapper does the retrying. A second request made
+    inside the transport would be a request the counter cannot see, and M2a's
+    "the call counter counts transport attempts" is what the acceptance checks
+    read. Cost: one unit of that call's retry budget. With `maxRetries: 0`
+    against such a server the first call of a run fails with the vendor's own
+    message; §17's default of 2 covers it. Recorded rather than worked around.
+  - Rejected: a static host-only choice (leaves a gateway in front of OpenAI
+    with a loud 400 and no recovery); retrying inside the transport (invisible
+    request, breaks the counter); a `rerun` flag on `ProviderError` like the
+    temperature re-run (honest and budget-free, but surgery on the
+    vendor-message coupling point for the same outcome); sending both fields
+    (rejected by servers); a setting (§0 says not to add a tunable for something
+    the transport can learn).
+- **S65** — `finish_reason: "length"` reuses the Anthropic transport's message
+  verbatim. It is the same fact reaching the user through the same Notice, and
+  `provider-bounds.test.ts` matches on it.
+- **S66** — `http-shared.ts` holds what both transports do identically: error
+  bodies, `Retry-After`, base64, and the `message`/`vendorMessage` split. That
+  split is shared because its *reason* is — clipped for the Notice, unclipped
+  for §11's temperature re-run — and a second transport carrying only the
+  clipped copy would have disabled that re-run silently. `bytesToBase64` is
+  re-exported from `anthropic.ts` so its tests keep their import path.
+- **S67** — while that code was open, an error body that is a bare string
+  (what Ollama sends) is now read. Reading only the nested shape turned
+  "model 'x' not found" into a bare `HTTP 404`.
+- **S68** — the transport is chosen in `createProvider`, i.e. once per compile
+  and once per ask. That is the scope the rest of the settings are already fixed
+  at, and switching provider mid-run is not a thing a user can mean.
+- **S69** — the transport reads `normalizeSettings(settings)` inside
+  `complete()`. The plugin hands the wrapper its own mutable settings object
+  (invariant 9), so an untrimmed base URL typed a moment earlier would otherwise
+  reach `new URL`.
+
+### Known limitations, accepted (M5)
+
+- A server that needs `max_completion_tokens` and is not on `api.openai.com`
+  costs one refused request per run, and fails outright when `maxRetries` is 0.
+- The scrubber's frames are the walk the *pane* ran. An answer note's recorded
+  trace has none, so replay has no slider — §9 asks for one on an overlay
+  "computed with snapshots", and a trace was not.
+- Nothing in `src/plugin` is covered by automated tests, the scrubber's wiring
+  included. README §18 is the whole of its verification, and it is unwalked.

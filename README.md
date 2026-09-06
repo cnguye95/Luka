@@ -21,12 +21,12 @@ spec was silent are logged in [BUILD-NOTES.md](BUILD-NOTES.md).
 
 ## Status
 
-Milestones **M0 (scaffold)** and **M1 (ingest)** are complete, plus the first
-most of M2: compile now normalizes what you put in `raw/`, extracts an
-inventory of entities and concepts from each source, and writes a linked
-three-kind wiki with citation blocks and a generated index. Still to come are
-the deletion cascade and the scope preview (the rest of M2), then answering
-questions and drawing the graph (M3–M4).
+Milestones **M0** through **M4** are complete: Luka ingests what you put in
+`raw/`, compiles it into a linked three-kind wiki, answers questions from that
+wiki with citations, files the answers back, and draws the retrieval mechanism
+in its own graph pane. Of §15's M5 stretch list, the **iteration scrubber** and
+the **OpenAI-compatible provider** are built; the hard-PDF paths were dropped
+by decision rather than deferred, and BUILD-NOTES records why.
 
 To prove the pipeline against the real API (optional, a few cents):
 
@@ -144,7 +144,14 @@ Mode → enable **Luka**. Keep the developer console open (Ctrl/Cmd-Shift-I): th
 manual checklist asks you to watch it in several places, and a plugin that
 fails to load says so there.
 
-**5. Set the API key.** Paste an Anthropic key into the Luka settings tab.
+**5. Choose a provider and set its key.** The Luka settings tab opens on
+**Anthropic**; paste a key and you are done. To use something else, switch
+**Provider** to *OpenAI-compatible*, set the **Base URL** — OpenAI's own
+`https://api.openai.com/v1`, or a local server such as Ollama's
+`http://localhost:11434/v1`, which usually needs no key at all — and change the
+five model ids, which default to Anthropic's and will not exist elsewhere. Each
+provider keeps its own key, so switching back and forth loses neither.
+
 Settings are the only source — the plugin has no `ANTHROPIC_API_KEY` fallback,
 and reads the key live on each run, so a freshly typed one takes effect without
 a reload. (The env var is for the optional live tests above and
@@ -199,6 +206,12 @@ call)** — or Enter — answers a narrower question: *what would retrieval
 actually pull for this?* It makes exactly one model call to choose seeds, ranks
 from them, paints the result as an overlay, and stops. No synthesis, no answer,
 and no file: §12.5 pins that an inspection writes nothing anywhere in the vault.
+
+On a graph-ranked vault the overlay arrives with a slider beneath it, which
+steps back through the walk one iteration at a time: drag it left to watch the
+mass start on the seeds and spread outward. Clicking a node gives you the same
+slider for the same reason. Neither costs anything — the iterations were
+retained by the walk that drew the overlay.
 
 That makes it the cheap way to see why an answer surfaced what it did, or to
 sanity-check a question before paying for the real thing. *Ask the wiki* costs
@@ -258,21 +271,27 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 108 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 125 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
 
-§17 is the exception to that order and sits last on purpose. It is newer than
+§17 is an exception to that order and sits late on purpose. It is newer than
 the pane and just as uncovered, but it needs an ask to reach, so it is grouped
 with the paid checks rather than the free ones.
+
+§18 is the other exception and sits last because it is newer still — M5, added
+after the rest of this list had been walked. Its two halves are independent:
+the scrubber costs nothing, and the provider items need a second provider set
+up before any of them mean anything.
 
 ### 1. Start here — does it load at all
 
 If any of these fail, nothing below is worth running.
 
 - [x] Plugin appears under Community plugins and enables without console errors.
-- [x] Settings tab shows an API key field (masked) and one model id per task.
+- [x] Settings tab shows a **Provider** dropdown, the selected provider's key
+      field (masked), and one model id per task.
 - [x] Values survive a reload of Obsidian (they are stored in
       `.obsidian/plugins/luka/data.json`).
 
@@ -412,7 +431,7 @@ standing between that regression and the vault.
 **How to check "no model call".** Not in DevTools. The plugin calls the API
 through Obsidian's `requestUrl`, which runs in Electron's main process, so its
 requests never appear in the renderer's Network panel — an empty panel there is
-consistent with any number of calls and proves nothing. Use your Anthropic
+consistent with any number of calls and proves nothing. Use your provider's
 usage page, which counts server-side, or read the path: click-PPR, the filter
 and trace replay reach no provider at all, and `ppr.ts` holds no reference to
 one.
@@ -653,3 +672,55 @@ survives being written down.
       read, and only the writing changed.
 - [x] **Show retrieval on graph** on a new answer lights the same nodes the
       note lists, and reports nothing missing.
+
+### 18. M5 — the scrubber and the OpenAI-compatible provider
+
+The newest code, and none of it verified by hand yet: everything above this
+section has been walked at least once, and nothing here has. The scrubber half
+is free. The provider half needs either an OpenAI-compatible key or a server
+running locally, and the last item in it is the only one that costs anything.
+
+**The scrubber.** It appears under the status line, never in the toolbar.
+
+- [ ] Click a node. A slider appears beneath the status line, and its label
+      reads `iteration N of N` — the last stop, showing exactly the overlay the
+      click already produced.
+- [ ] Drag it to the far left. The heat collapses onto the clicked node and
+      everything else goes dark: iteration 1 is the walk before it has spread.
+- [ ] Drag slowly right. The heat spreads outward along links, and the top-K
+      stroke moves between nodes as the ranking settles — it is not pinned to
+      the final answer.
+- [ ] Return to the rightmost stop. The graph looks exactly as it did before
+      you touched the slider.
+- [ ] Press Esc. The overlay and the slider go together.
+- [ ] Type a question and press **Inspect** on a vault big enough for graph
+      mode (the banner is absent). The slider appears for that overlay too.
+- [ ] Do the same on a small vault, where the Mode A banner shows. There is no
+      slider — Mode A ranks by keyword and runs no walk to step through.
+- [ ] **Show retrieval on graph** on an answer note. No slider: a trace is
+      recorded data, not a walk this pane ran.
+- [ ] With a slider on screen, press **Refresh**, or compile in another window.
+      The overlay clears and the slider goes with it.
+- [ ] Scrub to the middle, then **Export PNG**. The file shows the iteration on
+      screen, not the converged walk.
+
+**The provider.** Switch **Provider** in settings to *OpenAI-compatible*.
+
+- [ ] The Anthropic key field is replaced by an API key field and a **Base
+      URL** field. Switching back brings the Anthropic field back.
+- [ ] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
+      and reload Obsidian. Both are still there: the two do not share a field.
+- [ ] Leave the model ids at their Anthropic defaults and compile. It fails
+      with a notice naming the model the server rejected — it does not appear
+      to work.
+- [ ] Set the base URL with a trailing slash, then again with
+      `/chat/completions` already on the end. Both compile: the endpoint is
+      joined, not doubled.
+- [ ] Set the base URL to something that is not a URL at all. Compile fails
+      with a notice naming the value, and nothing reaches the network — your
+      key is not sent to a vendor you did not name.
+- [ ] Point it at a local server with the key field empty and compile. It
+      works: no credential is sent, because none was configured.
+- [ ] **Paid, optional.** Against OpenAI's own endpoint, compile one small
+      source and check the usage page. The token-cap field is chosen by host,
+      so an OpenAI run spends no extra request learning it.
