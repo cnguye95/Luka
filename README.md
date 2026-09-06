@@ -636,9 +636,9 @@ records, and the two have different jobs.
 
 **Filing, which is where the section is supposed to disappear.**
 
-- [ ] **File this answer** on the note that named gaps. `## Add next` is gone,
+- [x] **File this answer** on the note that named gaps. `## Add next` is gone,
       along with the trace; `missing:` and `## Sources consulted` remain.
-- [ ] Run **Compile**. No page appears named after a gap the section listed —
+- [x] Run **Compile**. No page appears named after a gap the section listed —
       check `wiki/` for one. (The section names pages that do not exist; kept,
       the next compile would read those names as things the source asserts.)
 
