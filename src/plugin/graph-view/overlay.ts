@@ -11,6 +11,33 @@
 import type { RetrievalMode } from "../../core/index";
 import type { SimNode } from "./sim";
 
+/**
+ * §9's scrubber state: the walk an overlay was computed from, and where the
+ * slider currently sits in it.
+ *
+ * It rides on the `Overlay` rather than beside it in the view, so everything
+ * that already replaces or clears an overlay — Esc, a refresh, a rebuild, the
+ * double-click restore — releases the retained vectors with it and needs no
+ * new path. One pane exists (S22), so at most one of these is ever held.
+ */
+export interface Scrub {
+  /** §7.2's retained vectors, iteration 1 first. Never more than 100. */
+  readonly frames: readonly ReadonlyMap<string, number>[];
+  /**
+   * The walk's final scores.
+   *
+   * Not always `frames[frames.length - 1]`: §7.2 caps retention at 100 while
+   * `pprMaxIterations` can be raised past it, and then the last iterations
+   * were never kept. This is the vector the overlay showed before any
+   * scrubbing, so the slider's last stop can always return to it.
+   */
+  readonly final: ReadonlyMap<string, number>;
+  /** How many iterations the walk actually ran. */
+  readonly iterations: number;
+  /** Which stop the slider is on, 0-based. */
+  readonly at: number;
+}
+
 export interface Overlay {
   /**
    * Which of §9's three overlays this is.
@@ -35,6 +62,12 @@ export interface Overlay {
   scores: ReadonlyMap<string, number> | null;
   /** What the status line says this overlay is. */
   label: string;
+  /**
+   * §9's scrubber, when this overlay came from a walk that retained its
+   * iterations. Absent on Mode-A inspection and on trace replay, neither of
+   * which has a walk to step through (S40).
+   */
+  scrub?: Scrub;
 }
 
 /**
@@ -45,7 +78,7 @@ export interface Overlay {
  * reading: the overlay answers "what did this query reach", not "how much mass
  * in absolute terms".
  */
-function normalize(scores: ReadonlyMap<string, number>): Map<string, number> {
+export function normalize(scores: ReadonlyMap<string, number>): Map<string, number> {
   let peak = 0;
   for (const value of scores.values()) peak = Math.max(peak, value);
   const out = new Map<string, number>();
@@ -63,7 +96,7 @@ function normalize(scores: ReadonlyMap<string, number>): Map<string, number> {
 }
 
 /** The `k` highest scorers, ties broken by path so two runs agree (§7.2). */
-function topOf(scores: ReadonlyMap<string, number>, k: number): Set<string> {
+export function topOf(scores: ReadonlyMap<string, number>, k: number): Set<string> {
   return new Set(
     [...scores]
       .filter(([, score]) => score > 0)

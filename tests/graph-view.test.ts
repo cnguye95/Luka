@@ -34,6 +34,13 @@ import {
   pressOn,
   type Press,
 } from "../src/plugin/graph-view/press";
+import {
+  scrubLabel,
+  scrubTo,
+  stopsOf,
+  vectorAt,
+  withScrub,
+} from "../src/plugin/graph-view/scrub";
 import { createSim, sameTopology, type Sim, type SimNode } from "../src/plugin/graph-view/sim";
 import type { GraphSnapshot } from "../src/core/types";
 
@@ -1053,5 +1060,161 @@ describe("the label-drop threshold is pinned from both sides", () => {
 
   it("drops at the threshold exactly", () => {
     expect(labelCount(SPEC_DROP_AT)).toBe(0);
+  });
+});
+
+// §9's iteration scrubber. `view.ts` holds the slider and the wiring; what is
+// here is the arithmetic under it — which stops exist, what each shows, what
+// the label claims. The wiring itself (slider appears, `input` re-overlays,
+// hides on clear) is covered by README §18's checklist and by nothing else,
+// which is stated rather than left to be discovered.
+describe("§9's iteration scrubber", () => {
+  // Peaks are deliberately not 1: a frame normalized against itself has to be
+  // visible as such, and frames that already peak at 1 hide the difference
+  // between normalizing and not.
+  const FRAMES: ReadonlyMap<string, number>[] = [
+    new Map([
+      ["a.md", 4],
+      ["b.md", 0],
+      ["c.md", 0],
+    ]),
+    new Map([
+      ["a.md", 4],
+      ["b.md", 2],
+      ["c.md", 1],
+    ]),
+    new Map([
+      ["a.md", 3],
+      ["b.md", 2],
+      ["c.md", 2],
+    ]),
+  ];
+  const FINAL = FRAMES[2] as ReadonlyMap<string, number>;
+
+  /** A click overlay over the converged walk, before any scrub is attached. */
+  function base() {
+    return fromClickPPR(FINAL, "a.md", 2);
+  }
+
+  function walk(over: Partial<{ iterations: number; snapshots: ReadonlyMap<string, number>[] }> = {}) {
+    return { scores: FINAL, iterations: 3, snapshots: FRAMES, ...over };
+  }
+
+  describe("how many stops the walk has", () => {
+    it("is one per retained vector when nothing was dropped", () => {
+      expect(stopsOf({ frames: FRAMES, iterations: 3 })).toBe(3);
+    });
+
+    it("adds one for the final vector when the cap cut the walk short", () => {
+      // §7.2 retains 100 while §17's iteration ceiling can be raised past it.
+      expect(stopsOf({ frames: FRAMES, iterations: 5 })).toBe(4);
+    });
+  });
+
+  describe("attaching a walk", () => {
+    it("leaves the overlay alone when the walk kept nothing", () => {
+      const overlay = base();
+      expect(withScrub(overlay, { scores: FINAL, iterations: 3 })).toBe(overlay);
+      expect(withScrub(overlay, walk({ snapshots: [] }))).toBe(overlay);
+    });
+
+    it("starts on the last stop, so what the user sees does not change", () => {
+      const overlay = withScrub(base(), walk());
+      expect(overlay.scrub?.at).toBe(2);
+      expect(overlay.scores).toEqual(base().scores);
+      expect(overlay.topK).toEqual(base().topK);
+    });
+  });
+
+  describe("scrubbing to an iteration", () => {
+    it("normalizes that frame against its own peak", () => {
+      const scrubbed = scrubTo(withScrub(base(), walk()), 1, 2);
+      expect(scrubbed.scores?.get("a.md")).toBe(1);
+      expect(scrubbed.scores?.get("b.md")).toBe(0.5);
+      expect(scrubbed.scores?.get("c.md")).toBe(0.25);
+    });
+
+    it("re-ranks the top-K stroke, so the ranking is seen settling", () => {
+      const attached = withScrub(base(), walk());
+      // At iteration 1 only the seed carries mass; by 2 the walk has reached b.
+      expect(scrubTo(attached, 0, 2).topK).toEqual(new Set(["a.md"]));
+      expect(scrubTo(attached, 1, 2).topK).toEqual(new Set(["a.md", "b.md"]));
+    });
+
+    it("carries the seeds, the source and the label unchanged", () => {
+      const attached = withScrub(base(), walk());
+      const scrubbed = scrubTo(attached, 0, 2);
+      expect(scrubbed.seeds).toEqual(attached.seeds);
+      expect(scrubbed.source).toBe("click");
+      expect(scrubbed.label).toBe(attached.label);
+      expect(scrubbed.scrub?.frames).toBe(FRAMES);
+    });
+
+    it("returns to the converged overlay on the last stop", () => {
+      const attached = withScrub(base(), walk());
+      const back = scrubTo(scrubTo(attached, 0, 2), stopsOf(attached.scrub!) - 1, 2);
+      expect(back.scores).toEqual(base().scores);
+      expect(back.topK).toEqual(base().topK);
+    });
+
+    it("shows the final vector, not the last retained one, past the cap", () => {
+      // Three frames kept out of five iterations: the extra stop is the walk's
+      // own answer, which no frame holds.
+      const distinct = new Map([
+        ["a.md", 10],
+        ["b.md", 10],
+        ["c.md", 10],
+      ]);
+      const attached = withScrub(base(), { scores: distinct, iterations: 5, snapshots: FRAMES });
+      expect(attached.scrub?.at).toBe(3);
+      const last = scrubTo(attached, 3, 3);
+      expect(last.scores?.get("c.md")).toBe(1);
+      expect(vectorAt(attached.scrub!, 3)).toBe(distinct);
+    });
+
+    it("clamps a stop outside the range and ignores one that is not a number", () => {
+      const attached = withScrub(base(), walk());
+      expect(scrubTo(attached, -1, 2).scrub?.at).toBe(0);
+      expect(scrubTo(attached, 99, 2).scrub?.at).toBe(2);
+      expect(scrubTo(attached, 1.7, 2).scrub?.at).toBe(1);
+      expect(scrubTo(attached, Number.NaN, 2)).toBe(attached);
+    });
+
+    it("does nothing to an overlay that has no walk behind it", () => {
+      const overlay = base();
+      expect(scrubTo(overlay, 1, 2)).toBe(overlay);
+    });
+
+    it("never mutates the overlay it was given", () => {
+      const attached = withScrub(base(), walk());
+      const scoresBefore = attached.scores;
+      const topKBefore = attached.topK;
+
+      scrubTo(attached, 0, 2);
+
+      expect(attached.scrub?.at).toBe(2);
+      expect(attached.scores).toBe(scoresBefore);
+      expect(attached.topK).toBe(topKBefore);
+    });
+  });
+
+  describe("what the label claims", () => {
+    it("counts iterations from one", () => {
+      const attached = withScrub(base(), walk());
+      expect(scrubLabel(scrubTo(attached, 0, 2).scrub!)).toBe("iteration 1 of 3");
+      expect(scrubLabel(scrubTo(attached, 2, 2).scrub!)).toBe("iteration 3 of 3");
+    });
+
+    it("treats a single dropped iteration as the stop it is", () => {
+      const attached = withScrub(base(), walk({ iterations: 4 }));
+      expect(scrubLabel(scrubTo(attached, 3, 2).scrub!)).toBe("iteration 4 of 4");
+    });
+
+    it("names the gap when the cap dropped a range of iterations", () => {
+      const attached = withScrub(base(), walk({ iterations: 6 }));
+      expect(scrubLabel(scrubTo(attached, 3, 2).scrub!)).toBe(
+        "final vector at iteration 6 (iterations 4–5 not retained)",
+      );
+    });
   });
 });

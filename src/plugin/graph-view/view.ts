@@ -24,6 +24,7 @@ import {
   type LukaSettings,
 } from "../../core/index";
 import { fromClickPPR, fromInspect, fromTrace, type Overlay } from "./overlay";
+import { scrubLabel, scrubTo, stopsOf, withScrub } from "./scrub";
 import { pressEnded, pressMoved, pressOn, type Press } from "./press";
 import { draw, hitTest, sampleTheme, toGraph, type Camera, type Frame } from "./render";
 import { createSim, type Sim, type SimNode } from "./sim";
@@ -78,6 +79,10 @@ export class LukaGraphView extends ItemView {
   private statusEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
+  /** §9's scrubber: the row, its slider and its label. Hidden without a walk. */
+  private scrubEl: HTMLElement | null = null;
+  private sliderEl: HTMLInputElement | null = null;
+  private scrubLabelEl: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private tooltipEl: HTMLElement | null = null;
   private camera: Camera = { x: 0, y: 0, scale: 1 };
@@ -224,6 +229,29 @@ export class LukaGraphView extends ItemView {
     this.bannerEl = root.createDiv({ cls: "luka-graph-banner" });
     this.bannerEl.hide();
     this.statusEl = root.createDiv({ cls: "luka-graph-status" });
+
+    // §9's scrubber. It sits between the status line and the canvas rather
+    // than in the toolbar because it belongs to the overlay the status line is
+    // naming, and because it is absent far more often than it is present.
+    this.scrubEl = root.createDiv({ cls: "luka-graph-scrub" });
+    const slider = this.scrubEl.createEl("input", {
+      type: "range",
+      cls: "luka-graph-scrub-slider",
+    });
+    slider.min = "0";
+    slider.step = "1";
+    this.sliderEl = slider;
+    this.scrubLabelEl = this.scrubEl.createDiv({ cls: "luka-graph-scrub-label" });
+    this.scrubEl.hide();
+    // One scheduled frame per event (S24), and no model call: the vectors were
+    // retained by the walk that built this overlay, so scrubbing is arithmetic
+    // over data already in hand.
+    this.registerDomEvent(slider, "input", () => {
+      const overlay = this.overlay;
+      if (overlay?.scrub === undefined) return;
+      this.setOverlay(scrubTo(overlay, Number(slider.value), this.topK()));
+    });
+
     this.bodyEl = root.createDiv({ cls: "luka-graph-body" });
 
     // §7.1's rebuild signal. Subscribed before the first load so a compile that
@@ -258,6 +286,9 @@ export class LukaGraphView extends ItemView {
     this.resize = null;
     this.canvas = null;
     this.tooltipEl = null;
+    this.scrubEl = null;
+    this.sliderEl = null;
+    this.scrubLabelEl = null;
     this.replayEl = null;
     this.inspectEl = null;
     this.press = null;
@@ -320,6 +351,7 @@ export class LukaGraphView extends ItemView {
       this.resize?.disconnect();
       this.resize = null;
       this.statusEl.setText("");
+      this.syncScrub();
       // §9's two states are exclusive: an empty vault is pointed at Compile, not
       // told its link ratio.
       this.bannerEl.hide();
@@ -329,6 +361,7 @@ export class LukaGraphView extends ItemView {
     }
 
     this.statusEl.setText(this.statusText());
+    this.syncScrub();
     this.syncBanner(graph);
 
     if (this.canvas === null) {
@@ -517,9 +550,17 @@ export class LukaGraphView extends ItemView {
     const button = this.inspectEl;
     if (button !== null) button.disabled = true;
     try {
-      const result = await this.core.inspect(asked);
+      const result = await this.core.inspect(asked, { snapshots: true });
       if (this.closed) return;
-      this.setOverlay(fromInspect(result, this.topK(), asked));
+      // Mode A ranks lexically and returns no vectors, so it gets no slider —
+      // the same absence §9 explains with "without a PPR heat ramp".
+      this.setOverlay(
+        withScrub(fromInspect(result, this.topK(), asked), {
+          scores: new Map(result.ranked.map((node) => [node.path, node.score])),
+          iterations: result.iterations ?? 0,
+          ...(result.snapshots === undefined ? {} : { snapshots: result.snapshots }),
+        }),
+      );
       if (result.ranked.length === 0) {
         new Notice("Luka: that question reached nothing in this graph.", 6000);
       }
@@ -667,12 +708,12 @@ export class LukaGraphView extends ItemView {
     // would otherwise record the first one's own overlay.
     if (this.overlay?.source !== "click") this.beforeClick = this.overlay;
     try {
-      const result = await this.core.computePPR([path]);
+      // §9's scrubber wants the walk's own iterations, so they are asked for
+      // here and ride on the overlay — released with it, and never more than
+      // §7.2's hundred.
+      const result = await this.core.computePPR([path], { snapshots: true });
       if (this.closed || epoch !== this.clickEpoch) return;
-      // Never `snapshots: true`: the per-iteration vectors are the M5
-      // scrubber's, and retaining up to 100 of them costs memory for a feature
-      // this milestone does not ship.
-      this.setOverlay(fromClickPPR(result.scores, path, this.topK()));
+      this.setOverlay(withScrub(fromClickPPR(result.scores, path, this.topK()), result));
     } catch (error) {
       new Notice(`Luka: could not rank from that node — ${message(error)}`, 6000);
     }
@@ -686,7 +727,37 @@ export class LukaGraphView extends ItemView {
   private setOverlay(overlay: Overlay | null): void {
     this.overlay = overlay;
     this.statusEl.setText(this.statusText());
+    this.syncScrub();
     this.schedule();
+  }
+
+  /**
+   * Shows §9's slider for an overlay that has a walk behind it, and hides it
+   * for one that does not.
+   *
+   * Called from `render` as well as from `setOverlay`, because `reload` and the
+   * rebuild subscription clear the overlay by assignment and then render: with
+   * only the `setOverlay` path, a Refresh or a compile would leave the slider
+   * on screen, ranging over vectors nothing is drawing any more.
+   */
+  private syncScrub(): void {
+    const row = this.scrubEl;
+    const slider = this.sliderEl;
+    if (row === null || slider === null) return;
+
+    const scrub = this.overlay?.scrub;
+    if (scrub === undefined || this.graph === null || this.graph.nodes.length === 0) {
+      row.hide();
+      return;
+    }
+
+    // `max` before `value`: a value above the current maximum is clamped to it
+    // by the platform, so setting them the other way round loses the position
+    // whenever the new walk is longer than the old one.
+    slider.max = String(stopsOf(scrub) - 1);
+    slider.value = String(scrub.at);
+    this.scrubLabelEl?.setText(scrubLabel(scrub));
+    row.show();
   }
 
   private statusText(): string {

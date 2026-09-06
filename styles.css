@@ -85,3 +85,23 @@
   flex: 2 1 12em;
   min-width: 8em;
 }
+
+/* §9's iteration scrubber: shown only while an overlay carries a walk. */
+.luka-graph-scrub {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: 0 var(--size-4-2) var(--size-4-1);
+}
+
+.luka-graph-scrub-slider {
+  flex: 1 1 8em;
+  min-width: 6em;
+}
+
+.luka-graph-scrub-label {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
