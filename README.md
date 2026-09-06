@@ -611,7 +611,7 @@ exist.
       appears. Ctrl/Cmd-click one: nothing opens. (The labels are escaped for
       this reason — a recommendation to write a page must not look like the
       page.)
-- [ ] Ask something the wiki answers well, over pages whose links all resolve.
+- [x] Ask something the wiki answers well, over pages whose links all resolve.
       That note has **no `## Add next` section at all** — not an empty one.
 - [x] No bullet names a page the wiki already has: check each against
       `## Sources consulted` in the same note, and against the wiki. What this
