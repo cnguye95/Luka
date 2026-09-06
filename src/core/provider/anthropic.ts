@@ -6,6 +6,12 @@
 import type { HttpAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import type { LukaSettings } from "../types";
+import {
+  bytesToBase64,
+  failureFrom,
+  INCOMPLETE_REPLY_MESSAGE,
+  NOT_JSON_MESSAGE,
+} from "./http-shared";
 import { ProviderError, type RawProvider, type RawRequest } from "./types";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -26,15 +32,7 @@ export function createAnthropicProvider(http: HttpAdapter, settings: LukaSetting
         timeoutMs: request.timeoutMs,
       });
 
-      if (response.status < 200 || response.status >= 300) {
-        const detail = errorDetail(response.status, response.bytes);
-        throw new ProviderError(detail.message, {
-          status: response.status,
-          retryable: response.status === 429 || response.status >= 500,
-          retryAfterMs: parseRetryAfter(response.headers["retry-after"]),
-          ...(detail.vendor === undefined ? {} : { vendorMessage: detail.vendor }),
-        });
-      }
+      if (response.status < 200 || response.status >= 300) throw failureFrom(response);
 
       return extractText(response.bytes);
     },
@@ -70,7 +68,7 @@ function extractText(bytes: Uint8Array): string {
   try {
     parsed = JSON.parse(decodeUtf8(bytes));
   } catch {
-    throw new ProviderError("provider returned a 2xx response that is not JSON", {
+    throw new ProviderError(NOT_JSON_MESSAGE, {
       retryable: false,
     });
   }
@@ -85,7 +83,7 @@ function extractText(bytes: Uint8Array): string {
   // citation block claiming the full citer set. Not retryable: the same call
   // returns the same length.
   if ((parsed as { stop_reason?: unknown }).stop_reason === "max_tokens") {
-    throw new ProviderError("provider reply hit max_tokens and is incomplete", {
+    throw new ProviderError(INCOMPLETE_REPLY_MESSAGE, {
       retryable: false,
     });
   }
@@ -97,67 +95,8 @@ function extractText(bytes: Uint8Array): string {
 }
 
 /**
- * How much of a vendor's error text is worth carrying. The string travels into
- * a `CompileFailure.reason` and from there into a `Notice`, one per failed
- * source, and nothing downstream shortens it — a megabyte error body became a
- * megabyte notice. Enough to diagnose, not enough to be a payload.
+ * `bytesToBase64` moved to `http-shared.ts` with the OpenAI-compatible
+ * transport, which needs it for the same reason. Re-exported here because the
+ * transport's own tests import it by this path.
  */
-const MAX_VENDOR_MESSAGE = 500;
-
-/**
- * The clipped message a Notice may show, and the vendor's own text beside it.
- * They are separate because §11's temperature re-run decides on the vendor's
- * wording: a vendor that enumerates unsupported parameters at length would
- * otherwise push the word past the clip and fail every compile.
- */
-function errorDetail(status: number, bytes: Uint8Array): { message: string; vendor?: string } {
-  try {
-    const parsed = JSON.parse(decodeUtf8(bytes)) as { error?: { message?: unknown } };
-    if (typeof parsed.error?.message === "string" && parsed.error.message !== "") {
-      const vendor = parsed.error.message;
-      return { message: `HTTP ${status}: ${clip(vendor)}`, vendor };
-    }
-  } catch {
-    // Not a JSON error body; the status alone will have to do.
-  }
-  return { message: `HTTP ${status}` };
-}
-
-/** One line, bounded, with the truncation visible rather than silent. */
-function clip(message: string): string {
-  const flat = message.replace(/\s+/g, " ").trim();
-  return flat.length <= MAX_VENDOR_MESSAGE ? flat : `${flat.slice(0, MAX_VENDOR_MESSAGE)}…`;
-}
-
-/**
- * Seconds form only; anything else falls back to the wrapper's backoff.
- *
- * Zero falls back too. It is not a shorter delay but no delay, and taken as a
- * value it beat the backoff ladder and took the jitter with it — the whole
- * retry budget spent in microseconds against a server that had just said it
- * was rate-limited. The ladder is the right answer when the vendor gives none.
- */
-function parseRetryAfter(header: string | undefined): number | undefined {
-  if (header === undefined || !/^\d+$/.test(header.trim())) return undefined;
-  const ms = Number(header.trim()) * 1000;
-  return ms > 0 ? ms : undefined;
-}
-
-const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-/** Hand-rolled so core needs neither Buffer nor btoa. */
-export function bytesToBase64(bytes: Uint8Array): string {
-  let out = "";
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i] as number;
-    const b = i + 1 < bytes.length ? (bytes[i + 1] as number) : undefined;
-    const c = i + 2 < bytes.length ? (bytes[i + 2] as number) : undefined;
-    const triple = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
-    out +=
-      (B64[(triple >> 18) & 63] as string) +
-      (B64[(triple >> 12) & 63] as string) +
-      (b === undefined ? "=" : (B64[(triple >> 6) & 63] as string)) +
-      (c === undefined ? "=" : (B64[triple & 63] as string));
-  }
-  return out;
-}
+export { bytesToBase64 } from "./http-shared";

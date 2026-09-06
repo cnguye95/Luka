@@ -108,6 +108,17 @@ describe("anthropic transport — responses", () => {
     expect((failure as ProviderError).status).toBe(429);
   });
 
+  it("reads an error body that is a bare string, as local servers send", async () => {
+    // Ollama and friends answer `{"error": "..."}` rather than nesting a
+    // message. Reading only the nested shape turned the whole reason into a
+    // bare "HTTP 404" — shared with the OpenAI-compatible transport, which is
+    // the one that meets those servers.
+    const { raw } = transport([jsonRoute(404, { error: "model 'x' not found" })]);
+    const failure = await raw.complete(REQUEST).catch((e: unknown) => e);
+    expect((failure as ProviderError).message).toBe("HTTP 404: model 'x' not found");
+    expect((failure as ProviderError).vendorMessage).toBe("model 'x' not found");
+  });
+
   it("classifies 429 and 5xx as retryable, other 4xx as not", async () => {
     const statuses: [number, boolean][] = [
       [429, true],
