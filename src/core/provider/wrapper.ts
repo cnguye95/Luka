@@ -7,9 +7,10 @@
 // against. `sleep` and `random` are injectable so tests run instantly and
 // deterministically.
 import type { HttpAdapter } from "../adapters";
-import type { LukaSettings, ProviderTask } from "../types";
+import type { LukaSettings, ProviderName, ProviderTask } from "../types";
 import { PROVIDER_TASKS, normalizeSettings } from "../types";
 import { createAnthropicProvider } from "./anthropic";
+import { createOpenAICompatProvider } from "./openai-compat";
 import {
   MAX_TOKENS_BY_TASK,
   ProviderError,
@@ -45,7 +46,11 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
    * loses nothing.
    */
   const current = (): LukaSettings => normalizeSettings(options.settings);
-  const raw = options.raw ?? createAnthropicProvider(options.http, options.settings);
+  // Chosen once, from the settings as they stand when the operation starts.
+  // `createProvider` is called per compile and per ask, so "per run" is what
+  // that amounts to — the same scope the rest of the settings are fixed at,
+  // and switching provider mid-compile is not a thing a user can mean.
+  const raw = options.raw ?? rawFor(current().provider, options.http, options.settings);
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const random = options.random ?? Math.random;
 
@@ -134,7 +139,12 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
   }
 
   async function complete(request: CompletionRequest): Promise<unknown> {
-    if (current().apiKey.trim() === "") {
+    // Anthropic only. An OpenAI-compatible endpoint may legitimately want no
+    // credential — a server on localhost usually does — and refusing to call
+    // one because a field is empty would make that configuration impossible to
+    // express. A server that does want a key answers 401, which is a clearer
+    // message than this guard could write.
+    if (current().provider === "anthropic" && current().apiKey.trim() === "") {
       throw new ProviderError("API key is not set — add it in Luka's settings", {
         task: request.task,
         retryable: false,
@@ -225,6 +235,13 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
 function unfence(text: string): string {
   const fenced = /^```(?:[A-Za-z0-9_-]+)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/.exec(text.trim());
   return fenced === null ? text : (fenced[1] as string);
+}
+
+/** §12's provider selector, resolved to a transport. */
+function rawFor(provider: ProviderName, http: HttpAdapter, settings: LukaSettings): RawProvider {
+  return provider === "openai-compatible"
+    ? createOpenAICompatProvider(http, settings)
+    : createAnthropicProvider(http, settings);
 }
 
 function delayBeforeAttempt(attempt: number, lastError: unknown, random: () => number): number {

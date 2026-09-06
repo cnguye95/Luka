@@ -447,3 +447,95 @@ describe("wrapper + anthropic end to end over scripted HTTP", () => {
     expect(provider.stats().requests).toBe(2);
   });
 });
+
+// §12's provider selector, from the wrapper down through the real transport.
+// The wrapper is the thing that must not care which one it is holding.
+describe("wrapper + openai-compatible end to end over scripted HTTP", () => {
+  const CHAT_OK = jsonRoute(200, {
+    choices: [{ finish_reason: "stop", message: { content: "done" } }],
+  });
+
+  const LOCAL: Partial<LukaSettings> = {
+    provider: "openai-compatible",
+    apiKey: "",
+    openaiApiKey: "",
+    openaiBaseUrl: "http://localhost:11434/v1",
+  };
+
+  function localProvider(http: ScriptedHttp, over: Partial<LukaSettings> = {}) {
+    const sleeps: number[] = [];
+    const provider = createProvider({
+      http,
+      settings: { ...SETTINGS, ...LOCAL, ...over },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      random: () => 1,
+    });
+    return { provider, sleeps };
+  }
+
+  it("calls a keyless local server rather than refusing for want of a key", async () => {
+    // The Anthropic guard would have stopped this before any request. A server
+    // that does want a credential answers 401, which says more than a guard
+    // written for a different vendor could.
+    const http = new ScriptedHttp([CHAT_OK]);
+    const { provider } = localProvider(http);
+
+    await expect(provider.complete({ task: "synthesis", system: "s", user: "u" })).resolves.toBe(
+      "done",
+    );
+    expect(http.requests[0]?.url).toBe("http://localhost:11434/v1/chat/completions");
+    expect(http.requests[0]?.headers?.["authorization"]).toBeUndefined();
+    expect(provider.stats().requests).toBe(1);
+  });
+
+  it("spends one counted attempt learning which field carries the token cap", async () => {
+    const http = new ScriptedHttp([
+      jsonRoute(400, {
+        error: { message: "Use 'max_completion_tokens' instead of 'max_tokens'." },
+      }),
+      CHAT_OK,
+    ]);
+    const { provider, sleeps } = localProvider(http);
+
+    await expect(provider.complete({ task: "synthesis", system: "s", user: "u" })).resolves.toBe(
+      "done",
+    );
+    expect(http.requests).toHaveLength(2);
+    const first = JSON.parse(http.requests[0]?.body ?? "{}") as Record<string, unknown>;
+    const second = JSON.parse(http.requests[1]?.body ?? "{}") as Record<string, unknown>;
+    expect("max_tokens" in first).toBe(true);
+    expect("max_completion_tokens" in second).toBe(true);
+    expect("max_tokens" in second).toBe(false);
+    // The retry is immediate, and both attempts are counted — the transport
+    // never makes a request the counter cannot see.
+    expect(sleeps).toEqual([1]);
+    expect(provider.stats().requests).toBe(2);
+  });
+
+  it("cannot learn it with no retry budget, and says what the server said", async () => {
+    // The recorded cost of doing this through the wrapper rather than inside
+    // the transport: the lesson needs one retry to be applied.
+    const http = new ScriptedHttp([
+      jsonRoute(400, { error: { message: "Use 'max_completion_tokens' instead." } }),
+      CHAT_OK,
+    ]);
+    const { provider } = localProvider(http, { maxRetries: 0 });
+
+    await expect(
+      provider.complete({ task: "synthesis", system: "s", user: "u" }),
+    ).rejects.toThrow(/max_completion_tokens/);
+    expect(http.requests).toHaveLength(1);
+  });
+
+  it("still refuses an Anthropic run with no key (the guard is per provider)", async () => {
+    const http = new ScriptedHttp([CHAT_OK]);
+    const provider = createProvider({ http, settings: { ...SETTINGS, apiKey: "" } });
+
+    await expect(provider.complete({ task: "synthesis", system: "s", user: "u" })).rejects.toThrow(
+      "API key is not set",
+    );
+    expect(http.requests).toHaveLength(0);
+  });
+});
