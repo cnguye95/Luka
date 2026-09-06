@@ -705,7 +705,10 @@ running locally, and the last item in it is the only one that costs anything.
 - [ ] **Show retrieval on graph** on an answer note. No slider: a trace is
       recorded data, not a walk this pane ran.
 - [ ] With a slider on screen, press **Refresh**, or compile in another window.
-      The overlay clears and the slider goes with it.
+      The overlay clears and the slider goes with it. (Only what is on screen
+      is claimed here. A copy can survive out of sight in the double-click
+      restore slot — see BUILD-NOTES S49 — so this item is about the pane, not
+      about memory.)
 - [ ] Scrub to the middle, then **Export PNG**. The file shows the iteration on
       screen, not the converged walk.
 
@@ -715,15 +718,23 @@ running locally, and the last item in it is the only one that costs anything.
       URL** field. Switching back brings the Anthropic field back.
 - [ ] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
       and reload Obsidian. Both are still there: the two do not share a field.
-- [ ] Leave the model ids at their Anthropic defaults and compile. It fails
-      with a notice naming the model the server rejected — it does not appear
-      to work.
+- [ ] Leave the model ids at their Anthropic defaults and compile. Every
+      source fails, and one notice per source carries the server's own
+      complaint. The point of the check is that it **fails loudly rather than
+      appearing to work** — whether the text names the model is up to the
+      server, since Luka passes the vendor's message through and falls back to
+      a bare `HTTP <status>` when the body carries none.
 - [ ] Set the base URL with a trailing slash, then again with
       `/chat/completions` already on the end. Both compile: the endpoint is
       joined, not doubled.
-- [ ] Set the base URL to something that is not a URL at all. Compile fails
-      with a notice naming the value, and nothing reaches the network — your
-      key is not sent to a vendor you did not name.
+- [ ] Set the base URL to something that is not a URL at all — `not a url`
+      will do. Compile fails immediately, with a notice quoting the value back
+      at you and saying it is not a valid http(s) URL. That wording is the
+      observable part: it is written before any request is attempted, and it
+      is different from every message a server can send, so seeing it *is*
+      seeing that nothing was sent. (Do not try to confirm that in DevTools —
+      per §8 above, the network panel cannot see these requests whether they
+      happen or not.)
 - [ ] Point it at a local server with the key field empty and compile. It
       works: no credential is sent, because none was configured.
 - [ ] **Paid, optional.** Against OpenAI's own endpoint, compile one small

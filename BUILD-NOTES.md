@@ -3383,11 +3383,25 @@ continue M4's numbering.
 ### The scrubber
 
 - **S49** — the retained vectors ride on the `Overlay` as an optional `scrub`
-  field, not in a field of their own on the view. Everything that already
-  replaces or clears an overlay — Esc, `reload`, the rebuild subscription, the
-  double-click restore of `beforeClick` — then releases them with it and needs
-  no new path. S22 gives the vault one pane, so one frame set exists at a time,
-  bounded by §7.2's cap of 100 vectors.
+  field, not in a field of their own on the view. Everything that replaces an
+  overlay releases the previous one's vectors with it and needs no new path:
+  Esc, `reload`, the rebuild subscription and the double-click restore all
+  reach the same field.
+  - *(Corrected 2026-09-06, by the review pass.)* The sentence that followed
+    said "one frame set exists at a time, bounded by §7.2's cap of 100
+    vectors", and both halves were wrong. **Two can be alive**: `beforeClick`
+    is a second overlay slot (M4's double-click restore), and neither `reload`
+    nor the rebuild subscription clears it — they null `this.overlay` only. So
+    a scrub can outlive the rebuild that retired the overlay it belonged to,
+    and a later double-click can put it back, slider and all, over a snapshot
+    it was not computed against. And the cap bounds the *number* of vectors,
+    not their width: each is a map over every node, so the real bound is
+    `100 × nodes` entries per overlay, twice over. At §9's stated target of
+    500+ nodes that is tens of thousands of entries and unremarkable; it is
+    linear in vault size, which the original sentence implied it was not.
+  - Left as it stands, on the user's decision: the stale-restore needs a walk
+    in flight at the moment a compile finishes, and the memory is bounded and
+    released on the next overlay. What was wrong was the note, not the choice.
 - **S50** — `scrub.ts` is a pure module beside `press.ts`, and `view.ts` holds
   only the slider and the wiring. §3's tree gains it the way it gained
   `concurrency.ts` and `press.ts`.
@@ -3598,5 +3612,13 @@ reviewer's report — is how a deviation becomes a surprise.
 - The scrubber's frames are the walk the *pane* ran. An answer note's recorded
   trace has none, so replay has no slider — §9 asks for one on an overlay
   "computed with snapshots", and a trace was not.
-- Nothing in `src/plugin` is covered by automated tests, the scrubber's wiring
-  included. README §18 is the whole of its verification, and it is unwalked.
+- The scrubber's *wiring* — the slider element, the `input` handler, the
+  `snapshots: true` requests and `syncScrub` — is covered by README §18 and by
+  nothing else, and §18 is unwalked. Reverting `view.ts` to its pre-M5 state
+  leaves all tests passing.
+  - Stated this narrowly on purpose. An earlier draft of this bullet said
+    "nothing in `src/plugin` is covered by automated tests", which is false and
+    contradicted S58 eleven lines above it: `tests/graph-view.test.ts` covers
+    `scrub.ts`, `overlay.ts`, `press.ts`, `sim.ts` and `render.ts`, and
+    `fs-obsidian.ts` has had tests since M3. A limitation written wider than
+    the truth reads as licence to skip a suite that exists.
