@@ -213,6 +213,37 @@ describe("edges (§7.1)", () => {
       "wiki/concepts/Personalized PageRank.md|wiki/concepts/Retrieval.md",
     ]);
   });
+
+  it("does not let a page alias take a manifest path away from its raw node", async () => {
+    // Call A sees only the body and asks for "obvious variants", so a dataset's
+    // descriptor page comes back aliased with the dataset's own path. §4 makes
+    // every citation block and `source:` key name that path; if the alias won,
+    // each of them would be an edge to the wrong node and the raw node would
+    // sit at degree 0, unreported because the orphan filter skips raw.
+    const fs = new MemFs({
+      "wiki/entities/runs.csv.md": page("runs.csv", "entity", "The dataset.", ["raw/runs.csv"]),
+      "wiki/sources/runs.md":
+        "---\nkind: source\nsource: \"[[raw/runs.csv]]\"\nsummary: ''\nupdated: '2026-08-20'\n---\nProse.\n",
+      "raw/runs.md": "---\nderived-from: raw/runs.csv\n---\n# runs.csv\n",
+      [MANIFEST]: JSON.stringify({ "raw/runs.csv": { hash: "c", derivative: "raw/runs.md" } }),
+    });
+
+    expect(pairs(await build(fs))).toEqual(["raw/runs.md|wiki/sources/runs.md"]);
+  });
+
+  it("keeps a passthrough source reachable when a page alias is its own path", async () => {
+    // Harder than the derivative case: the alias names the node's *own* path,
+    // so both manifest claims would be no-ops if the page had claimed first,
+    // and the raw node would be reachable by no name at all.
+    const fs = new MemFs({
+      "wiki/entities/rawfigures.md.md": page("rawfigures.md", "entity", "Figures.", ["raw/figures.md"]),
+      "wiki/concepts/Image localization.md": page("Image localization", "concept", "See [[raw/figures.md]]."),
+      "raw/figures.md": "![a](a.png)\n",
+      [MANIFEST]: JSON.stringify({ "raw/figures.md": { hash: "f" } }),
+    });
+
+    expect(pairs(await build(fs))).toEqual(["raw/figures.md|wiki/concepts/Image localization.md"]);
+  });
 });
 
 describe("the graph does not depend on the order the vault is read in", () => {

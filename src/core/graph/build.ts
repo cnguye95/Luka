@@ -39,7 +39,8 @@ export async function buildGraph(input: BuildGraphInput): Promise<GraphSnapshot>
   const nodes = new Map<string, GraphNode>();
   // Handle → node path. One node can be reachable by several names: a wiki page
   // by its title and each alias, a raw source by both its manifest path and the
-  // readable markdown that stands in for it.
+  // readable markdown that stands in for it. Raw sources claim first — see the
+  // page-name loop below for why.
   const byHandle = new Map<string, string>();
 
   for (const page of pages) {
@@ -50,8 +51,6 @@ export async function buildGraph(input: BuildGraphInput): Promise<GraphSnapshot>
       degree: 0,
       summary: page.summary,
     });
-    claim(byHandle, page.title, page.path);
-    for (const alias of page.aliases) claim(byHandle, alias, page.path);
   }
 
   for (const sourcePath of Object.keys(manifest).sort(comparePaths)) {
@@ -80,6 +79,20 @@ export async function buildGraph(input: BuildGraphInput): Promise<GraphSnapshot>
     // source page has no edge to the very file it describes.
     claim(byHandle, readable, readable);
     claim(byHandle, sourcePath, readable);
+  }
+
+  // Page names last. Call A writes aliases from the body alone and is asked for
+  // "obvious variants", so a dataset's descriptor page comes back aliased with
+  // the dataset's own path — and §4 makes every citation block and `source:`
+  // key name exactly that path. Had the page claimed first, each of those
+  // links would be an edge to the descriptor and the raw node would sit at
+  // degree 0, or for a passthrough source lose its every name. The manifest is
+  // the authority on what a `raw/` path means; an alias that loses here costs
+  // the page nothing it is owed. Titles cannot collide: `sanitizeTitle` strips
+  // the `/` every source path carries.
+  for (const page of pages) {
+    claim(byHandle, page.title, page.path);
+    for (const alias of page.aliases) claim(byHandle, alias, page.path);
   }
 
   const pairs = new Set<string>();

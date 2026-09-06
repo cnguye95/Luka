@@ -3086,6 +3086,25 @@ edges, or in both — and that is a §15 decision rather than a §9 one.
 
 ### A page alias can hijack a raw node's handle (§7.1)
 
+**Status (2026-09-06): FIXED.** `buildGraph` now claims manifest handles
+before page titles and aliases, so a source-shaped alias loses to the node the
+manifest says the path is. The change is confined to `build.ts`; nothing in the
+rename subsystem imports it, and the 7/1 tripwire was re-run anyway: 7 and 1.
+Two tests pin it, and both fail with the loops in their old order — the
+recorded `raw/runs.csv` case, and a harder one the verification pass found on
+`test-vault`: `wiki/entities/rawfigures.md.md` aliased `raw/figures.md`, a
+*passthrough* source, so the alias took the node's own path and both manifest
+claims were no-ops. That raw node was reachable by no name at all, seven link
+sites misrouted, and the orphan report said "None". The note's "any derivative
+whose descriptor page echoes its origin path" was too narrow; passthrough
+sources were hit harder, and the new `## Add next` diagram had started drawing
+the phantom edge too. Not taken: refusing `raw/` aliases at page-table load,
+which would cover the other five tables but touches the namespace coupling
+point — the graph was the only consumer without a `raw/` guard. Still open
+from the same page: its body opens `# raw/figures.md` under the title
+`rawfigures.md`, and `withoutTitleHeading`'s fold does not equate a path with
+its sanitized title, so the §6.5 fix above has that hole.
+
 Found while sizing the "what to add next" pane against `test-vault`. That
 feature does not touch it and takes the snapshot as given.
 
