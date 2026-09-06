@@ -2964,6 +2964,28 @@ and the compile's own rebuild retires that rebuild; if the forced walk then
 rejects, the cache stays at the pre-compile snapshot. The window is a few
 microseconds and the recovery is another Refresh.
 
+**Corrected and narrowed (2026-09-06).** That residual was misdescribed twice.
+A press cannot land between the lock's release and the compile's own rebuild:
+`writes.end()`, `invalidateGraph()` and the synchronous start of
+`rebuildGraph()` run in one continuation, and a button press is a macrotask.
+The real window is any press during the compile's own rebuild *walk* — the
+whole of it, seconds on a large vault — which retires that walk. And the case
+it led to was worse than "the cache stays": `await rebuildGraph()` at the end
+of `compile` had no catch, so a compile whose own rebuild rejected — one
+unreadable file under `wiki/`, after every page was written and the manifest
+committed — propagated out as "compile failed", `reportCompile` never ran, the
+run's own report was lost, and the cache stayed pre-compile with no event. Now
+caught: the compile completes, the miss goes on `reported` as "graph not
+rebuilt — …", and the cache is dropped so the next read walks rather than
+serving a vault that no longer exists. One test, which fails without the catch.
+
+Also withdrawn: the paragraph above says the epoch and the flag "each have
+their own failing test". The verification pass deleted only the epoch half of
+the overlap check and the suite stayed green. `begin()` bumps the generation,
+so a walk that overlapped either edge of the phase already fails
+`mine === generation` when it lands; the epoch never changes the decision. It
+stays as a second reading of the same fact, but it is not load-bearing.
+
 The pane keeps its drawn graph when a walk rejects, rather than replacing it
 with the empty state. The walk failed, not the snapshot on screen, and
 reporting an emptiness that is not true is the worse half of a failure the
@@ -3157,6 +3179,44 @@ only; claim manifest handles before page aliases; or refuse an alias beginning
 `raw/` when the page table is loaded. Each touches `build.ts`, which CLAUDE.md
 names as the seam where `GraphNode` changes reach the rename path, so it wants
 its own commit with the 7/1 mutation counts re-run — not a fold into a feature.
+
+## The verification pass over the open findings — 2026-09-06
+
+Six open findings and seven owed pane checks, re-verified against the code as
+it stood after thirty-one commits had landed on the files they name. Four
+read-only reviewer lanes, then every mutation this log records for the fixes
+those items depend on, re-applied one at a time: 17 mutations, 15 counts
+reproduced. Two moved — deleting the `forcing` slot fails 1 rather than 2,
+and never clearing `writing` fails 4 rather than 3, an `inspect.test.ts` race
+test having joined — and one claim was refuted outright (the epoch, above).
+The 7/1 rename tripwire held, before and after the fixes below. One note on
+the tripwire itself: `chooseTarget` and its recorded-path fallback live in
+`normalize/index.ts`, not `renames.ts` as CLAUDE.md has it; the mutation is
+unambiguous either way.
+
+Verdicts. The readable/live seam is *partial*: `readablePathFor` still decides
+the passthrough arm itself and masks the shared rule's null behind
+`?? sourcePath` — extensionally identical to the pre-refactor code, unreachable
+today, untested, and the one place the rejected answer survives. The context
+budget and the alias hijack were exactly as stated, and the alias finding was
+worse (its own entry). The network-panel entry's remedy landed in full and it
+can be closed; the modal-Compile entry's remedy was never applied to §13.3's
+own text, though commit f59b527 applied it to a different item; the
+edges-not-nodes entry's wording fix was never applied either, and it points at
+§15 when the sentence is §9's (handoff.md line 464). All seven pane items have
+their code in place; the Refresh-during-compile item's mechanism changed under
+it (WritePhase, 2c0dcbb), so a press during the scope preview now updates the
+counts and that is correct. Nothing in `tests/` imports `view.ts`, so the
+button wiring, the failed-walk catch, the open path's unforced default and the
+tooltip remain hand checks; the four still owed are §5.2, §5.4, the unchanged-
+vault Refresh and the failed-walk Refresh.
+
+Three fixes came out of it, each in its own commit with its entry updated in
+place: the alias claim order, the follow-up round's whole-pages rule, and the
+post-compile rebuild that threw. Left open and named: the seam's dead fallback,
+the trace's silent drops and unknown-field handling, `withoutTitleHeading`'s
+sanitized-title hole, README line 330's "watch the console" (nothing writes to
+it), and the two checklist rewordings.
 
 ## §14 closeout — what the manual pass found
 

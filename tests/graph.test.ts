@@ -317,6 +317,61 @@ describe("the graph is rebuilt after compile (§7.1)", () => {
     await core.compile();
     expect(seen).toHaveLength(2);
   });
+
+  it("finishes a compile whose own rebuild cannot walk, and says so on the report", async () => {
+    // Every page is written and the manifest committed before the rebuild
+    // runs, so a file that cannot be read *then* is a graph problem, not a
+    // compile failure. Thrown, it would reach the plugin as "compile failed"
+    // and the run's own report would never be shown. The stale cache goes
+    // too: the next read walks rather than serving the pre-compile vault.
+    const fs = new MemFs({ "raw/note.md": "PageRank matters.\n" });
+    const provider = new StubProvider((request) =>
+      request.task === "page-generation"
+        ? "Prose about [[PageRank]]."
+        : inventoryReply("A note.", [{ title: "PageRank", kind: "concept" }]),
+    );
+    const core = createCore({
+      fs,
+      http: new StubHttp({}),
+      manifestPath: MANIFEST,
+      settings: { ...DEFAULT_SETTINGS, apiKey: "test-key" },
+      now: () => new Date("2026-08-20T10:00:00Z"),
+      provider,
+    });
+    const seen: GraphSnapshot[] = [];
+    core.onGraphRebuilt((graph) => seen.push(graph));
+    expect((await core.getGraph()).nodes).toEqual([]);
+
+    // The manifest is the compile's commit point, and nothing reads `wiki/`
+    // after it is written — except the rebuild. Fail the first such read.
+    const originalRead = fs.read.bind(fs);
+    const originalWrite = fs.write.bind(fs);
+    let committed = false;
+    fs.write = async (path: string, data) => {
+      if (path === MANIFEST) committed = true;
+      return originalWrite(path, data);
+    };
+    fs.read = async (path: string) => {
+      if (committed && path.startsWith("wiki/")) {
+        committed = false;
+        throw new Error("EACCES wiki/");
+      }
+      return originalRead(path);
+    };
+
+    const result = await core.compile();
+
+    expect(result.failed).toEqual([]);
+    expect(result.pagesWritten).toBeGreaterThan(0);
+    expect(result.reported.map((entry) => entry.reason)).toEqual([
+      expect.stringMatching(/^graph not rebuilt — EACCES wiki\//),
+    ]);
+    // Nothing was published for the walk that failed, and the next read walks
+    // the vault the compile left rather than the empty one it began with.
+    expect(seen).toHaveLength(1);
+    expect((await core.getGraph()).nodes.length).toBeGreaterThan(0);
+    expect(seen).toHaveLength(2);
+  });
 });
 
 describe("a forced read walks the vault again (§9's Refresh)", () => {

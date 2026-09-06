@@ -396,8 +396,8 @@ export function createCore(deps: CoreDeps): Core {
    * Accepted, and worth stating because it is not free: this drops what a
    * superseded walk read. That is right when the walk that superseded it
    * publishes, which is every case but one — a compile whose own rebuild then
-   * fails leaves the cache at the pre-compile snapshot with nothing to correct
-   * it. The recovery is a Refresh, which by then is not busy and walks.
+   * fails would leave the cache at the pre-compile snapshot — so `compile`
+   * drops the cache when its own rebuild rejects, and the next read walks.
    */
   function currentOrNewer(built: GraphSnapshot, mine: number, superseded: boolean): GraphSnapshot {
     return (mine === generation && !superseded) || graph === null ? built : graph;
@@ -440,7 +440,24 @@ export function createCore(deps: CoreDeps): Core {
         // Retire first: a build begun before these writes cannot describe them,
         // and joining it would cache a graph that is already wrong.
         invalidateGraph();
-        await rebuildGraph();
+        try {
+          await rebuildGraph();
+        } catch (error) {
+          // The compile is done: every page is written and the manifest is
+          // committed. A walk that then cannot read one file is a graph
+          // problem, not a compile failure, and throwing here would report
+          // the run as failed and lose its own report. The cache is dropped
+          // rather than left at the pre-compile snapshot — a reader asking
+          // "what is the graph now" is better told to walk again than handed
+          // a vault that no longer exists — and the miss is carried on
+          // `reported`, where work that finished differently than intended
+          // already goes.
+          graph = null;
+          result.reported.push({
+            path: "wiki/",
+            reason: `graph not rebuilt — ${error instanceof Error ? error.message : String(error)}; the pane keeps its last snapshot until the next Refresh or compile`,
+          });
+        }
       }
       return result;
     },
