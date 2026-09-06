@@ -20,6 +20,7 @@ import { serializeFrontmatter } from "../yaml";
 import { parseCitationBlock, withCitationBlock } from "./citations";
 import type { TitleIndex } from "./links";
 import { resolveLinks } from "./links";
+import { handleOf } from "./pagetable";
 import { pagePathForKind } from "./pagetable";
 
 const SYSTEM = [
@@ -220,8 +221,36 @@ export function renderPage(page: PageToWrite, index: TitleIndex, updated: string
     updated,
     ...(page.sourcePath === undefined ? {} : { source: `[[${page.sourcePath}]]` }),
   });
-  const body = withCitationBlock(resolveLinks(page.body, index), page.citers);
+  const body = withCitationBlock(
+    resolveLinks(withoutTitleHeading(page.body, page.title), index),
+    page.citers,
+  );
   return frontmatter + body;
+}
+
+/**
+ * §6.5's post-process gains a fifth pass: a leading heading that only repeats
+ * the page's own title comes off.
+ *
+ * The prompt already forbids one, and told the model "yours would be
+ * discarded", which was not true of anything — no pass stripped it, so the
+ * sentence was a promise the code did not keep. The §14 manual pass found the
+ * page where the model did not comply, one in twenty-nine. Invariant 5 is that
+ * code writes the structure and the model writes prose; a heading is
+ * structure, and leaving the only defense in a prompt makes the invariant hold
+ * as far as the model feels like it.
+ *
+ * Only the *leading* heading, and only when it matches. `## How the update
+ * works` further down is prose the page needs, and a first heading that says
+ * something else is the model organizing its own text — which it is meant to
+ * do. Matching uses `handleOf`, so the same fold §4 compares names by catches
+ * a heading differing only in case or Unicode form.
+ */
+export function withoutTitleHeading(body: string, title: string): string {
+  const match = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t]*(?:\r?\n|$)/.exec(body.trimStart());
+  if (match === null) return body;
+  if (handleOf(match[1] as string) !== handleOf(title)) return body;
+  return body.trimStart().slice(match[0].length).trimStart();
 }
 
 /**

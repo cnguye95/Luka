@@ -4,6 +4,7 @@ import {
   citerUnion,
   generatePageBody,
   readablePathFor,
+  withoutTitleHeading,
   readCitations,
   renderCallBPrompt,
   renderPage,
@@ -345,5 +346,82 @@ describe("readablePathFor (§7.1)", () => {
     expect(readablePathFor("raw/paper.pdf", "pdf", "raw/paper.md")).toBe("raw/paper.md");
     expect(readablePathFor("raw/board.png", "image", "raw/board.md")).toBe("raw/board.md");
     expect(readablePathFor("raw/toy-repo", "repo", "raw/toy-repo.md")).toBe("raw/toy-repo.md");
+  });
+});
+
+describe("a heading repeating the title comes off (§6.5, invariant 5)", () => {
+  // The §14 pass found one page in twenty-nine opening with a heading that
+  // only said its own title again. The prompt forbids it and claimed such a
+  // heading "would be discarded", which nothing did — this is the pass that
+  // makes the sentence true.
+  const strip = withoutTitleHeading;
+
+  it("strips a leading heading that only repeats the title", () => {
+    // Red if the pass is removed, or if it only handles `#`.
+    expect(strip("# Wikilink graph\n\nProse follows.\n", "Wikilink graph")).toBe(
+      "Prose follows.\n",
+    );
+    expect(strip("## Wikilink graph\nProse.\n", "Wikilink graph")).toBe("Prose.\n");
+  });
+
+  it("matches by §4's fold, so case and Unicode form do not let one through", () => {
+    // Red if the comparison is `===` on the raw strings rather than `handleOf`.
+    expect(strip("# wikilink GRAPH\nProse.\n", "Wikilink graph")).toBe("Prose.\n");
+    expect(strip("# Cafe\u0301 culture\nProse.\n", "Caf\u00e9 culture")).toBe("Prose.\n");
+  });
+
+  it("keeps a first heading that says something else", () => {
+    // The model organizing its own prose is what it is for. Red if the pass
+    // strips any leading heading rather than a matching one.
+    const body = "# How the update works\n\nProse.\n";
+    expect(strip(body, "Wikilink graph")).toBe(body);
+  });
+
+  it("keeps a matching heading that is not the first thing", () => {
+    // Only the leading one. A section further down that happens to carry the
+    // title is prose. Red if the regex loses its start anchor.
+    const body = "Opening prose.\n\n## Wikilink graph\n\nMore.\n";
+    expect(strip(body, "Wikilink graph")).toBe(body);
+  });
+
+  it("strips exactly one, so a second heading survives", () => {
+    // Red if the pass loops. Two title headings in a row is the model being
+    // strange, and the second is then visible rather than silently eaten.
+    expect(strip("# Graph\n# Graph\nProse.\n", "Graph")).toBe("# Graph\nProse.\n");
+  });
+
+  it("leaves a body with no heading alone", () => {
+    expect(strip("Just prose.\n", "Graph")).toBe("Just prose.\n");
+    expect(strip("", "Graph")).toBe("");
+  });
+
+  it("does not mistake a hash inside prose for a heading", () => {
+    // Red if the regex drops its leading-line anchoring.
+    const body = "Use #tags and C# freely.\n";
+    expect(strip(body, "Graph")).toBe(body);
+  });
+
+  it("runs inside renderPage, before links are resolved", () => {
+    // The pure pass is covered above; this is the wiring. Red if the call is
+    // dropped from renderPage — which is the shape this log keeps recording,
+    // an extracted function tested while its only caller goes unobserved.
+    const index = buildTitleIndex([page("Personalized PageRank", ["PPR"])]);
+    const rendered = renderPage(
+      {
+        path: "wiki/concepts/Personalized PageRank.md",
+        title: "Personalized PageRank",
+        kind: "concept",
+        aliases: ["PPR"],
+        summary: "Ranking by random walk.",
+        body: "# Personalized PageRank\n\nLuka ranks with [[PPR]].",
+        citers: ["raw/paper.md"],
+      },
+      index,
+      "2026-08-20",
+    );
+
+    expect(rendered).not.toContain("# Personalized PageRank\n");
+    // The prose survives, and the link post-pass still ran over it.
+    expect(rendered).toContain("[[Personalized PageRank|PPR]]");
   });
 });
