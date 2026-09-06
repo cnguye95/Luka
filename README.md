@@ -675,29 +675,38 @@ survives being written down.
 
 ### 18. M5 — the scrubber and the OpenAI-compatible provider
 
-The newest code, and none of it verified by hand yet: everything above this
-section has been walked at least once, and nothing here has. The scrubber half
-is free. The provider half needs either an OpenAI-compatible key or a server
-running locally, and the last item in it is the only one that costs anything.
+The newest code, and the least walked: everything above this section has been
+through a full pass, and this one is partway through its first. The scrubber
+half is free. The provider half needs either an OpenAI-compatible key or a
+server running locally, and the last item in it is the only one that costs
+anything.
+
+**Rebuild first, before anything below.** `npm run build && npm run
+install:vault`, then reload the plugin — see *After a rebuild* above. This
+section is newer than any build you are likely to have installed, and a stale
+one is indistinguishable from a missing feature: the first attempt at this
+list reported the slider absent, and the cause was a `main.js` from the
+previous evening while the repo's own build was current. Check the timestamp on
+`test-vault/.obsidian/plugins/luka/main.js` before you suspect the code.
 
 **The scrubber.** It appears under the status line, never in the toolbar.
 
-- [ ] Click a node. A slider appears beneath the status line, and its label
+- [x] Click a node. A slider appears beneath the status line, and its label
       reads `iteration N of N` — the last stop, showing exactly the overlay the
       click already produced.
-- [ ] Drag it to the far left. The heat is concentrated close to the clicked
+- [x] Drag it to the far left. The heat is concentrated close to the clicked
       node — on it and its immediate neighbours — and the rest of the graph is
       dark. Do not expect the clicked node itself to be the brightest: stop 1
       is the walk *after* its first step, where a seed has passed most of its
       mass to its neighbours and kept only what teleport returns. On a seed of
       low degree the neighbours are brighter than the seed, and that is
       correct. What the far-left stop shows is reach, not ranking.
-- [ ] Drag slowly right. The heat spreads outward along links, and the top-K
+- [x] Drag slowly right. The heat spreads outward along links, and the top-K
       stroke moves between nodes as the ranking settles — it is not pinned to
       the final answer.
-- [ ] Return to the rightmost stop. The graph looks exactly as it did before
+- [x] Return to the rightmost stop. The graph looks exactly as it did before
       you touched the slider.
-- [ ] Press Esc. The overlay and the slider go together.
+- [x] Press Esc. The overlay and the slider go together.
 - [ ] Type a question and press **Inspect** on a vault big enough for graph
       mode (the banner is absent). The slider appears for that overlay too.
 - [ ] Do the same on a small vault, where the Mode A banner shows. There is no
