@@ -628,9 +628,11 @@ exist.
 **The frontmatter half.** The section is drawn from a list the note also
 records, and the two have different jobs.
 
-- [ ] An answer whose synthesis reported something missing carries a `missing:`
+- [x] An answer whose synthesis reported something missing carries a `missing:`
       list in its frontmatter, each entry on one line with no `[[brackets]]`.
-      An answer that reported nothing carries no such key.
+      An answer that reported nothing carries no such key. Check one of each:
+      the second case is the easier one to get, so it is the first that proves
+      anything.
 
 **Filing, which is where the section is supposed to disappear.**
 
