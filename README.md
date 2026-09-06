@@ -613,12 +613,14 @@ exist.
       page.)
 - [ ] Ask something the wiki answers well, over pages whose links all resolve.
       That note has **no `## Add next` section at all** — not an empty one.
-- [ ] No bullet names a page the wiki already has: check each against
-      `## Sources consulted` in the same note. If synthesis never names an
-      existing page on your run, leave this unticked rather than ticking it on
-      inference — the `missing:` key may still list one, and that is correct.
-      The key is the record of what the answer lacked; the section is advice
-      about what to write.
+- [x] No bullet names a page the wiki already has: check each against
+      `## Sources consulted` in the same note, and against the wiki. What this
+      catches by hand is a bullet recommending a page you can already open.
+      That a synthesis item naming an existing page is dropped — including
+      through one of its aliases — is pinned by test instead, because it needs
+      the model to name one and nothing here can make it. The `missing:` key
+      may still list that page, and that is correct: the key records what the
+      answer lacked, the section advises what to write.
 
 **The frontmatter half.** The section is drawn from a list the note also
 records, and the two have different jobs.
