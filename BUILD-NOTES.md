@@ -3538,10 +3538,63 @@ reach. Fixes applied in the order the user approved them.
   deleting half of a well-formed one was the same fault wearing the other face.
   The fragment is still dropped, because it is never sent to a server.
 
+Two of the review's findings were adjudicated as *recordings* rather than
+fixes. Both are written down here because the alternative — leaving them in a
+reviewer's report — is how a deviation becomes a surprise.
+
+- **S73** — **the token-field refusal makes a 400 retryable, which widens §11's
+  retry set.** §11 says "2 retries with exponential backoff + jitter on
+  429/5xx/network", and `http-shared.ts`'s `failureFrom` implements exactly
+  that. `tokenFieldRefusal` deliberately does not route through it: it raises a
+  400 with `retryable: true`, because the request being asked for is *not* the
+  same request — the memo has flipped and the retry carries a different field
+  name. §11's rule is written for the case where retrying is pointless, and
+  this is the case where it is the whole point.
+  - Two costs, both accepted. It spends one unit of that call's retry budget
+    (S64). And `retryAfterMs: 1` is being used as an internal control channel
+    to skip the backoff ladder, while `wrapper.ts` documents that field as
+    meaning "a vendor that says 100ms knows something the ladder does not" — it
+    is now sometimes not a vendor.
+  - Not fixed, on the user's decision. The alternative that survives scrutiny
+    is a `rerun` flag on `ProviderError`, distinct from `retryable`, which
+    would leave §11's enumeration untouched and spend no budget. It is also
+    surgery on the vendor-message ↔ retry-behaviour coupling point CLAUDE.md
+    names, for an outcome the current code already reaches. Revisit it only if
+    something else needs that flag too; a second caller is what would make it
+    worth the coupling.
+  - `failureFrom`'s docstring now points here, so the two sibling modules no
+    longer state contradictory rules about the same status code with nothing
+    connecting them.
+- **S74** — **the memo learns one way only, and recovers across runs rather
+  than within one.** `tokenFieldRefusal` guards on `sent !== "max_tokens"`, so
+  `max_completion_tokens → max_tokens` is never detected even when the 400
+  names the field outright. A multi-model gateway whose first model wants the
+  newer name and whose next model wants the older one therefore fails every
+  remaining source of that compile.
+  - Accepted rather than fixed, and the reason it is tolerable is a property of
+    the surrounding design rather than of this function: the memo is
+    per-transport, a transport is per operation, and invariant 3 manifests only
+    sources that *succeeded*. So each compile starts again from the host's
+    default and carries whatever it can, and the failures are retried by the
+    next run. Repeated compiles make progress instead of repeating a stuck
+    state — which is why "run it again" is a real answer here and not a shrug.
+  - Fixing it properly needs a signal this code does not have. A 400 naming
+    `max_completion_tokens` is equally consistent with *the field being wrong*
+    and with *its value being wrong* ("must be greater than 0"), and flipping
+    on the second reading would re-send a byte-identical request until the
+    budget is gone, wearing a message that says it is retrying with a field it
+    is already using.
+  - S64's own wording described the flip as symmetric ("a 400 naming the other
+    field flips a per-transport memo"). It is not, and this entry supersedes
+    that half-sentence.
+
 ### Known limitations, accepted (M5)
 
 - A server that needs `max_completion_tokens` and is not on `api.openai.com`
   costs one refused request per run, and fails outright when `maxRetries` is 0.
+- The same memo cannot learn the reverse (S74). A multi-model gateway that
+  needs both field names loses the remainder of a compile once the memo flips,
+  and recovers on the next run rather than within that one.
 - The scrubber's frames are the walk the *pane* ran. An answer note's recorded
   trace has none, so replay has no slider — §9 asks for one on an overlay
   "computed with snapshots", and a trace was not.

@@ -68,6 +68,13 @@ export function clip(message: string): string {
  *
  * §11 retries "429/5xx/network" and nothing else: every other 4xx is the
  * request's own fault and the same request will fail the same way.
+ *
+ * One caller deliberately does not reach this. `openai-compat.ts`'s
+ * `tokenFieldRefusal` raises a *retryable* 400, because the request it is
+ * asking for is not the same request — the token field has changed. That is a
+ * recorded deviation from the sentence above (BUILD-NOTES S73), not a
+ * disagreement about what this function does: everything routed here follows
+ * §11's enumeration exactly.
  */
 export function failureFrom(response: HttpResponse): ProviderError {
   const detail = errorDetail(response.status, response.bytes);

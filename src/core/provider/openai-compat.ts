@@ -156,6 +156,17 @@ function defaultTokenField(url: string): TokenField {
  * It costs one unit of that call's retry budget, so with `maxRetries` at 0 the
  * first call of a run against such a server fails. §17's default of 2 covers
  * it; recorded in BUILD-NOTES rather than worked around.
+ *
+ * Learning runs one way only: `max_tokens` → `max_completion_tokens`, never
+ * back. A multi-model gateway whose next model wants the older name therefore
+ * fails for the rest of the run. It recovers across runs rather than within
+ * one — the memo is per-transport and a transport is per operation, and
+ * invariant 3 only manifests sources that succeeded, so each compile starts
+ * from the host's default again and carries the sources it can. Accepted, and
+ * recorded as a limitation (BUILD-NOTES S74) rather than fixed, because the
+ * reverse direction needs a second signal this code cannot read: a 400 naming
+ * `max_completion_tokens` is equally consistent with the field being wrong and
+ * with its *value* being wrong.
  */
 function tokenFieldRefusal(
   response: { status: number; bytes: Uint8Array },
