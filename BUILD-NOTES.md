@@ -2622,12 +2622,10 @@ catch a regression. Neither finding is closed until these run against a real
 vault. Tick them here, not in the README, whose boxes track a full pass rather
 than a re-check.
 
-**Closed out 2026-09-06.** Of the seven items open that morning, three were
-answered by hand against `test-vault` and three ticked on the suite's
-authority, each naming the test that pins it and what the test cannot see. One
-is left: §5.4's second half, a compile that changes the *topology* rather than
-only the prose. Its first half — the rebuild event reaching an open pane with
-no click — was seen by hand.
+**Closed out 2026-09-06. Nothing is owed.** Of the seven items open that
+morning, four were answered by hand against `test-vault` and three ticked on
+the suite's authority, each naming the test that pins it and what the test
+cannot see. Both findings below are now verified as well as fixed.
 
 **The click fix (`9f90088`)** — the suite does not discriminate here at all;
 reverting `view.ts` leaves every test passing, so this list is the only guard:
@@ -2655,13 +2653,16 @@ settled layout *visibly* holds still needs a real vault:
 
 - [x] §4.7: with the pane open and settled, run a second **Compile** that
       reports "nothing to do". Nothing moves at all.
-- [ ] §5.4 again: a compile that really changes a source still updates the
-      counts, and the new node appears and settles. *(2026-09-06, by hand: with
-      the pane open, editing `raw/note.md` and compiling updated the counts on
+- [x] §5.4 again: a compile that really changes a source still updates the
+      counts, and the new node appears and settles. *(2026-09-06, by hand, in
+      two passes. Editing `raw/note.md` with the pane open updated the counts on
       their own the moment the compile finished, under a second and with no
-      click — §7.1's rebuild event reaches the pane, which is the half no test
-      can see. Left to see: a compile that changes the topology, and the new
-      node arriving and settling rather than the counts merely redrawing.)*
+      click — §7.1's rebuild event reaching the pane, which is the half no test
+      can see. Then filing an answer into `raw/answers/` and compiling: §8.4's
+      flow ingests it as a new source, so the topology really moved, and the
+      new node was watched attaching to the graph and settling. That second
+      pass is the one that matters here — it exercises the reheat path the
+      `sameTopology` guard could have swallowed.)*
 - [x] §7.3 again: a drag still reheats and neighbours still resettle — the
       guard must not have made `replace` the only reheat path. **Ticked on the
       suite's authority (2026-09-06):** "reheats the walk for a real drag, so
@@ -2857,9 +2858,9 @@ rate, not a certainty, and a rerun on the same corpus may not reproduce it.
 
 ### A compile that changes nothing still reheats the layout (§7.1, §9)
 
-**Status (2026-09-06): FIXED, merged, and hand-verified but for one half-item**
-— §5.4's topology change, in "Verification owed" above. `sim.replace` now
-compares the incoming node paths and edge pairs
+**Status (2026-09-06): FIXED, merged, and verified by hand.** All four checks
+under "Verification owed" above now stand — two by hand, two on the suite's
+authority. `sim.replace` now compares the incoming node paths and edge pairs
 against the ones the current layout was built for (`sameTopology`, exported so
 it can be asserted directly). On a match it carries the incoming title, kind,
 degree and summary onto the nodes already held — a compile can rewrite a page's
