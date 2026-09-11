@@ -715,10 +715,15 @@ previous evening while the repo's own build was current. Check the timestamp on
       why. It appears below either half of §7.3's predicate: fewer than 20
       nodes, or fewer than 1.5 link pairs per node. No banner means both are
       met, a walk ran, and there are iterations to scrub.
-- [ ] Do the same on a vault small or sparse enough to show that banner. There
-      is no slider — Mode A ranks by keyword and runs no walk to step through.
-      A fresh vault with a handful of sources is the easy way to get one; an
-      established vault will not drop back below the predicate.
+- [x] Do the same with that banner showing. There is no slider — Mode A ranks
+      by keyword and runs no walk to step through — and the overlay has no heat
+      ramp either: seeds and lexical top-K light by ring and stroke, at their
+      kind colours, with everything else dimmed. Both absences have the same
+      cause.
+      The banner is easiest to summon from **Settings → Graph mode: minimum
+      nodes**, raised above the node count in the status line. That is a
+      supported §17 parameter, not a trick, and it beats building a throwaway
+      vault. Put it back to 20 afterwards.
 - [ ] **Show retrieval on graph** on an answer note. No slider: a trace is
       recorded data, not a walk this pane ran.
 - [ ] With a slider on screen, press **Refresh**, or compile in another window.
