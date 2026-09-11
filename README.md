@@ -737,9 +737,11 @@ previous evening while the repo's own build was current. Check the timestamp on
       is claimed here. A copy can survive out of sight in the double-click
       restore slot — see BUILD-NOTES S49 — so this item is about the pane, not
       about memory.)
-- [ ] Click a node, then drag the slider back to a stop where the picture is
-      **visibly different** from the rightmost one — an early stop, where the
-      heat is still tight around the seed, is easiest to tell apart. Leave it
+- [x] Click a node, then drag the slider back to a stop where the picture is
+      **visibly different** from the rightmost one. Use stop 1. Do *not* use
+      the middle: a walk of 55 iterations was found to look identical at 27 and
+      at 55, because the walk settles to the eye long before it settles to
+      §7.2's threshold of 1e-8. Only the first few stops differ visibly. Leave
       there and press **Export PNG**. Open the file from your Downloads folder
       and compare it against the screen: it should show the stop you left the
       slider on, not the settled walk.

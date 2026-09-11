@@ -3602,6 +3602,33 @@ reviewer's report — is how a deviation becomes a surprise.
     field flips a per-transport memo"). It is not, and this entry supersedes
     that half-sentence.
 
+### What the §18 walk found about the scrubber — 2026-09-11
+
+All ten scrubber items pass by hand. One observation from the pass is worth
+keeping, because it is a property of the feature that no test could have
+surfaced and that the code does not hint at.
+
+- **S75** — **the scrubber's informative range is its first few stops; the tail
+  is visually dead.** Checking the PNG export at stop 27 of 55 failed to
+  discriminate anything, because stops 27 and 55 render identically. §7.2 stops
+  at an L1 delta of 1e-8, and a heat ramp normalized to a peak of 1 cannot show
+  a difference eight orders of magnitude below its own range. So a walk spends
+  most of its iterations converging in ways the screen cannot represent. Stop 1
+  against the last stop is the only pairing guaranteed to differ, which is what
+  the checklist now tells the tester to use.
+  - This is not a defect and needs no fix: §9 asks for a slider over the
+    retained vectors and that is what exists, the vectors are genuinely
+    distinct, and the label reports the true iteration count.
+  - It does bound what the feature is *for*. The slider answers "how far had
+    the walk reached early on", not "watch it settle" — the settling is over,
+    visually, within a handful of steps. The README items were rewritten to say
+    reach rather than spread for the same reason (S70).
+  - It also rules something out in advance. A play button animating stop 1 to
+    stop N — the obvious next feature — would spend most of its running time on
+    frames indistinguishable from each other, and would look broken rather than
+    informative. Anyone reaching for it should animate the early stops only, or
+    not at all.
+
 ### Known limitations, accepted (M5)
 
 - A server that needs `max_completion_tokens` and is not on `api.openai.com`
