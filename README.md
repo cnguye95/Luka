@@ -724,8 +724,14 @@ previous evening while the repo's own build was current. Check the timestamp on
       nodes**, raised above the node count in the status line. That is a
       supported §17 parameter, not a trick, and it beats building a throwaway
       vault. Put it back to 20 afterwards.
-- [ ] **Show retrieval on graph** on an answer note. No slider: a trace is
-      recorded data, not a walk this pane ran.
+- [x] **Show retrieval on graph** on an answer note written in mode B. No
+      slider — but note what *is* there: the full heat ramp, the seed ringed,
+      the top-K stroked. This is the sharp version of the check, and it is a
+      different absence from the one above. Mode A loses the ramp and the
+      slider together because it never walked. A trace has scores and no
+      iterations, because the note records where retrieval arrived and not how
+      it got there — so the overlay is complete and the slider still cannot
+      exist.
 - [ ] With a slider on screen, press **Refresh**, or compile in another window.
       The overlay clears and the slider goes with it. (Only what is on screen
       is claimed here. A copy can survive out of sight in the double-click
