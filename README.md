@@ -732,7 +732,7 @@ previous evening while the repo's own build was current. Check the timestamp on
       iterations, because the note records where retrieval arrived and not how
       it got there — so the overlay is complete and the slider still cannot
       exist.
-- [ ] With a slider on screen, press **Refresh**, or compile in another window.
+- [x] With a slider on screen, press **Refresh**, or compile in another window.
       The overlay clears and the slider goes with it. (Only what is on screen
       is claimed here. A copy can survive out of sight in the double-click
       restore slot — see BUILD-NOTES S49 — so this item is about the pane, not
