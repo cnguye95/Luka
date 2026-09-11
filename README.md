@@ -707,10 +707,18 @@ previous evening while the repo's own build was current. Check the timestamp on
 - [x] Return to the rightmost stop. The graph looks exactly as it did before
       you touched the slider.
 - [x] Press Esc. The overlay and the slider go together.
-- [ ] Type a question and press **Inspect** on a vault big enough for graph
-      mode (the banner is absent). The slider appears for that overlay too.
-- [ ] Do the same on a small vault, where the Mode A banner shows. There is no
-      slider — Mode A ranks by keyword and runs no walk to step through.
+- [x] Type a question and press **Inspect** on a vault in graph mode. The
+      slider appears for that overlay too, and the status line names the
+      question rather than a node. *In graph mode* means no **Mode A** banner
+      between the toolbar and the status line — the one reading `Mode A
+      (lexical) active — graph ranking off`, followed by the counts that say
+      why. It appears below either half of §7.3's predicate: fewer than 20
+      nodes, or fewer than 1.5 link pairs per node. No banner means both are
+      met, a walk ran, and there are iterations to scrub.
+- [ ] Do the same on a vault small or sparse enough to show that banner. There
+      is no slider — Mode A ranks by keyword and runs no walk to step through.
+      A fresh vault with a handful of sources is the easy way to get one; an
+      established vault will not drop back below the predicate.
 - [ ] **Show retrieval on graph** on an answer note. No slider: a trace is
       recorded data, not a walk this pane ran.
 - [ ] With a slider on screen, press **Refresh**, or compile in another window.
