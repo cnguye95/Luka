@@ -737,8 +737,18 @@ previous evening while the repo's own build was current. Check the timestamp on
       is claimed here. A copy can survive out of sight in the double-click
       restore slot — see BUILD-NOTES S49 — so this item is about the pane, not
       about memory.)
-- [ ] Scrub to the middle, then **Export PNG**. The file shows the iteration on
-      screen, not the converged walk.
+- [ ] Click a node, then drag the slider back to a stop where the picture is
+      **visibly different** from the rightmost one — an early stop, where the
+      heat is still tight around the seed, is easiest to tell apart. Leave it
+      there and press **Export PNG**. Open the file from your Downloads folder
+      and compare it against the screen: it should show the stop you left the
+      slider on, not the settled walk.
+      Worth doing because it is the only item here where two features meet. The
+      export re-renders the frame rather than photographing the canvas, so it
+      reads the overlay a second time — and a scrubbed overlay is an ordinary
+      overlay carrying one iteration's scores. A file showing the converged
+      ranking would mean the export found those scores somewhere other than the
+      frame on screen.
 
 **The provider.** Switch **Provider** in settings to *OpenAI-compatible*.
 
