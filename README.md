@@ -754,10 +754,14 @@ previous evening while the repo's own build was current. Check the timestamp on
 
 **The provider.** Switch **Provider** in settings to *OpenAI-compatible*.
 
-- [ ] The Anthropic key field is replaced by an API key field and a **Base
+- [x] The Anthropic key field is replaced by an API key field and a **Base
       URL** field. Switching back brings the Anthropic field back.
-- [ ] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
-      and reload Obsidian. Both are still there: the two do not share a field.
+- [x] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
+      and reload Obsidian. Both are still there: the two do not share a field,
+      and neither switching nor reloading clears either one. This is the check
+      S59 exists for — `apiKey` kept its name and gained a sibling rather than
+      being renamed, because §16 rules out settings migration and a rename
+      would have emptied the key of every vault that already had one.
 - [ ] Leave the model ids at their Anthropic defaults and compile. Every
       source fails, and one notice per source carries the server's own
       complaint. The point of the check is that it **fails loudly rather than
