@@ -762,8 +762,11 @@ previous evening while the repo's own build was current. Check the timestamp on
       S59 exists for — `apiKey` kept its name and gained a sibling rather than
       being renamed, because §16 rules out settings migration and a rename
       would have emptied the key of every vault that already had one.
-- [ ] Leave the model ids at their Anthropic defaults and compile **a source
-      the manifest has not seen**. Drop one new file into `raw/` first: on an
+- [x] Leave the model ids at their Anthropic defaults and compile **a source
+      the manifest has not seen**. Drop a new file into `raw/` first, or run
+      **File this answer** on any answer note — filing needs no provider, so it
+      works with the settings already broken, and the note lands in
+      `raw/answers/` as an ordinary new source. Either way you need one: on an
       already-compiled vault §6.2 makes Compile a no-op with zero model calls,
       so nothing would fail and the silence would look like this check passing
       when it never ran.
