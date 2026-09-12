@@ -762,12 +762,18 @@ previous evening while the repo's own build was current. Check the timestamp on
       S59 exists for — `apiKey` kept its name and gained a sibling rather than
       being renamed, because §16 rules out settings migration and a rename
       would have emptied the key of every vault that already had one.
-- [ ] Leave the model ids at their Anthropic defaults and compile. Every
-      source fails, and one notice per source carries the server's own
-      complaint. The point of the check is that it **fails loudly rather than
-      appearing to work** — whether the text names the model is up to the
-      server, since Luka passes the vendor's message through and falls back to
-      a bare `HTTP <status>` when the body carries none.
+- [ ] Leave the model ids at their Anthropic defaults and compile **a source
+      the manifest has not seen**. Drop one new file into `raw/` first: on an
+      already-compiled vault §6.2 makes Compile a no-op with zero model calls,
+      so nothing would fail and the silence would look like this check passing
+      when it never ran.
+      That source fails, with one notice naming it and carrying the server's
+      own complaint. The point is that it **fails loudly rather than appearing
+      to work** — whether the text names the model is up to the server, since
+      Luka passes the vendor's message through and falls back to a bare `HTTP
+      <status>` when the body carries none. Then confirm invariant 3: no page
+      for it under `wiki/`, and no entry for it in the manifest, so the next
+      compile retries it rather than treating it as done.
 - [ ] Set the base URL with a trailing slash, then again with
       `/chat/completions` already on the end. Both compile: the endpoint is
       joined, not doubled.
