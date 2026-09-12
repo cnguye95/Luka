@@ -800,7 +800,8 @@ previous evening while the repo's own build was current. Check the timestamp on
       per §8 above, the network panel cannot see these requests whether they
       happen or not.)
 - [ ] Point it at a local server with the key field empty and compile. It
-      works: no credential is sent, because none was configured.
+      works: no credential is sent, because none was configured. 
+      (Ollama recommended, tested by creator)
 - [ ] **Paid, optional.** Against OpenAI's own endpoint, compile one small
       source and check the usage page. The token-cap field is chosen by host,
       so an OpenAI run spends no extra request learning it.
