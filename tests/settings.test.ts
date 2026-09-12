@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createProvider } from "../src/core/provider/wrapper";
 import { utf8 } from "../src/core/hash";
 import {
+  DEFAULT_ANTHROPIC_MODELS,
+  DEFAULT_OPENAI_MODELS,
   DEFAULT_SETTINGS,
   PPR_EPSILON,
   PROVIDER_TASKS,
+  modelsForProvider,
   normalizeSettings,
   type LukaSettings,
 } from "../src/core/types";
@@ -265,5 +268,70 @@ describe("§8.2's follow-up toggle survives a hand-edited data.json", () => {
       );
     }
     expect(normalizeSettings({ ...DEFAULT_SETTINGS, followUpEnabled: false }).followUpEnabled).toBe(false);
+  });
+});
+
+// Switching provider used to leave five model ids belonging to the vendor just
+// left, so the next compile failed on every source until they were retyped.
+describe("model ids follow the provider, without discarding what was typed", () => {
+  it("swaps a whole untouched map, both directions", () => {
+    const toOpenai = modelsForProvider(DEFAULT_SETTINGS.models, "anthropic", "openai-compatible");
+    expect(toOpenai).toEqual(DEFAULT_OPENAI_MODELS);
+
+    const andBack = modelsForProvider(toOpenai, "openai-compatible", "anthropic");
+    expect(andBack).toEqual(DEFAULT_ANTHROPIC_MODELS);
+  });
+
+  it("keeps an id the user typed, and swaps the ones beside it", () => {
+    // The whole point of the per-field test: a switch is not consent to
+    // discard work. A blanket overwrite passes the case above and fails this.
+    const edited = { ...DEFAULT_SETTINGS.models, synthesis: "claude-opus-5" };
+
+    const next = modelsForProvider(edited, "anthropic", "openai-compatible");
+
+    expect(next.synthesis).toBe("claude-opus-5");
+    expect(next.inventory).toBe(DEFAULT_OPENAI_MODELS.inventory);
+    expect(next["page-generation"]).toBe(DEFAULT_OPENAI_MODELS["page-generation"]);
+  });
+
+  it("leaves a fully hand-typed map alone", () => {
+    const mine = Object.fromEntries(PROVIDER_TASKS.map((task) => [task, `my-${task}`])) as Record<
+      (typeof PROVIDER_TASKS)[number],
+      string
+    >;
+
+    expect(modelsForProvider(mine, "anthropic", "openai-compatible")).toEqual(mine);
+  });
+
+  it("changes nothing when the provider did not change", () => {
+    expect(modelsForProvider(DEFAULT_SETTINGS.models, "anthropic", "anthropic")).toEqual(
+      DEFAULT_ANTHROPIC_MODELS,
+    );
+  });
+
+  it("returns a copy, never the caller's object", () => {
+    // The settings tab writes into `models` on every keystroke; handing back
+    // the same reference would make a switch edit the map it was reading.
+    const before = { ...DEFAULT_SETTINGS.models };
+
+    const next = modelsForProvider(before, "anthropic", "openai-compatible");
+
+    expect(next).not.toBe(before);
+    expect(before).toEqual(DEFAULT_ANTHROPIC_MODELS);
+  });
+
+  it("ships an id for every task on both sides, and they do not overlap", () => {
+    for (const task of PROVIDER_TASKS) {
+      expect(DEFAULT_OPENAI_MODELS[task]).toMatch(/\S/);
+      expect(DEFAULT_ANTHROPIC_MODELS[task]).toMatch(/^claude-/);
+      expect(DEFAULT_OPENAI_MODELS[task]).not.toBe(DEFAULT_ANTHROPIC_MODELS[task]);
+    }
+  });
+
+  it("mutating DEFAULT_SETTINGS.models cannot reach the named set", () => {
+    const settings = { ...DEFAULT_SETTINGS, models: { ...DEFAULT_SETTINGS.models } };
+    settings.models.inventory = "scribbled";
+
+    expect(DEFAULT_ANTHROPIC_MODELS.inventory).toBe("claude-haiku-4-5-20251001");
   });
 });

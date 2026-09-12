@@ -4,9 +4,9 @@ import {
   DEFAULT_SETTINGS,
   PPR_EPSILON,
   PROVIDER_TASKS,
+  modelsForProvider,
   normalizeSettings,
   type LukaSettings,
-  type ProviderName,
 } from "../core/types";
 import type LukaPlugin from "./main";
 
@@ -43,7 +43,16 @@ export class LukaSettingTab extends PluginSettingTab {
           .addOptions({ anthropic: "Anthropic", "openai-compatible": "OpenAI-compatible" })
           .setValue(provider)
           .onChange(async (value) => {
-            this.plugin.settings.provider = value as ProviderName;
+            const next = value === "openai-compatible" ? "openai-compatible" : "anthropic";
+            // Read before the write: the ids that move are the ones still
+            // holding the *outgoing* provider's defaults, so which provider is
+            // being left has to be known first.
+            this.plugin.settings.models = modelsForProvider(
+              this.plugin.settings.models,
+              provider,
+              next,
+            );
+            this.plugin.settings.provider = next;
             await this.plugin.saveSettings();
             // Only the selected provider's fields are shown, so the tab is
             // rebuilt rather than left describing the other one.
@@ -82,7 +91,9 @@ export class LukaSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Models")
-      .setDesc("Model ids must belong to the selected provider; the defaults are Anthropic's.")
+      .setDesc(
+        "Model ids must belong to the selected provider. Switching provider moves any id you have not edited; ids you typed yourself are left alone.",
+      )
       .setHeading();
 
     for (const task of PROVIDER_TASKS) {

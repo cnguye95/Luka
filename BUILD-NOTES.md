@@ -3649,3 +3649,57 @@ surfaced and that the code does not hint at.
     `scrub.ts`, `overlay.ts`, `press.ts`, `sim.ts` and `render.ts`, and
     `fs-obsidian.ts` has had tests since M3. A limitation written wider than
     the truth reads as licence to skip a suite that exists.
+
+### Model ids follow the provider — user-directed (2026-09-12)
+
+§15 assigns no milestone to this and §11 says only that "settings map each task
+to a model id", so nothing here follows from the spec. It is the user's
+decision, taken after the §18 walk made the cost obvious: every provider switch
+left five ids belonging to the vendor just left, and the next compile failed on
+every source until they were retyped by hand. §18's wrong-model-ids check
+reached its state *by doing nothing*, which is the clearest possible statement
+of the problem.
+
+- **S76** — **two named model sets, one per provider**, and `DEFAULT_SETTINGS`
+  spreads the Anthropic one. §17's table names Anthropic's ids; the OpenAI set
+  is the same §11 shape — small for `inventory`/`seed-selection`, mid-tier for
+  the other three — against the endpoint `DEFAULT_OPENAI_BASE_URL` already
+  points at. That makes the shipped defaults coherent: base URL and model ids
+  now describe one working configuration instead of two halves of different
+  ones. The ids are `gpt-4.1-mini` and `gpt-4.1`, not chosen from a docs page
+  but copied from the configuration that passed §18's paid check — the mid-tier
+  entry is multimodal, so §6.1's vision pass shares it exactly as the Anthropic
+  set does.
+- **S77** — **only an id still holding the outgoing provider's default moves.**
+  A blanket swap was the obvious implementation and is wrong: the tab writes
+  into `models` on every keystroke, so a switch would discard whatever the user
+  had typed for their own server. Changing provider is a statement about the
+  endpoint, not consent to throw away work.
+  - The accepted cost is the mirror image: a hand-typed id can outlive the
+    provider it was meant for, and will sit in the tab looking foreign. That is
+    visible and recoverable; a silent deletion is neither.
+  - `modelsForProvider` is pure and lives in `types.ts` beside the sets, not in
+    the settings tab — §14 puts the tab under a manual checklist, and this is
+    the half that can be tested. Seven cases, and the two mutations worth
+    fearing both die: a blanket overwrite fails the per-field cases, and
+    returning the caller's object fails the copy case.
+  - The settings tab reads the outgoing provider *before* writing the new one,
+    which is the whole correctness condition and is one line from being wrong.
+- **S78** — **this supersedes the Models heading's old description.** It used
+  to say "the defaults are Anthropic's", which was the honest answer while ids
+  never moved and is now misleading. It states the rule instead: switching
+  moves what you have not edited.
+- **S79** — §18's wrong-model-ids item **had to be rewritten**, because it
+  reached its state by inheritance and no longer can. The tester now types a
+  bad id deliberately. The tick stands: the same wrong id lands in the same
+  field and fails identically, so what was verified is unchanged — only how the
+  vault gets there. A new item covers the moving itself, and is unwalked.
+  - Worth noting as a shape: a convenience feature quietly invalidated the
+    *setup* of an unrelated check without touching what it asserts. Nothing in
+    the test suite could have caught that, because §18 is prose.
+- **Not built: querying the endpoint for its model list.** It would serve every
+  OpenAI-compatible server rather than OpenAI alone, and guess nothing. But it
+  is a network call from the settings tab, and invariant 1 permits none without
+  explicit user invocation, so it would have to sit behind a button — a
+  different feature, and one nobody has asked for. Recorded so the option is
+  not rediscovered as though it were free.

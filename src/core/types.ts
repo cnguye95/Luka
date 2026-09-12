@@ -143,19 +143,76 @@ export interface LukaSettings {
   compileConcurrency: number;
 }
 
+/**
+ * §11's model map for each provider: "a current small model for
+ * `inventory`/`seed-selection` and a current mid-tier model for
+ * `page-generation`/`synthesis`/`vision`".
+ *
+ * Two sets rather than one, because a model id belongs to a vendor. §17's
+ * table names Anthropic's, which are the defaults; the OpenAI set is the same
+ * shape against the endpoint `DEFAULT_OPENAI_BASE_URL` already points at, so
+ * the shipped defaults are coherent — base URL and model ids describe one
+ * working configuration rather than two halves of different ones.
+ */
+export const DEFAULT_ANTHROPIC_MODELS: Record<ProviderTask, string> = {
+  inventory: "claude-haiku-4-5-20251001",
+  "seed-selection": "claude-haiku-4-5-20251001",
+  "page-generation": "claude-sonnet-5",
+  synthesis: "claude-sonnet-5",
+  vision: "claude-sonnet-5",
+};
+
+/** The mid-tier entry is multimodal, so §6.1's vision pass shares it. */
+export const DEFAULT_OPENAI_MODELS: Record<ProviderTask, string> = {
+  inventory: "gpt-4.1-mini",
+  "seed-selection": "gpt-4.1-mini",
+  "page-generation": "gpt-4.1",
+  synthesis: "gpt-4.1",
+  vision: "gpt-4.1",
+};
+
+/** Which vendor's ids a provider's untouched fields hold. */
+export function defaultModelsFor(provider: ProviderName): Record<ProviderTask, string> {
+  return provider === "openai-compatible" ? DEFAULT_OPENAI_MODELS : DEFAULT_ANTHROPIC_MODELS;
+}
+
+/**
+ * The model map to show after a provider switch.
+ *
+ * A switch used to leave five ids belonging to the vendor just left, so the
+ * next compile failed on every source until they were retyped by hand. Only
+ * fields still holding the *outgoing* provider's defaults are replaced: an id
+ * the user typed is theirs, and changing provider is not consent to discard
+ * it. That does mean a hand-typed id can outlive the provider it was meant
+ * for — visible in the tab, and the lesser harm of the two.
+ *
+ * Pure, and here rather than in the settings tab, so it can be tested: §14
+ * puts the tab itself under a manual checklist.
+ */
+export function modelsForProvider(
+  models: Record<ProviderTask, string>,
+  from: ProviderName,
+  to: ProviderName,
+): Record<ProviderTask, string> {
+  const next = { ...models };
+  if (from === to) return next;
+  const leaving = defaultModelsFor(from);
+  const arriving = defaultModelsFor(to);
+  for (const task of PROVIDER_TASKS) {
+    if (next[task]?.trim() === leaving[task]) next[task] = arriving[task];
+  }
+  return next;
+}
+
 /** handoff.md §17. Values marked "fixed" there are constants in their own modules, not settings. */
 export const DEFAULT_SETTINGS: LukaSettings = {
   provider: "anthropic",
   apiKey: "",
   openaiApiKey: "",
   openaiBaseUrl: DEFAULT_OPENAI_BASE_URL,
-  models: {
-    inventory: "claude-haiku-4-5-20251001",
-    "seed-selection": "claude-haiku-4-5-20251001",
-    "page-generation": "claude-sonnet-5",
-    synthesis: "claude-sonnet-5",
-    vision: "claude-sonnet-5",
-  },
+  // A copy: `normalizeSettings` and the settings tab both write into this
+  // nested object, and sharing it would edit the named set above.
+  models: { ...DEFAULT_ANTHROPIC_MODELS },
   contextBudgetTokens: 40_000,
   assemblyCap: 12,
   modeMinNodes: 20,

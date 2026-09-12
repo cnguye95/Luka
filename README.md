@@ -145,17 +145,57 @@ manual checklist asks you to watch it in several places, and a plugin that
 fails to load says so there.
 
 **5. Choose a provider and set its key.** The Luka settings tab opens on
-**Anthropic**; paste a key and you are done. To use something else, switch
-**Provider** to *OpenAI-compatible*, set the **Base URL** — OpenAI's own
-`https://api.openai.com/v1`, or a local server such as Ollama's
-`http://localhost:11434/v1`, which usually needs no key at all — and change the
-five model ids, which default to Anthropic's and will not exist elsewhere. Each
-provider keeps its own key, so switching back and forth loses neither.
+**Anthropic**; paste a key and you are done. For OpenAI, switch **Provider** to
+*OpenAI-compatible* and paste an OpenAI key: the base URL already points at
+`https://api.openai.com/v1`, and the model ids move to OpenAI's when you
+switch, so there is nothing else to fill in.
+
+Switching moves only ids you have **not** edited. Anything you typed yourself
+survives the switch, on the grounds that changing provider is not a request to
+throw your work away — so a hand-typed id can outlive the provider it was meant
+for, and the tab is where you would see that.
+
+Each provider keeps its own key, so switching back and forth loses neither.
+Note that *OpenAI-compatible* is one setting with one key field covering every
+server that speaks that API, so moving between OpenAI and a local one does mean
+retyping the key.
 
 Settings are the only source — the plugin has no `ANTHROPIC_API_KEY` fallback,
 and reads the key live on each run, so a freshly typed one takes effect without
 a reload. (The env var is for the optional live tests above and
 `npm run eval:live`, which run outside Obsidian.)
+
+### Running it against a local model
+
+Any server speaking the Chat Completions API works. [Ollama](https://ollama.com)
+is the shortest path and needs no key at all.
+
+```
+ollama pull qwen2.5:7b
+```
+
+Then in the settings tab: **Provider** *OpenAI-compatible*, **Base URL**
+`http://localhost:11434/v1`, **API key** empty, and all five model ids set to
+`qwen2.5:7b`. Ollama serves the OpenAI-compatible endpoint on port 11434 by
+default and ignores credentials, so the empty key is correct rather than a
+workaround.
+
+Three things worth knowing before you judge the output:
+
+- **Extraction is the hard task, not writing.** `inventory` must return strict
+  JSON naming the entities and concepts in a source, and Luka allows one repair
+  retry before giving up on it. A 3B model will parse fine and still return an
+  empty list, which leaves you source pages and no concept pages — §6.5 says
+  that is a legal outcome, so compile succeeds and the wiki stays thin. 7B is
+  the smallest size worth using, and Qwen is stronger at structured output than
+  Llama at the same size.
+- **Lower the context budget to match the model.** It defaults to 40,000 tokens
+  and page generation is fed whole sources. A model with a smaller window will
+  quietly build pages from truncated input.
+- **Vision needs a vision model.** Only orphan images in `raw/` trigger it, so
+  if you have none the `vision` row does not matter. If you do, point it at
+  something like `llama3.2-vision:11b`; a text-only model will fail that source
+  and leave the rest of the compile alone.
 
 **6. Give it something to compile.**
 
@@ -271,7 +311,7 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 125 items, ordered so that stopping anywhere leaves the most valuable
+(§14). 126 items, ordered so that stopping anywhere leaves the most valuable
 ground covered: setup first, then the graph pane — the newest code and the only
 part with no automated coverage whatsoever — then the older flows, then the
 destructive and paid checks, then edge cases. Work top to bottom.
@@ -756,14 +796,26 @@ previous evening while the repo's own build was current. Check the timestamp on
 
 - [x] The Anthropic key field is replaced by an API key field and a **Base
       URL** field. Switching back brings the Anthropic field back.
+- [ ] Switch to *OpenAI-compatible* with the five model ids untouched. They
+      become OpenAI's: `gpt-4.1-mini` for **inventory** and **seed-selection**,
+      `gpt-4.1` for the other three. Switch back and they return to Anthropic's.
+      Then edit one by hand — put anything in **synthesis** — and switch again:
+      that one keeps what you typed while the rest move around it. Changing
+      provider is not a request to discard your work, so the rule is that only
+      an id still holding the *outgoing* provider's default is replaced.
 - [x] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
       and reload Obsidian. Both are still there: the two do not share a field,
       and neither switching nor reloading clears either one. This is the check
       S59 exists for — `apiKey` kept its name and gained a sibling rather than
       being renamed, because §16 rules out settings migration and a rename
       would have emptied the key of every vault that already had one.
-- [x] Leave the model ids at their Anthropic defaults and compile **a source
-      the manifest has not seen**. Drop a new file into `raw/` first, or run
+- [x] Type a model id the endpoint does not have — `claude-haiku-4-5-20251001`
+      does nicely against OpenAI — into **inventory**, and compile **a source
+      the manifest has not seen**.
+      *(Typed deliberately since model ids started following the provider. It
+      was walked when a switch left the old vendor's ids in place, which put
+      the same wrong id in the same field; the failure path is identical and
+      the tick stands.)* Drop a new file into `raw/` first, or run
       **File this answer** on any answer note — filing needs no provider, so it
       works with the settings already broken, and the note lands in
       `raw/answers/` as an ordinary new source. Either way you need one: on an
