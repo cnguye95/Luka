@@ -577,8 +577,8 @@ nothing below depends on them.
 
 These delete pages, so they come after everything that reads the vault. The
 core is tested against in-memory and Node filesystems; only Obsidian's own
-adapter can show that a delete reaches the system trash, which makes the last
-two items here the highest-value pair in the list.
+adapter can show that a delete reaches the system trash, which makes the
+trash pair here the highest-value items in the list.
 
 - [x] Deleting `raw/page.html` and running **Luka: Compile** opens the scope
       modal first, showing the diff counts and both lists — pages to regenerate,
@@ -596,9 +596,22 @@ two items here the highest-value pair in the list.
       confirmation at the scope modal survivable, and it is the one thing the
       modal's "pages that *may* be deleted" wording promises but code cannot
       assert.
-- [ ] **N/A where the OS has a system trash** (deletes go there instead, so no
-      vault-local folder appears). `.trash/`, if it appears, is not picked up as a source by a later
-      compile: the next **Luka: Compile** still reports "nothing to do".
+- [ ] A `.trash/` folder in the vault is not picked up as a source: with the
+      vault otherwise up to date, **Luka: Compile** still reports "nothing to
+      do".
+      Luka's own deletes will not produce that folder — it asks for the system
+      trash first and only falls back to the vault's — so the way to reach this
+      state is Obsidian's own setting. Under *Settings → Files and links →
+      Deleted files*, choose **Move to Obsidian trash (.trash folder)**, then
+      delete any markdown file through Obsidian's file explorer. `.trash/`
+      appears at the vault root holding it. Compile, confirm "nothing to do",
+      and put the setting back to *Move to system trash*.
+      This was marked N/A for a whole pass on the grounds that a system trash
+      makes it unreachable. That was a claim about Luka's deletes, not about
+      the folder: the user's own deletes put files there on any platform, and
+      the property — that a file you deleted cannot walk back in as a
+      brand-new source — is worth confirming against the real adapter. The
+      same property is now pinned in `tests/compile.test.ts`.
 - [x] Editing a source rather than deleting it also opens the modal, and its
       "may be deleted" list is empty.
 - [x] A compile whose diff is only additions opens no modal at all.

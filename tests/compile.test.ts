@@ -876,6 +876,24 @@ describe("source discovery", () => {
     expect(result.skipped).toEqual([]);
   });
 
+  it("never walks the vault's own .trash, so a deleted file cannot resurface", async () => {
+    // Obsidian's local-trash setting moves a deleted file to `<vault>/.trash/`.
+    // Discovery is rooted at `raw/` and only descends, so nothing at the vault
+    // root is reachable — which is what stops a file the user deleted from
+    // being re-ingested as a brand-new source on the next compile. README
+    // §13.6 checks the same property by hand, against the real adapter.
+    const fs = new MemFs({
+      "raw/note.md": "n\n",
+      ".trash/note.md": "the deleted copy\n",
+      ".trash/other.md": "another deleted file\n",
+    });
+
+    const result = await core(fs).instance.compile();
+
+    expect(Object.keys(manifestOf(fs))).toEqual(["raw/note.md"]);
+    expect(result.skipped).toEqual([]);
+  });
+
   it("skips unsupported files without manifesting them, so they resurface", async () => {
     const fs = new MemFs({ "raw/archive.zip": "PK\n" });
     const first = await core(fs).instance.compile();
