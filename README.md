@@ -791,7 +791,7 @@ previous evening while the repo's own build was current. Check the timestamp on
       above, while a doubled one (`…/v1/chat/completions/chat/completions`)
       gets a different error naming the bad path. Same model error both times
       is the pass. Set the field back to `https://api.openai.com/v1` after.
-- [ ] Set the base URL to something that is not a URL at all — `not a url`
+- [x] Set the base URL to something that is not a URL at all — `not a url`
       will do. Compile fails immediately, with a notice quoting the value back
       at you and saying it is not a valid http(s) URL. That wording is the
       observable part: it is written before any request is attempted, and it
