@@ -3678,6 +3678,15 @@ of the problem.
   - The accepted cost is the mirror image: a hand-typed id can outlive the
     provider it was meant for, and will sit in the tab looking foreign. That is
     visible and recoverable; a silent deletion is neither.
+  - **The rule reads values, not edit history.** Nothing records which fields
+    were touched, so typing a field back to the outgoing provider's default
+    makes it a default again and it resumes moving. Confirmed by hand during
+    §18's walk, and it is the behaviour worth having: the alternative is
+    per-field edit tracking, which stores extra state to make the common case
+    worse. The case where it costs something is a gateway serving Claude
+    models over the OpenAI protocol — leaving Anthropic swaps that user's
+    `claude-sonnet-5` for `gpt-4.1`, because the value is indistinguishable
+    from an untouched default. They retype it once, as above.
   - `modelsForProvider` is pure and lives in `types.ts` beside the sets, not in
     the settings tab — §14 puts the tab under a manual checklist, and this is
     the half that can be tested. Seven cases, and the two mutations worth

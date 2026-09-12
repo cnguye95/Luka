@@ -715,8 +715,8 @@ survives being written down.
 
 ### 18. M5 — the scrubber and the OpenAI-compatible provider
 
-The newest code, and the least walked: everything above this section has been
-through a full pass, and this one is partway through its first. The scrubber
+The newest code. Walked in full on 2026-09-11/12, so every item here is
+ticked — treat a failure as a regression rather than as an unknown. The scrubber
 half is free. The provider half needs either an OpenAI-compatible key or a
 server running locally, and the last item in it is the only one that costs
 anything.
@@ -796,13 +796,16 @@ previous evening while the repo's own build was current. Check the timestamp on
 
 - [x] The Anthropic key field is replaced by an API key field and a **Base
       URL** field. Switching back brings the Anthropic field back.
-- [ ] Switch to *OpenAI-compatible* with the five model ids untouched. They
+- [x] Switch to *OpenAI-compatible* with the five model ids untouched. They
       become OpenAI's: `gpt-4.1-mini` for **inventory** and **seed-selection**,
       `gpt-4.1` for the other three. Switch back and they return to Anthropic's.
       Then edit one by hand — put anything in **synthesis** — and switch again:
       that one keeps what you typed while the rest move around it. Changing
       provider is not a request to discard your work, so the rule is that only
       an id still holding the *outgoing* provider's default is replaced.
+      Type that field back to the outgoing default and it starts moving again,
+      which is correct: the rule reads values, not edit history, so a field
+      holding the default *is* a default whoever put it there.
 - [x] Set an OpenAI-compatible key, switch to Anthropic, set a different key,
       and reload Obsidian. Both are still there: the two do not share a field,
       and neither switching nor reloading clears either one. This is the check
@@ -854,6 +857,8 @@ previous evening while the repo's own build was current. Check the timestamp on
 - [x] Point it at a local server with the key field empty and compile. It
       works: no credential is sent, because none was configured. 
       (Ollama recommended, tested by creator, however results may be weaker with no API)
-- [ ] **Paid, optional.** Against OpenAI's own endpoint, compile one small
+- [x] **Paid, optional.** Against OpenAI's own endpoint, compile one small
       source and check the usage page. The token-cap field is chosen by host,
-      so an OpenAI run spends no extra request learning it.
+      so an OpenAI run spends no extra request learning it. This is the only
+      check on that guess against the real API; the mirror half is covered by
+      the local server above, which accepts `max_tokens` as predicted.
