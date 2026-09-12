@@ -777,7 +777,7 @@ previous evening while the repo's own build was current. Check the timestamp on
       <status>` when the body carries none. Then confirm invariant 3: no page
       for it under `wiki/`, and no entry for it in the manifest, so the next
       compile retries it rather than treating it as done.
-- [ ] Two separate runs, changing only the base URL between them. Set it to
+- [x] Two separate runs, changing only the base URL between them. Set it to
       `https://api.openai.com/v1/` — note the trailing slash — and compile;
       then to `https://api.openai.com/v1/chat/completions` and compile again.
       Both must behave exactly as the plain `https://api.openai.com/v1` does:
