@@ -311,10 +311,15 @@ move the floors.
 ## Manual checklist
 
 Automated tests cover `src/core` only; the Obsidian surface is checked by hand
-(§14). 126 items, ordered so that stopping anywhere leaves the most valuable
-ground covered: setup first, then the graph pane — the newest code and the only
-part with no automated coverage whatsoever — then the older flows, then the
-destructive and paid checks, then edge cases. Work top to bottom.
+(§14). **126 items, all of them walked** — the last on 2026-09-12, closing the
+first pass in which every box is ticked. A failure anywhere below is therefore
+a regression, not an unknown; that is what the ticks are for, and re-walking a
+section after touching the code it covers is the point of keeping them.
+
+They are ordered so that stopping anywhere leaves the most valuable ground
+covered: setup first, then the graph pane — the only part with no automated
+coverage whatsoever — then the older flows, then the destructive and paid
+checks, then edge cases. Work top to bottom.
 
 §17 is an exception to that order and sits late on purpose. It is newer than
 the pane and just as uncovered, but it needs an ask to reach, so it is grouped
@@ -323,7 +328,7 @@ with the paid checks rather than the free ones.
 §18 is the other exception and sits last because it is newer still — M5, added
 after the rest of this list had been walked. Its two halves are independent:
 the scrubber costs nothing, and the provider items need a second provider set
-up before any of them mean anything.
+up before any of them mean anything. A local Ollama covers all but the last.
 
 ### 1. Start here — does it load at all
 
@@ -596,7 +601,7 @@ trash pair here the highest-value items in the list.
       confirmation at the scope modal survivable, and it is the one thing the
       modal's "pages that *may* be deleted" wording promises but code cannot
       assert.
-- [ ] A `.trash/` folder in the vault is not picked up as a source: with the
+- [x] A `.trash/` folder in the vault is not picked up as a source: with the
       vault otherwise up to date, **Luka: Compile** still reports "nothing to
       do".
       Luka's own deletes will not produce that folder — it asks for the system
