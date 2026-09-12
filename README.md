@@ -777,9 +777,20 @@ previous evening while the repo's own build was current. Check the timestamp on
       <status>` when the body carries none. Then confirm invariant 3: no page
       for it under `wiki/`, and no entry for it in the manifest, so the next
       compile retries it rather than treating it as done.
-- [ ] Set the base URL with a trailing slash, then again with
-      `/chat/completions` already on the end. Both compile: the endpoint is
-      joined, not doubled.
+- [ ] Two separate runs, changing only the base URL between them. Set it to
+      `https://api.openai.com/v1/` — note the trailing slash — and compile;
+      then to `https://api.openai.com/v1/chat/completions` and compile again.
+      Both must behave exactly as the plain `https://api.openai.com/v1` does:
+      Luka appends the endpoint itself, stripping a trailing slash and a
+      trailing `/chat/completions` first, so none of the three doubles up.
+      These are the two ways it gets typed wrong — the settings placeholder
+      shows a root while every API doc shows the full endpoint, so both get
+      pasted.
+      **Valid model ids are not needed.** The server's error says which thing
+      was wrong: a correct path gets you the same model complaint as the check
+      above, while a doubled one (`…/v1/chat/completions/chat/completions`)
+      gets a different error naming the bad path. Same model error both times
+      is the pass. Set the field back to `https://api.openai.com/v1` after.
 - [ ] Set the base URL to something that is not a URL at all — `not a url`
       will do. Compile fails immediately, with a notice quoting the value back
       at you and saying it is not a valid http(s) URL. That wording is the
