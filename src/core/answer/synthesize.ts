@@ -1,6 +1,6 @@
-// Synthesis and the answer note (handoff.md §8.2, §8.3).
+// Synthesis and the answer note.
 //
-// §8.2: "Input: question + assembled pages, each delimited and labeled with
+// "Input: question + assembled pages, each delimited and labeled with
 // their title/path/kind. Prompt requirements: answer in markdown; attribute
 // claims with inline `[[links]]` drawn only from the provided set; end with
 // exactly one fenced JSON block `{"missing_information": [...]}` (empty list
@@ -24,10 +24,10 @@ import { answerGaps, renderGapsBlock } from "./addnext";
 const SOURCES_START = "<!-- sources:start -->";
 const SOURCES_END = "<!-- sources:end -->";
 
-/** §8.3's exact wording for the ungrounded case. */
+/** The fixed wording for the ungrounded case. */
 const UNGROUNDED_CALLOUT = "> [!warning] Not grounded in your wiki";
 
-/** §8.3: "slug: lowercase, alphanumerics and dashes, max 60 chars". */
+/** Slug: lowercase, alphanumerics and dashes, max 60 chars. */
 const SLUG_LIMIT = 60;
 
 const SYSTEM = [
@@ -52,7 +52,7 @@ export interface SynthesisReply {
 export function renderSynthesisPrompt(question: string, nodes: readonly AssembledNode[]): string {
   const parts = [`Question: ${question}`, ""];
   for (const node of nodes) {
-    // Delimited and labeled per §8.2, so the model can attribute a claim to the
+    // Delimited and labeled, so the model can attribute a claim to the
     // page it came from and link to it by the title code will accept back.
     parts.push(`--- page: ${node.title} (${node.kind}, ${node.path}) ---`, node.text, "");
   }
@@ -67,10 +67,10 @@ export async function synthesize(
   question: string,
   nodes: readonly AssembledNode[],
 ): Promise<SynthesisReply> {
-  // Prose, not JSON mode: §8.2's reply is markdown that happens to end with a
+  // Prose, not JSON mode: the reply is markdown that happens to end with a
   // fenced block, and asking the wrapper to parse the whole thing as JSON would
   // reject every valid answer. Temperature is left unset, as page generation
-  // leaves it — §11 fixes temperature 0 for JSON tasks only.
+  // leaves it — temperature 0 is fixed for JSON tasks only.
   const reply = await provider.complete({
     task: "synthesis",
     system: SYSTEM,
@@ -80,7 +80,7 @@ export async function synthesize(
 }
 
 /**
- * Removes §8.2's trailing fenced JSON block and reads its list.
+ * Removes the trailing fenced JSON block and reads its list.
  *
  * Only a block at the very end is taken: a fenced example in the middle of an
  * answer is prose the user asked for. A block that is missing, unparseable, or
@@ -122,7 +122,7 @@ export function stripMissingBlock(reply: string): SynthesisReply {
  * scalar, and invariant 5 gives structure to code. Stripping `[[`/`]]` is the
  * one this key adds: `buildGraph` scans a node's whole file for links,
  * frontmatter included, so once an answer is filed a bracketed item would
- * become an edge the model chose. §10's candidates are safe either way — they
+ * become an edge the model chose. Article candidates are safe either way — they
  * are read off the wiki page table, which `loadPageTable` seeds with `wiki/`
  * alone, and a filed answer lives under `raw/`.
  *
@@ -147,7 +147,7 @@ export function cleanMissing(list: readonly string[]): string[] {
 }
 
 /**
- * §8.3: "any link outside the retrieved set is unlinked to plain text plus
+ * "Any link outside the retrieved set is unlinked to plain text plus
  * marker".
  *
  * The link becomes the text it displayed, so the sentence still reads, and the
@@ -165,8 +165,8 @@ export function validateAnswerLinks(
     known.add(handleOf(node.path));
   }
 
-  // An alias of a retrieved page is not a link outside the retrieved set. §4
-  // gives titles and aliases one namespace and resolves a handle through the
+  // An alias of a retrieved page is not a link outside the retrieved set. The
+  // namespace covers titles and aliases and resolves a handle through the
   // title table, so resolution here goes through that same table rather than
   // matching titles alone — otherwise a model that writes `[[PPR]]` for a page
   // retrieved as "Personalized PageRank" has its link stripped for naming the
@@ -178,7 +178,7 @@ export function validateAnswerLinks(
     const pipe = inner.indexOf("|");
     const target = (pipe === -1 ? inner : inner.slice(0, pipe)).trim();
     // A piped link with nothing after the pipe still has to leave a readable
-    // sentence: §8.3 unlinks "to plain text", and an empty display would put a
+    // sentence: unlinking is "to plain text", and an empty display would put a
     // bare marker where a word used to be.
     const piped = pipe === -1 ? "" : inner.slice(pipe + 1).trim();
     const display = piped === "" ? target : piped;
@@ -231,7 +231,7 @@ export function validateAnswerLinks(
  * back at filing, and the sources block is covered because it is code's to
  * write, not because anything parses it. `compile/citations.ts` has a fourth
  * `BLOCK`, for `citations:start`/`end`, and it was briefly added here on the
- * reasoning that §8.4 files an answer into `raw/answers/` where the next
+ * reasoning that filing puts an answer into `raw/answers/` where the next
  * compile reads it.
  * That reasoning is wrong: all three `parseCitationBlock` call sites iterate
  * the wiki page table, and `loadPageTable` seeds its walk with `wiki/` alone,
@@ -256,11 +256,11 @@ const CODE_OWNED_SENTINEL =
  * case: `BLOCK` cannot pair it with anything, so filing removes nothing and the
  * sentinel rides into `raw/answers/` as source text.
  *
- * It is *not* true that a forged block's links become graph edges §7.1 would
+ * It is *not* true that a forged block's links become edges the graph would
  * not otherwise have. `validateAnswerLinks` runs over the whole body first, so
  * a forged link to a page outside the retrieved set is already unlinked, and a
  * forged link to one inside it names a page code's own sources block lists
- * anyway — §7.1 dedupes per pair, so the edge set is identical either way. An
+ * anyway — edges dedupe per pair, so the edge set is identical either way. An
  * earlier version of this comment claimed otherwise; measured, it is not so.
  *
  * Deliberately blind to code fences, because every consumer downstream is.
@@ -279,7 +279,7 @@ const CODE_OWNED_SENTINEL =
  * identical sentinel later in that line untouched, which is the asymmetry this
  * whole file keeps having to be checked for.
  *
- * What the model wrote around the sentinels is prose, and §4 says the model
+ * What the model wrote around the sentinels is prose, and the model
  * writes prose — a heading it chose is its own. What it may not do is produce
  * something that parses as a block code is supposed to own.
  */
@@ -289,12 +289,12 @@ export function withoutForgedBlocks(body: string): string {
 
 export interface AnswerNote {
   question: string;
-  /** ISO datetime, §4's `asked`. */
+  /** ISO datetime, the `asked` key. */
   asked: string;
   mode: RetrievalMode;
   grounded: boolean;
   /**
-   * §8.2's `missing_information` from the last synthesis, already through
+   * The `missing_information` list from the last synthesis, already through
    * `cleanMissing`. Omitted from the note when empty: an answer that lacked
    * nothing should carry no key saying so.
    */
@@ -302,10 +302,10 @@ export interface AnswerNote {
   /** The model's prose, already stripped of its JSON block. */
   body: string;
   consulted: readonly AssembledNode[];
-  /** The page table, so an alias of a retrieved page still resolves (§4). */
+  /** The page table, so an alias of a retrieved page still resolves. */
   pages?: readonly PageMeta[];
   /**
-   * §7.1's snapshot, for the solid edges in the `## Add next` diagram — what
+   * The graph snapshot, for the solid edges in the `## Add next` diagram — what
    * the wiki already holds, against which the dashed additions read.
    */
   graph?: GraphSnapshot;
@@ -330,7 +330,7 @@ export function renderAnswerNote(note: AnswerNote): string {
   });
 
   const parts: string[] = [];
-  // §8.3 puts the callout first, before the answer.
+  // The callout comes first, before the answer.
   if (!note.grounded) parts.push(UNGROUNDED_CALLOUT, "");
   parts.push(
     withoutForgedBlocks(validateAnswerLinks(note.body, note.consulted, note.pages ?? [])).trim(),
@@ -349,12 +349,12 @@ export function renderAnswerNote(note: AnswerNote): string {
   return `${frontmatter}${parts.join("\n")}\n`;
 }
 
-/** §8.3's `## Sources consulted` block — a different block from §4's citations. */
+/** The `## Sources consulted` block — a different block from a page's citations. */
 export function renderSourcesBlock(consulted: readonly AssembledNode[]): string {
   const lines = [SOURCES_START, "## Sources consulted"];
   // Sorted by path, so two answers over the same set list it the same way.
   for (const node of [...consulted].sort((a, b) => comparePaths(a.path, b.path))) {
-    // A wiki page is named by its title, a raw source by its path — §4's rule
+    // A wiki page is named by its title, a raw source by its path — the rule
     // for which form a link takes.
     lines.push(`- [[${node.kind === "raw" ? node.path : node.title}]]`);
   }
@@ -363,7 +363,7 @@ export function renderSourcesBlock(consulted: readonly AssembledNode[]): string 
 }
 
 /**
- * §8.3's path: `answers/YYYY-MM-DD-HHmm <question-slug>.md`.
+ * The note's path: `answers/YYYY-MM-DD-HHmm <question-slug>.md`.
  *
  * UTC, matching `ingested`'s convention: a vault synced between machines in
  * different zones would otherwise name two notes by the same local minute.

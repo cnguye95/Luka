@@ -1,12 +1,12 @@
-// §9's iteration scrubber: "when an overlay was computed with snapshots, a
+// The iteration scrubber: "when an overlay was computed with snapshots, a
 // slider scrubs per-iteration PPR vectors."
 //
 // The arithmetic of that — which stops exist, which vector each one shows, and
 // what the label says — is pure, so it lives here rather than in `view.ts`
 // among the DOM, the same split `press.ts` makes for the node gestures.
 //
-// The one thing worth reading twice is `stopsOf`. §7.2 retains at most 100
-// vectors while §17's `pprMaxIterations` can be raised past that, so a long
+// The one thing worth reading twice is `stopsOf`. The walk retains at most 100
+// vectors while `pprMaxIterations` can be raised past that, so a long
 // walk keeps its first hundred iterations and its final scores with a gap in
 // between. The slider has to be able to return to the vector the overlay was
 // already showing, so that final vector gets a stop of its own whenever it is
@@ -17,7 +17,7 @@ import type { PPRResult } from "../../core/index";
 /**
  * What a scrub can be built from: any walk that reports its iterations.
  *
- * Structural rather than `PPRResult` itself, because §9's query inspection
+ * Structural rather than `PPRResult` itself, because query inspection
  * hands back the same three fields off an `InspectResult` and there is no
  * reason for one of the two producers to be the special case.
  */
@@ -37,7 +37,7 @@ export function vectorAt(scrub: Scrub, at: number): ReadonlyMap<string, number> 
  * Attaches the walk's iterations to an overlay, if it kept any.
  *
  * Returns the overlay untouched when there is nothing to scrub — a walk that
- * was not asked for snapshots, or the empty-seed case §7.2 answers with no
+ * was not asked for snapshots, or the empty-seed case answered with no
  * iterations at all. The slider is then simply absent, which is the state
  * Mode-A inspection and trace replay are always in.
  *
@@ -59,10 +59,10 @@ export function withScrub(overlay: Overlay, walk: Walk): Overlay {
 /**
  * The same overlay, showing the walk as it stood at one iteration.
  *
- * Both of §9's score-driven marks move: the heat ramp because that is the
+ * Both score-driven marks move: the heat ramp because that is the
  * point, and the top-K stroke because a ranking pinned to the converged walk
  * would claim the early iterations had already chosen their winners. Each
- * frame is normalized against its own peak (S32 applied per vector), so the
+ * frame is normalized against its own peak (as the overlay does), so the
  * ramp answers "where was the mass then", not "how far along was this".
  *
  * A new object every time. The frames array is shared rather than copied —
@@ -84,7 +84,7 @@ export function scrubTo(overlay: Overlay, at: number, k: number): Overlay {
 /**
  * What the slider says it is showing.
  *
- * Iterations are reported 1-based because that is how §7.2 counts them and how
+ * Iterations are reported 1-based because that is how the walk counts and how
  * `PPRResult.iterations` reports them. The third form only arises when the
  * retention cap cut the middle out of a long walk, and it names the gap rather
  * than letting the slider imply it stepped through iterations nobody kept.

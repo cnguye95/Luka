@@ -1,9 +1,8 @@
-// The in-memory page table (handoff.md §4: "generated each compile from the
-// in-memory page table, which is built from wiki frontmatter") plus §4's
-// identity and naming rules.
+// The in-memory page table, built each compile from wiki frontmatter, plus
+// the identity and naming rules.
 //
-// A page's title is its filename stem: §4 makes the filename the sanitized
-// title, and no frontmatter key carries it.
+// A page's title is its filename stem: the filename is the sanitized title,
+// and no frontmatter key carries it.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { comparePaths, extname, isInfrastructure, stem } from "../paths";
@@ -14,29 +13,29 @@ export const WIKI_FOLDER = "wiki";
 
 const KINDS: readonly PageKind[] = ["source", "entity", "concept"];
 
-/** Characters §4 strips from a title to make a filename. */
-// §4 names the characters a title may not contain, which is about wikilink
+/** Characters stripped from a title to make a filename. */
+// The base set is what a title may not contain, which is about wikilink
 // and path syntax. A filename has its own refusals on top of that — `?`, `*`,
 // quotes, angle brackets and control characters are rejected outright by
 // Windows — and a title that reaches the write unusable does not cost one page:
 // every source citing it is blocked, so nothing in the run is manifested, and
 // because inventory runs at temperature 0 the model returns the same title on
-// the next compile. Being stricter than §4 is not a deviation from it.
+// the next compile. Being stricter than the base set costs nothing.
 // Control characters are in the class on purpose: a model can return one,
 // and a filename carrying it is rejected outright rather than merely ugly.
 // eslint-disable-next-line no-control-regex
 const FORBIDDEN = /[[\]#^|\\/:?*"<>\u0000-\u001f]/g;
 /**
- * §4's filename lives in one filesystem component, which ext4 and APFS bound
+ * The filename lives in one filesystem component, which ext4 and APFS bound
  * at 255 *bytes* — not code units. Room here for `.md`, for a `-10` suffix,
  * and slack for hosts that are stricter.
  */
 const MAX_TITLE_BYTES = 200;
 
 /**
- * The one spelling rule for §4's namespace.
+ * The one spelling rule for the title/alias namespace.
  *
- * §4 gives titles and aliases one namespace, so every table keyed by a name —
+ * Titles and aliases share one namespace, so every table keyed by a name —
  * the page table, the link index, the merge's owner map — has to agree on when
  * two strings are the same name. Built separately they drift, and a name free
  * in one table and taken in another is a page written over another page.
@@ -57,7 +56,7 @@ export async function loadPageTable(fs: FsAdapter): Promise<PageMeta[]> {
   while (directories.length > 0) {
     const directory = directories.pop() as string;
     for (const entry of await fs.list(directory)) {
-      // Invariant 8 and §7.1's "every file under wiki/ (minus `_`-prefixed)":
+      // Invariant 8, "every file under wiki/ (minus `_`-prefixed)":
       // the prefix marks infrastructure, and a `_`-prefixed folder holds
       // infrastructure too — nothing inside it is a page.
       if (isInfrastructure(entry.path)) continue;
@@ -94,8 +93,8 @@ function toPage(path: string, text: string): PageMeta | null {
 }
 
 /**
- * §4 writes a source page's origin as `source: "[[raw/<file>]]"`. The brackets
- * are there to make the graph an edge (§7.1); the path inside is what a
+ * A source page's origin is written as `source: "[[raw/<file>]]"`. The brackets
+ * are there to make the graph an edge; the path inside is what a
  * re-ingested source matches against, so it is unwrapped here.
  */
 function sourceTarget(value: unknown): string | null {
@@ -110,7 +109,7 @@ function sourceTarget(value: unknown): string | null {
 
 function toStringArray(value: unknown): string[] {
   // `aliases: Ada` is as common in a hand-written vault as a proper list, and
-  // dropping it would cost §6.5's dedup a match and create a duplicate page.
+  // dropping it would cost dedup a match and create a duplicate page.
   if (typeof value === "string") return value.trim() === "" ? [] : [value.trim()];
   if (!Array.isArray(value)) return [];
   return value
@@ -119,10 +118,10 @@ function toStringArray(value: unknown): string[] {
 }
 
 /**
- * §4: strip `[]#^|\/:`, and strip leading `_` and `.` so no generated page can
+ * Strip `[]#^|\/:`, and strip leading `_` and `.` so no generated page can
  * collide with the infrastructure prefix.
  *
- * Length is deliberately not bounded here. §6.5 matches each inventory item
+ * Length is deliberately not bounded here. Dedup matches each inventory item
  * against the page table through this function, so a bound makes it a lossy
  * key: two concepts that share a long opening become one page. The filename
  * bound belongs to `uniqueTitle`, which is what actually names a file.
@@ -143,13 +142,13 @@ export function sanitizeTitle(title: string): string {
 }
 
 /**
- * The filename stem a title becomes, before §4's uniqueness suffix.
+ * The filename stem a title becomes, before the uniqueness suffix.
  *
- * §6.5 looks a page up by the same rule that named it. §4 stores a page's
- * title only as its filename, so if the stored name is cut and the lookup key
+ * Dedup looks a page up by the same rule that named it. A page's title is
+ * stored only as its filename, so if the stored name is cut and the lookup key
  * is not, the two stop being the same rule: a page can never be found again,
  * and every compile creates another one. That is what `handleOf` exists to
- * prevent, on the other of §4's two namespace properties — how names compare,
+ * prevent, on the other of the namespace's two properties — how names compare,
  * and how long a name may be. Both are answered here.
  */
 export function titleStem(title: string): string {
@@ -166,14 +165,14 @@ export function titleStem(title: string): string {
  *
  * The tag is what keeps the stem a *function of the whole title*. Without it a
  * cut is lossy in both directions: two different titles sharing a 200-byte
- * opening take one stem, so §6.5 matches a new concept onto an older one's
+ * opening take one stem, so dedup matches a new concept onto an older one's
  * page — and the stem carries no evidence of which title made it, so it cannot
  * be recomputed from a model reply to find that page again.
  */
 function boundTitle(title: string, budget: number): string {
   if (!cutToBytes(title, budget).cut) return title;
-  // Tagged from the *handle*, not the raw title. §4 gives the namespace one
-  // spelling rule, so two casings §4 calls one name must not take two stems —
+  // Tagged from the *handle*, not the raw title. The namespace has one
+  // spelling rule, so two casings it calls one name must not take two stems —
   // the kept prefix already folds under `handleOf`, and a tag that did not
   // would split them into two permanent pages.
   const tag = `-${titleTag(handleOf(title))}`;
@@ -208,12 +207,12 @@ function titleTag(title: string): string {
 }
 
 /**
- * §4: unique across `wiki/`, and short enough for the host to accept.
+ * Unique across `wiki/`, and short enough for the host to accept.
  *
  * This is the function that turns a title into a filename, so it owns both
  * rules. Compared by handle, because the vault may sit on a case-insensitive
  * or normalization-insensitive filesystem where two spellings are one file.
- * Collisions take the §8.4 suffix idiom: `-2`, `-3`, … — and the suffix is
+ * Collisions take the suffix idiom: `-2`, `-3`, … — and the suffix is
  * counted inside the bound, not appended past it.
  */
 export function uniqueTitle(title: string, taken: ReadonlySet<string>): string {
@@ -232,7 +231,7 @@ export function takenTitles(pages: readonly PageMeta[]): Set<string> {
   return new Set(pages.map((page) => handleOf(page.title)));
 }
 
-/** Vault path for a page of a given kind, per §4's folder layout. */
+/** Vault path for a page of a given kind, per the folder layout. */
 export function pagePathForKind(title: string, kind: PageKind): string {
   const folder = kind === "source" ? "sources" : kind === "entity" ? "entities" : "concepts";
   return `${WIKI_FOLDER}/${folder}/${title}.md`;

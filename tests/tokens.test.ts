@@ -4,7 +4,7 @@ import { estimateTokens, packUnderBudget, truncateToTokens } from "../src/core/t
 
 const MARKER = truncatedForContextBudget();
 
-describe("token estimation (§17: chars/4)", () => {
+describe("token estimation (chars/4)", () => {
   it("rounds up so a partial token still costs one", () => {
     expect(estimateTokens("")).toBe(0);
     expect(estimateTokens("a")).toBe(1);
@@ -69,7 +69,7 @@ describe("packUnderBudget", () => {
 
   it("stops at the first item that does not fit and never reaches past it", () => {
     // 60 fits; 60 more would exceed 100; the small item after must NOT be
-    // pulled forward — assembly order is meaningful (§6.5 citation order).
+    // pulled forward — assembly order is meaningful (citation order).
     const items = [size(60), size(60), size(5)];
     const result = packUnderBudget(items, (t) => t, 100);
     expect(result.items).toEqual([items[0]]);
@@ -77,7 +77,7 @@ describe("packUnderBudget", () => {
     expect(result.truncated).toBe(false);
   });
 
-  it("truncates a first item that alone exceeds the whole budget (§7.4)", () => {
+  it("truncates a first item that alone exceeds the whole budget", () => {
     const result = packUnderBudget([size(500), size(1)], (t) => t, 50);
     expect(result.items).toHaveLength(1);
     expect(result.truncated).toBe(true);
@@ -92,8 +92,8 @@ describe("packUnderBudget", () => {
   });
 
   it("drops rather than truncates a first item when asked for whole items only", () => {
-    // §8.2's follow-up round appends "under the remaining context budget";
-    // §7.4's truncation exception is for a page over the *whole* budget, so a
+    // The follow-up round appends "under the remaining context budget";
+    // the truncation exception is for a page over the *whole* budget, so a
     // remnant that fits no page whole yields nothing — not a fragment that a
     // third model call would then be spent on.
     const result = packUnderBudget([size(500), size(1)], (t) => t, 50, undefined, false);
@@ -102,7 +102,7 @@ describe("packUnderBudget", () => {
     expect(result.usedTokens).toBe(0);
   });
 
-  it("honors the item cap before the budget (§7.4's K)", () => {
+  it("honors the item cap before the budget (K)", () => {
     const result = packUnderBudget([size(1), size(1), size(1)], (t) => t, 10_000, 2);
     expect(result.items).toHaveLength(2);
   });
@@ -119,7 +119,7 @@ describe("packUnderBudget", () => {
   });
 
   it("reports the real cost of a truncated first item, not zero", () => {
-    // §8.2's follow-up round appends "under the remaining context budget",
+    // The follow-up round appends "under the remaining context budget",
     // computed from this number.
     const result = packUnderBudget([size(500)], (t) => t, 50);
     expect(result.usedTokens).toBeGreaterThan(40);

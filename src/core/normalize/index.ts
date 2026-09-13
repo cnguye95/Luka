@@ -1,8 +1,8 @@
-// Normalization dispatch (handoff.md §6.1). Compile's later phases only ever
+// Normalization dispatch. Compile's later phases only ever
 // receive markdown.
 //
 // Two shapes exist. Passthrough sources (md/txt) are annotated in place and
-// hashed *afterwards* (§6.2). Every other format writes a derivative next to
+// hashed *afterwards*. Every other format writes a derivative next to
 // the original and the manifest hash is taken over the untouched original.
 import type { FsAdapter, HttpAdapter } from "../adapters";
 import {
@@ -52,7 +52,7 @@ export function isPassthrough(format: SourceFormat): boolean {
 /**
  * `<original-stem>.md` beside the original; `null` when the format writes none.
  *
- * An orphan image writes one: §6.1's vision row keeps the original and adds a
+ * An orphan image writes one: the vision pass keeps the original and adds a
  * markdown description, which makes the image a source like any other and
  * earns it a wiki page. Inline images never reach here — they are localized
  * into `raw/assets/` and are not sources at all.
@@ -70,7 +70,7 @@ export interface NormalizeDeps {
   timeoutMs: number;
   /** ISO date recorded as `ingested`. */
   today: string;
-  /** Required by the §6.1 vision row; unused by every other format. */
+  /** Required by the vision pass; unused by every other format. */
   provider: LLMProvider;
 }
 
@@ -143,7 +143,7 @@ export async function normalizeSource(
   // are the identity, and no extractor can invalidate the value afterwards.
   const hash = await sha256Hex(bytes);
 
-  // Claimed before any extraction runs. §6.1 names every derivative
+  // Claimed before any extraction runs. Every derivative is named
   // `<original-stem>.md`, so two non-passthrough sources sharing a stem
   // (`chart.csv` and `chart.png`) both want one file and the second cannot
   // have it. Checking afterwards would still fail — but only after paying for
@@ -163,7 +163,7 @@ export async function normalizeSource(
       break;
     case "pdf": {
       const extraction = await pdfToMarkdown(bytes);
-      // §6.5's smell test is PDF-only. The marker heads the body rather than
+      // The smell test is PDF-only. The marker heads the body rather than
       // the file so the frontmatter block stays first, and it is re-derived
       // with the derivative on every run, so it never goes stale.
       const reasons = smellPdfExtraction(extraction);
@@ -188,7 +188,7 @@ export async function normalizeSource(
   return { hash, derivativePath, wrote: true };
 }
 
-/** §6.1's orphan-image set, mapped to the media types the vision API takes. */
+/** The orphan-image set, mapped to the media types the vision API takes. */
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -211,8 +211,8 @@ const VISION_SYSTEM = [
 ].join("\n");
 
 /**
- * §6.1's vision pass — exactly one model call per orphan image (invariant 12).
- * A failure propagates: the source is skipped with a notice (§11) and
+ * The vision pass — exactly one model call per orphan image (invariant 12).
+ * A failure propagates: the source is skipped with a notice and
  * invariant 3's success-only manifest retries it next compile.
  */
 async function describeImage(
@@ -238,7 +238,7 @@ async function describeImage(
 /**
  * Where this normalization writes.
  *
- * `<stem>.md` first, always: §6.1 names it, and a derivative sitting where its
+ * `<stem>.md` first, always: it is canonical, and a derivative sitting where its
  * source's name says it should is the one a user can find. The claim is made
  * before any extraction runs, so a doomed source never spends a model call.
  *
@@ -254,12 +254,12 @@ async function describeImage(
  * file it vacated is swept at the commit point behind the ownership guard.
  *
  * An *empty* non-canonical path is never taken: fresh placement belongs to
- * §6.1, and a float is only ever the continuation of a file that already exists.
+ * normalization; a float is only ever the continuation of an existing file.
  *
  * Only a *refusal* redirects the write. An IO failure is not a judgement about
  * who owns the canonical path, and acting on it as though it were would move a
  * write somewhere else on a transient blip, silently — the same distinction
- * §6.2's missing-derivative test draws between an unreadable document and an
+ * the missing-derivative test draws between an unreadable document and an
  * unreadable disk.
  */
 async function chooseTarget(

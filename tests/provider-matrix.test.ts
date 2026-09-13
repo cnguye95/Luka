@@ -1,4 +1,4 @@
-// The §11 reliability wrapper, enumerated rather than sampled.
+// The reliability wrapper, enumerated rather than sampled.
 //
 // The wrapper's failures are typed conditions, not a wide input space: a
 // handful of transport outcomes crossed with json/prose and the retry budget
@@ -76,19 +76,19 @@ function harness(script: readonly Outcome[], overrides: Partial<LukaSettings> = 
 }
 
 /**
- * §11 and §17, quoted rather than derived: "2 retries with exponential backoff
+ * The rules, quoted rather than derived: "2 retries with exponential backoff
  * + jitter", "120s timeout", "per-task max_tokens caps (inventory 2000, seeds
  * 500, generation 3000, synthesis 4000, vision 1500)".
  *
  * These were `DEFAULT_SETTINGS.maxRetries` and `MAX_TOKENS_BY_TASK` before,
  * which made the matrix agree with the code by construction: with
  * `maxRetries: 0` every cell still passed, including the backoff schedule,
- * because the expectation moved with the value. A spec number has to come from
- * the spec.
+ * because the expectation moved with the value. A fixed number has to be
+ * stated independently.
  */
-const SPEC_RETRIES = 2;
-const SPEC_TIMEOUT_MS = 120_000;
-const SPEC_TOKEN_CAPS: Record<string, number> = {
+const FIXED_RETRIES = 2;
+const FIXED_TIMEOUT_MS = 120_000;
+const FIXED_TOKEN_CAPS: Record<string, number> = {
   inventory: 2000,
   "seed-selection": 500,
   "page-generation": 3000,
@@ -96,7 +96,7 @@ const SPEC_TOKEN_CAPS: Record<string, number> = {
   vision: 1500,
 };
 
-const RETRIES = SPEC_RETRIES;
+const RETRIES = FIXED_RETRIES;
 const ATTEMPTS = RETRIES + 1;
 
 describe("what reaches the transport", () => {
@@ -132,35 +132,35 @@ describe("what reaches the transport", () => {
   });
 });
 
-describe("what the spec says reaches the transport", () => {
-  it("settings agree with §17's stated defaults", () => {
+describe("what the rules say reaches the transport", () => {
+  it("settings agree with the stated defaults", () => {
     // If these drift, every derived expectation below drifts with them.
-    expect(DEFAULT_SETTINGS.maxRetries).toBe(SPEC_RETRIES);
-    expect(DEFAULT_SETTINGS.requestTimeoutMs).toBe(SPEC_TIMEOUT_MS);
+    expect(DEFAULT_SETTINGS.maxRetries).toBe(FIXED_RETRIES);
+    expect(DEFAULT_SETTINGS.requestTimeoutMs).toBe(FIXED_TIMEOUT_MS);
   });
 
   it("sends each task to the model configured for it", async () => {
     // Nothing here asserted the model id, so a wrapper that routed every task
     // to one model passed the whole matrix.
-    for (const task of Object.keys(SPEC_TOKEN_CAPS) as (keyof typeof SPEC_TOKEN_CAPS)[]) {
+    for (const task of Object.keys(FIXED_TOKEN_CAPS) as (keyof typeof FIXED_TOKEN_CAPS)[]) {
       const { provider, seen } = harness([ok("prose")]);
       await provider.complete({ task: task as never, system: "s", user: "u" });
       expect([task, seen[0]?.model]).toEqual([task, DEFAULT_SETTINGS.models[task as never]]);
     }
   });
 
-  it("forwards §11's timeout to every attempt, retries included", async () => {
+  it("forwards the timeout to every attempt, retries included", async () => {
     const { provider, seen } = harness([serverError()]);
     await expect(
       provider.complete({ task: "synthesis", system: "s", user: "u" }),
     ).rejects.toThrow(ProviderError);
 
     expect(seen).toHaveLength(ATTEMPTS);
-    expect(seen.every((request) => request.timeoutMs === SPEC_TIMEOUT_MS)).toBe(true);
+    expect(seen.every((request) => request.timeoutMs === FIXED_TIMEOUT_MS)).toBe(true);
   });
 
-  it("caps every task at the number §11 names for it", async () => {
-    for (const [task, cap] of Object.entries(SPEC_TOKEN_CAPS)) {
+  it("caps every task at the number fixed for it", async () => {
+    for (const [task, cap] of Object.entries(FIXED_TOKEN_CAPS)) {
       const { provider, seen } = harness([ok("prose")]);
       await provider.complete({
         task: task as never,
@@ -173,7 +173,7 @@ describe("what the spec says reaches the transport", () => {
   });
 
   it("fixes a json task at temperature 0 even when the caller asks otherwise", async () => {
-    // §11: "JSON tasks: temperature 0" — unconditionally.
+    // "JSON tasks: temperature 0" — unconditionally.
     const { provider, seen } = harness([ok()]);
     await provider.complete({
       task: "inventory",
@@ -246,7 +246,7 @@ describe("what one complete() can cost", () => {
 
   it("bounds the transport attempts one call can make", async () => {
     // The attempt loop runs up to ATTEMPTS; the temperature re-run enters it a
-    // second time; the JSON repair doubles that again. §11 sets no overall
+    // second time; the JSON repair doubles that again. Nothing sets an overall
     // deadline, so the ceiling is worth stating rather than discovering.
     const { provider, seen } = harness([temperatureRejected()]);
     await expect(

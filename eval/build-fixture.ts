@@ -1,4 +1,4 @@
-// Builds `eval/fixture-vault/` (handoff.md §13).
+// Builds `eval/fixture-vault/`.
 //
 // "a committed, pre-built small vault (~20 sources, ~40 wiki pages, realistic
 // links; author it by hand or by one-time generation, then commit; no model
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
   const core = createCore({
     fs,
     http: new StubHttp({}),
-    // §13 wants the manifest committed with the vault, so it sits at the root
+    // The manifest is committed with the vault, so it sits at the root
     // rather than in a plugin folder that is not part of the fixture.
     manifestPath: MANIFEST,
     settings: { ...DEFAULT_SETTINGS, apiKey: "fixture" },

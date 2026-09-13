@@ -1,26 +1,26 @@
 // The answer note's `## Add next` section — what would have made this answer
 // better, drawn beside the answer that lacked it.
 //
-// Not in handoff.md. §15 assigns no milestone to a recommendation surface; the
-// user asked for one, and BUILD-NOTES records the decisions. The first attempt
+// Not in the original specification; added by decision (design_decisions.md,
+// "Add next lives in the answer, not in a pane"). The first attempt
 // was a vault-wide pane, and the thing wrong with it was that a vault-wide
 // list recommends against material nobody has asked about. A question is a
 // statement of what the user wants the wiki to know, so the gap worth naming
 // is the one that question ran into.
 //
 // Two signals, both already in hand when the note is written, so the section
-// costs no model call (§16 forbids an LLM-driven health check, and this is the
+// costs no model call (an LLM-driven check is a non-goal, and this is the
 // same rule):
 //
-//   - what §8.2's synthesis said it was missing, which is the model reporting
+//   - what synthesis said it was missing, which is the model reporting
 //     on its own answer rather than being asked a second question about it;
 //   - wikilink targets on the pages retrieved for this question that resolve
-//     to nothing — §4 calls an unresolved link "a future-article signal, not
+//     to nothing — an unresolved link is "a future-article signal, not
 //     an error", and here the pages that wanted it are the ones the answer was
 //     built from.
 //
-// Both are resolved by §4's rule — the links through `unresolvedTargets`,
-// which is the function §10 uses, and synthesis's items through the same title
+// Both are resolved by one rule — the links through `unresolvedTargets`, as
+// in the health check, and synthesis's items through the same title
 // index — so neither the section nor `wiki/_health.md` calls a page missing
 // that the other can see.
 //
@@ -67,7 +67,7 @@ const BLOCK =
  * Characters Mermaid reads as syntax inside a quoted label, plus the brackets.
  *
  * The brackets are not Mermaid's problem — they are Luka's. `linkTargets` is
- * fence-blind, so `[[X]]` anywhere in the note is a link to §7.1, and
+ * fence-blind, so `[[X]]` anywhere in the note is a link to the graph, and
  * Mermaid's own subroutine shape is spelled exactly that way. Escaping them
  * makes "the diagram contains no wikilink" true by construction rather than by
  * the label happening not to contain one.
@@ -77,22 +77,22 @@ const MERMAID_SPECIAL = /["<>&#`[\]{}|\\%]/g;
 export interface AnswerGap {
   /** The name a page would take, or synthesis's own words. */
   title: string;
-  /** Named by §8.2's list, so drawn from the answer rather than from a page. */
+  /** Named by synthesis, so drawn from the answer rather than from a page. */
   fromAnswer: boolean;
   /** Consulted pages that link to it, distinct, ordered by path. */
   citers: { path: string; title: string }[];
 }
 
 export interface AnswerGapsInput {
-  /** §8.2's list, already through `cleanMissing`. */
+  /** Synthesis's missing list, already through `cleanMissing`. */
   missing: readonly string[];
   consulted: readonly AssembledNode[];
-  /** The page table, so a link an alias answers is not a gap (§4). */
+  /** The page table, so a link an alias answers is not a gap. */
   pages: readonly PageMeta[];
 }
 
 /**
- * Whether a name could become a page under §4, by §4's own rule.
+ * Whether a name could become a page, by the naming rule itself.
  *
  * The namespace has two properties — how names compare and how long a name may
  * be — and `titleStem` is where both are answered: it sanitizes, which strips
@@ -118,7 +118,7 @@ function nameable(name: string): boolean {
  * The test is deliberately narrow, because the cost of the two mistakes is not
  * symmetric. A code-shaped name that survives is one weak line in a list; a
  * real one that is dropped is a recommendation the user never sees, and
- * §10 goes on listing it, so the two surfaces disagree with no way to tell
+ * the health report goes on listing it, so the two disagree with no way to tell
  * why. An earlier version of this asked only whether a lowercase letter was
  * followed by an uppercase one, which is the shape of `linkTargets` — and of
  * `PageRank`, `OpenAI`, `GitHub` and every other capitalized compound a wiki
@@ -146,15 +146,15 @@ function identifierShaped(name: string): boolean {
  */
 export function answerGaps(input: AnswerGapsInput): AnswerGap[] {
   const scans: LinkScan[] = input.consulted
-    // A raw source is a file, not a §4 page: its links are the author's, and
-    // §4 does not resolve them against the title table.
+    // A raw source is a file, not a page: its links are the author's, and
+    // they are not resolved against the title table.
     .filter((node) => node.kind !== "raw")
     .map((node) => ({
       page: { path: node.path, title: node.title },
       targets: linkTargets(node.text),
     }));
 
-  // §4's rule, the same one §10 resolves candidates with. Synthesis reports
+  // The same rule the health check resolves candidates with. Synthesis reports
   // what its answer lacked, which is not the same question as what the wiki
   // lacks: it can name a page that exists — one already among the pages it was
   // given — and the frontmatter key records that faithfully. The section is
@@ -205,7 +205,7 @@ export function mermaidLabel(text: string): string {
 }
 
 /**
- * §8.3's third code-written block, or `""` when the answer lacked nothing.
+ * The note's third code-written block, or `""` when the answer lacked nothing.
  *
  * The diagram is a Mermaid fence, which Obsidian renders in reading view with
  * no help from the plugin — the first fenced block Luka writes into a vault.
@@ -276,7 +276,7 @@ function diagram(gaps: readonly AnswerGap[], graph?: GraphSnapshot): string[] {
 }
 
 /**
- * §8.4's filing strips this with the trace.
+ * Filing strips this with the trace.
  *
  * The section names pages that do not exist. Kept, the next compile's
  * inventory would read those names as things the source says are true, and the

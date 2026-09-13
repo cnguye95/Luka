@@ -63,7 +63,7 @@ describe("first run", () => {
   });
 });
 
-describe("the four rules (§6.2)", () => {
+describe("the four rules", () => {
   it("skips an unchanged source and writes nothing — no reprocess loop", async () => {
     const fs = new MemFs({ "raw/note.md": "# Note\n\nBody.\n", "raw/plain.txt": "text\n" });
     await core(fs).instance.compile();
@@ -131,7 +131,7 @@ describe("the four rules (§6.2)", () => {
 
     expect(second).toMatchObject({ renamed: 1, added: 0, modified: 0, deleted: 0 });
     expect(manifestOf(fs)).toEqual({ "raw/renamed.md": entry });
-    // §6.2's "skip regeneration": no model call, and the source file itself is
+    // A rename skips regeneration: no model call, and the source file itself is
     // untouched. Only the wiki's references to the old path are repointed.
     expect(provider.stats().requests).toBe(0);
     expect(fs.text("raw/renamed.md")).toBe(
@@ -140,7 +140,7 @@ describe("the four rules (§6.2)", () => {
     expect(first.pagesWritten).toBe(1);
   });
 
-  it("repoints the wiki at a renamed source rather than orphaning its page (§6.2, §4)", async () => {
+  it("repoints the wiki at a renamed source rather than orphaning its page", async () => {
     const fs = new MemFs({ "raw/a.md": "content\n" });
     await core(fs).instance.compile();
     const pagePath = "wiki/sources/a.md";
@@ -156,8 +156,8 @@ describe("the four rules (§6.2)", () => {
     expect(fs.text(pagePath)).not.toContain("raw/a.md");
   });
 
-  it("treats a move that also changes the content as two events, not a rename (§4)", async () => {
-    // §4: "delete-then-add at a different path is two events". The hash differs,
+  it("treats a move that also changes the content as two events, not a rename", async () => {
+    // "Delete-then-add at a different path is two events". The hash differs,
     // so rename pairing must NOT fire — otherwise the new content would inherit
     // the old file's identity and never be re-extracted.
     const fs = new MemFs({ "raw/a.md": "one\n" });
@@ -170,7 +170,7 @@ describe("the four rules (§6.2)", () => {
     expect(second).toMatchObject({ renamed: 0, added: 1, deleted: 1 });
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/renamed.md"]);
 
-    // The page for the deleted source has no surviving citer, so §6.6's
+    // The page for the deleted source has no surviving citer, so the
     // cascade removes it; the new path gets its own page.
     expect(fs.paths().filter((path) => path.startsWith("wiki/sources/"))).toEqual([
       "wiki/sources/renamed.md",
@@ -197,7 +197,7 @@ describe("the four rules (§6.2)", () => {
     await instance.compile();
     expect(await fs.exists("raw/a.md")).toBe(true);
 
-    // §6.2: a derivative "persists until the original changes", and a rename
+    // A derivative "persists until the original changes", and a rename
     // does not change the original — identical bytes are how it was detected.
     // So the file moves with its source and only its origin key is rewritten.
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
@@ -224,7 +224,7 @@ describe("the four rules (§6.2)", () => {
     expect(fs.writes).toBe(0);
   });
 
-  it("keeps the pages of a source moved into a subfolder (§6.2, §6.6)", async () => {
+  it("keeps the pages of a source moved into a subfolder", async () => {
     // Moving a file leaves its derivative behind, so this always degrades to
     // rename + modified. Before the two rules composed, the old path was
     // reported deleted and the cascade removed every page citing it.
@@ -471,7 +471,7 @@ describe("the four rules (§6.2)", () => {
 
   it("carries the derivative of a rename that also changes format", async () => {
     // Same bytes at a new path with a different extension: one source, and
-    // §6.2's shortcut still applies. The derivative moves and is repointed; it
+    // the rename shortcut still applies. The derivative moves and is repointed; it
     // is not rebuilt just because the new extension would extract differently.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
     await core(fs).instance.compile();
@@ -548,7 +548,7 @@ describe("the four rules (§6.2)", () => {
     expect(fs.text("raw/b/z.md")).toContain("MARK-Y.");
   });
 
-  it("pairs a rename with the copy it actually came from (§4)", async () => {
+  it("pairs a rename with the copy it actually came from", async () => {
     // Two byte-identical sources. The user deletes one and moves the other;
     // hash alone cannot tell them apart, but the basename can.
     const fs = new MemFs({
@@ -677,8 +677,8 @@ describe("the four rules (§6.2)", () => {
     expect(await fs.exists("wiki/sources/a.md")).toBe(true);
   });
 
-  it("does not cascade on a source that discovery skipped (§6.1)", async () => {
-    // A skipped path is still sitting in the vault — §6.1 has it "surface again
+  it("does not cascade on a source that discovery skipped", async () => {
+    // A skipped path is still sitting in the vault — it must "surface again
     // each compile". Treating it as vanished would delete the pages of a source
     // that never went away, which is what happens when the skip rules change
     // under a vault that already compiled.
@@ -734,7 +734,7 @@ describe("the four rules (§6.2)", () => {
   });
 
   it("leaves the rest of a repaired derivative's frontmatter byte-for-byte", async () => {
-    // §6.2 invites the user to edit a derivative, so repointing one key must
+    // The user is invited to edit a derivative, so repointing one key must
     // not restyle their YAML: a load/dump round trip drops comments, reorders
     // keys and retypes scalars (`010` becomes `10`).
     const fs = new MemFs({ "raw/data.csv": "a,b\n1,2\n" });
@@ -768,7 +768,7 @@ describe("the four rules (§6.2)", () => {
     await fs.move("raw/data.csv", "raw/data.tsv");
     const second = await core(fs).instance.compile();
 
-    // A rename, and no regeneration: §6.2's shortcut still applies.
+    // A rename, and no regeneration: the shortcut still applies.
     expect(second).toMatchObject({ renamed: 1, modified: 0, deleted: 0, failed: [] });
     expect(fs.text("raw/data.md")).toContain("derived-from: raw/data.tsv");
     expect(Object.keys(manifestOf(fs))).toEqual(["raw/data.tsv"]);
@@ -880,8 +880,8 @@ describe("source discovery", () => {
     // Obsidian's local-trash setting moves a deleted file to `<vault>/.trash/`.
     // Discovery is rooted at `raw/` and only descends, so nothing at the vault
     // root is reachable — which is what stops a file the user deleted from
-    // being re-ingested as a brand-new source on the next compile. README
-    // §13.6 checks the same property by hand, against the real adapter.
+    // being re-ingested as a brand-new source on the next compile. Checklist
+    // item 13.6 checks the same property by hand, against the real adapter.
     const fs = new MemFs({
       "raw/note.md": "n\n",
       ".trash/note.md": "the deleted copy\n",
@@ -905,7 +905,7 @@ describe("source discovery", () => {
     expect(second.skipped).toHaveLength(1);
   });
 
-  it("ingests an orphan image as a source through the vision pass (§6.1)", async () => {
+  it("ingests an orphan image as a source through the vision pass", async () => {
     const fs = new MemFs({ "raw/photo.png": pngBytes(600, 400) });
     const { instance, provider } = core(fs);
 
@@ -935,7 +935,7 @@ describe("source discovery", () => {
     const second = await core(fs).instance.compile();
 
     expect(second).toMatchObject({ renamed: 2, modelCalls: 0, failed: [] });
-    // §6.2's repair path survives: neither rename re-extracted.
+    // The repair path survives: neither rename re-extracted.
     expect(fs.text("raw/hold.md")).toContain("HAND REPAIRED.");
     expect(fs.text("raw/hold.md")).toContain("derived-from: raw/hold.html");
     expect(fs.text("raw/zz.md")).toContain("derived-from: raw/zz.csv");
@@ -991,7 +991,7 @@ describe("source discovery", () => {
     // repointed at their new source. No move, no model call, no loss.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n", "raw/b.csv": "x,y\n1,2\n" });
     await core(fs).instance.compile();
-    // A repair on one of them, to pin that floating preserves §6.2's repair
+    // A repair on one of them, to pin that floating preserves the repair
     // path exactly as an ordinary carry does.
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
 
@@ -1043,7 +1043,7 @@ describe("source discovery", () => {
   });
 
   it("never overwrites a user's file that merely carries a derived-from key", async () => {
-    // §2 invariant 7's first clause — "Nothing else in a user-placed file is
+    // Invariant 7's first clause — "Nothing else in a user-placed file is
     // ever modified" — cannot rest on the assumption that only Luka writes that
     // key. A copied or hand-edited file carries it too, and its origin may name
     // nothing at all.
@@ -1058,7 +1058,7 @@ describe("source discovery", () => {
   });
 
   it("still refuses a derivative whose source is merely unreadable this run", async () => {
-    // The owner is skipped, not gone — §6.1 has it "surface again each compile",
+    // The owner is skipped, not gone — it will "surface again each compile",
     // so its markdown is still spoken for.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
     await core(fs).instance.compile();
@@ -1097,7 +1097,7 @@ describe("source discovery", () => {
   });
 
   it("does not reclassify a source because one read of its markdown failed", async () => {
-    // §6.2's missing-derivative test reads the file to ask whether it is still
+    // The missing-derivative test reads the file to ask whether it is still
     // this source's. A read that fails answers neither yes nor no — treating it
     // as "not ours" re-extracts over the file, silently, on an IO blip.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
@@ -1213,7 +1213,7 @@ describe("source discovery", () => {
 
   it("re-extracts once from a manifest written before ownership was recorded", async () => {
     // The old shape was `path -> hash`, which names no derivative — so a
-    // converting source's cannot be located and §6.2's missing-derivative rule
+    // converting source's cannot be located and the missing-derivative rule
     // fires. That costs one re-extraction, which records the pointer. A
     // passthrough source has no derivative to name and is unaffected.
     const fs = new MemFs({ "raw/page.html": "<h1>Hi</h1>\n", "raw/note.md": "Body.\n" });

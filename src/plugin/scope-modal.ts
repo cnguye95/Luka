@@ -3,11 +3,11 @@ import type { ScopePreview } from "../core/index";
 import { stem } from "../core/paths";
 
 /**
- * §6.6's confirm modal: "show the scope preview (counts + lists of pages to
+ * The confirm modal: "show the scope preview (counts + lists of pages to
  * regenerate and pages that may be deleted)".
  *
  * The core holds the operation lock across this, so the vault cannot change
- * under the preview while it is on screen (§8.1).
+ * under the preview while it is on screen.
  */
 export function confirmScope(app: App, preview: ScopePreview): Promise<boolean> {
   return new Promise((resolve) => {
@@ -51,7 +51,7 @@ class ScopeModal extends Modal {
       return;
     }
     const list = this.contentEl.createEl("ul");
-    // §4 makes the filename the title, so the stem is the page's name.
+    // The filename is the title, so the stem is the page's name.
     for (const path of paths) list.createEl("li", { text: stem(path) });
   }
 

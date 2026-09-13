@@ -1,4 +1,4 @@
-// §8.2's synthesis and §8.3's answer note. §14's minimum set names "synthesis
+// Synthesis and the answer note. The minimum test set names "synthesis
 // JSON-block strip"; the rest here is invariant 5 — code writes the
 // frontmatter, the callout, the sources block and the trace, and the model
 // writes prose only.
@@ -28,7 +28,7 @@ const node = (title: string, over: Partial<AssembledNode> = {}): AssembledNode =
 
 const TRACE: Trace = { mode: "B", seeds: ["Alpha"], round2: false, top: [], unparsed: [] };
 
-describe("§8.2's trailing JSON block is stripped (§14)", () => {
+describe("the trailing JSON block is stripped", () => {
   it("removes the block and reads its list", () => {
     const reply = 'The answer.\n\n```json\n{"missing_information": ["dates"]}\n```';
 
@@ -78,7 +78,7 @@ describe("§8.2's trailing JSON block is stripped (§14)", () => {
   });
 });
 
-describe("the synthesis call (§8.2, §11)", () => {
+describe("the synthesis call", () => {
   it("labels each page with its title, kind and path", async () => {
     const provider = new StubProvider(() => "Prose.");
     await synthesize(provider, "How does ranking work?", [node("PageRank"), node("Retrieval")]);
@@ -90,7 +90,7 @@ describe("the synthesis call (§8.2, §11)", () => {
   });
 
   it("runs as prose, not JSON mode, and leaves temperature unset", async () => {
-    // §8.2's reply is markdown that ends with a fenced block. Asking the
+    // The reply is markdown that ends with a fenced block. Asking the
     // wrapper to parse the whole thing as JSON would reject every valid answer.
     const provider = new StubProvider(() => "Prose.");
     await synthesize(provider, "q", [node("A")]);
@@ -106,7 +106,7 @@ describe("the synthesis call (§8.2, §11)", () => {
   });
 });
 
-describe("§8.3's link validation", () => {
+describe("link validation", () => {
   const retrieved = [node("PageRank"), node("paper.md", { kind: "raw", path: "raw/paper.md" })];
 
   it("keeps a link to a page that was retrieved", () => {
@@ -173,7 +173,7 @@ describe("what the model said was missing enters frontmatter as one line each", 
   });
 });
 
-describe("§8.3's note is written by code (invariant 5)", () => {
+describe("the note is written by code (invariant 5)", () => {
   const base = {
     question: "How does ranking work?",
     asked: "2026-08-20T10:00:00Z",
@@ -184,7 +184,7 @@ describe("§8.3's note is written by code (invariant 5)", () => {
     trace: TRACE,
   };
 
-  it("writes frontmatter in §4's key order", () => {
+  it("writes frontmatter in the fixed key order", () => {
     const note = renderAnswerNote(base);
 
     expect(note.startsWith("---\nkind: answer\nquestion: ")).toBe(true);
@@ -217,7 +217,7 @@ describe("§8.3's note is written by code (invariant 5)", () => {
   it("writes the Add next section between the sources and the trace", () => {
     // Between them because it is about the answer rather than about the run:
     // a reader who has just seen what was consulted is being told what was
-    // not. The trace stays last, as §8.3 has it.
+    // not. The trace stays last.
     const note = renderAnswerNote({
       ...base,
       consulted: [node("PageRank", { text: "Ranking needs [[Convergence]]." })],
@@ -315,7 +315,7 @@ describe("§8.3's note is written by code (invariant 5)", () => {
   });
 });
 
-describe("§8.3's answer path", () => {
+describe("the answer path", () => {
   const at = new Date("2026-08-20T10:07:00Z");
 
   it("is answers/YYYY-MM-DD-HHmm <slug>.md", () => {
@@ -388,7 +388,7 @@ describe("invariant 5: the model cannot forge a block code owns", () => {
     expect([...note.matchAll(/<!-- trace:end -->/g)]).toHaveLength(1);
   });
 
-  it("neutralizes an unterminated fence, which §8.4's strip cannot remove", () => {
+  it("neutralizes an unterminated fence, which filing's strip cannot remove", () => {
     // `stripTrace` needs a matching end fence. An unterminated one written by
     // the model would ride into `raw/answers/` and become source text.
     const forged = "An answer.\n\n<!-- trace:start -->\n## Retrieval trace\n- mode: A";
@@ -399,7 +399,7 @@ describe("invariant 5: the model cannot forge a block code owns", () => {
   });
 
   it("keeps the model's prose, including a heading it wrote", () => {
-    // §4 says the model writes prose; a heading is prose. Only the *structure*
+    // The model writes prose; a heading is prose. Only the *structure*
     // — the parseable sentinel — belongs to code.
     const forged = "An answer.\n\n<!-- sources:start -->\n## My own summary\nSome prose.\n<!-- sources:end -->";
 
@@ -470,7 +470,7 @@ describe("invariant 5: the model cannot forge a block code owns", () => {
   });
 });
 
-describe("§8.3's unlinking is not applied to things that are not page links", () => {
+describe("unlinking is not applied to things that are not page links", () => {
   const retrieved = [node("PageRank")];
 
   it("leaves a heading reference into a retrieved page alone", () => {
@@ -510,7 +510,7 @@ describe("§8.3's unlinking is not applied to things that are not page links", (
   });
 
   it("keeps a sentence readable when a piped link has no display text", () => {
-    // §8.3 unlinks "to plain text", and an empty display leaves a bare marker
+    // Unlinking is "to plain text", and an empty display leaves a bare marker
     // where a word used to be.
     const validated = validateAnswerLinks("See [[Photosynthesis|]].", retrieved);
 
@@ -534,7 +534,7 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
   // table, and `loadPageTable` walks `wiki/` alone, so a filed answer's text
   // never reaches it. Covering it would cost an answer that quotes a wiki
   // page's citation block two of its lines, for no parse harm avoided.
-  const SPEC_PARSER_SENTINELS = [
+  const FIXED_PARSER_SENTINELS = [
     "<!-- trace:start -->",
     "<!-- trace:end -->",
     "<!-- sources:start -->",
@@ -594,7 +594,7 @@ describe("the stripper and the trace parser describe one subject (invariant 5)",
     // Slack is allowed in one direction only: the stripper may be more
     // permissive than the parser, never less. If `BLOCK` would treat a line as
     // structure, that line must not survive into raw/answers/.
-    for (const sentinel of SPEC_PARSER_SENTINELS) {
+    for (const sentinel of FIXED_PARSER_SENTINELS) {
       // `BLOCK` accepts the sentinel at column 0 with optional trailing blanks.
       for (const line of [sentinel, `${sentinel} `, `${sentinel}\t`]) {
         expect(withoutForgedBlocks(`before\n${line}\nafter`)).toBe("before\nafter");

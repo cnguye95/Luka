@@ -56,7 +56,7 @@ describe("anthropic transport — request shape", () => {
     expect("temperature" in body).toBe(false);
   });
 
-  it("sends images as base64 content blocks ahead of the text (§11 vision)", async () => {
+  it("sends images as base64 content blocks ahead of the text (vision)", async () => {
     const { http, raw } = transport([OK]);
     await raw.complete({
       ...REQUEST,

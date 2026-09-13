@@ -102,7 +102,7 @@ describe("alt text may hold balanced brackets", () => {
 
 describe("a bound written for a notice is not a behavioural input", () => {
   it("re-runs without temperature when the vendor names it past the clip", async () => {
-    // §11 degrades a JSON task onto a model that refuses `temperature` by
+    // The wrapper degrades a JSON task onto a model that refuses `temperature` by
     // re-running once without it. The predicate reads the vendor's message, so
     // clipping that message to bound a Notice must not decide the retry — a
     // vendor that enumerates unsupported parameters at length would otherwise
@@ -165,7 +165,7 @@ describe("localizing an image rewrites the link, not the prose", () => {
 
 describe("a truncated reply is not a complete one", () => {
   it("refuses a prose reply the model ran out of room to finish", async () => {
-    // §11 caps max_tokens per task. When the model hits that cap the reply is
+    // max_tokens is capped per task. When the model hits that cap the reply is
     // a fragment, and for a prose task that fragment is written straight into
     // wiki/ under a code-written citation block claiming the full citer set.
     const http = new ScriptedHttp([

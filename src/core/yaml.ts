@@ -1,4 +1,4 @@
-// Frontmatter read/write (handoff.md §4).
+// Frontmatter read/write.
 //
 // Two hard constraints shape this module.
 //
@@ -9,7 +9,7 @@
 // reorders keys, and retypes scalars (`010` becomes `10`). New keys are
 // spliced in as text and every existing byte is left exactly as written.
 //
-// §6.2: a passthrough source is hashed *after* annotation, so serialization
+// A passthrough source is hashed *after* annotation, so serialization
 // must be byte-stable or every compile would see the file as modified again.
 import { dump, load } from "js-yaml";
 
@@ -38,7 +38,7 @@ export interface ParsedFrontmatter {
  * this is the only reader of that key, a user's own file could be accepted as
  * Luka's and overwritten. It also has to survive a `---` line *inside* a block
  * scalar, which would otherwise truncate the block and lose every key below it
- * — including the ownership key, on exactly the hand-edit §6.2 invites.
+ * — including the ownership key, on exactly the sanctioned hand-edit.
  */
 const FENCE = /^(---[ \t]*\r?\n)((?:[\s\S]*?\r?\n)?)(---[ \t]*(?:\r?\n|$))/;
 
@@ -49,15 +49,15 @@ const FENCE = /^(---[ \t]*\r?\n)((?:[\s\S]*?\r?\n)?)(---[ \t]*(?:\r?\n|$))/;
  * Anchoring the close to a line start is right, but on its own it turns every
  * shape it now refuses — `----`, an indented `---`, a fence never closed —
  * from "left untouched" into "a second block prepended in front of the first".
- * Those are the hand-edits §6.2 invites, and prepending to one is a write to a
+ * Those are sanctioned hand-edits, and prepending to one is a write to a
  * file the user owns that no rule sanctions. Unparseable frontmatter is still
  * frontmatter: the document is left exactly as it stands.
  */
 const OPENING_FENCE = /^---[ \t]*\r?\n/;
 
 /**
- * The order §4 lists these keys in, plus `missing` after `grounded` — a
- * recorded §4 deviation, not one of its keys. Anything else is appended
+ * The fixed order for the keys Luka writes, with `missing` after `grounded` —
+ * a later addition to the answer frontmatter. Anything else is appended
  * alphabetically.
  */
 const KEY_ORDER = [
@@ -128,7 +128,7 @@ function renderKeys(data: Record<string, unknown>): string {
  * document alone — including the rest of the frontmatter.
  *
  * Used to point a derivative's `derived-from` at its source's new path after a
- * rename. §6.2 invites the user to edit a derivative (it is the sanctioned
+ * rename. The user is invited to edit a derivative (it is the sanctioned
  * repair path for a bad extraction), so even though invariant 7 makes the file
  * Luka's to rewrite, re-serializing the block would throw away their comments
  * and restyle their YAML for the sake of one word. Any comment on the rewritten

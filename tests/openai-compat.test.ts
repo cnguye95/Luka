@@ -1,4 +1,4 @@
-// §11's OpenAI-compatible transport. Mirrors `anthropic.test.ts` case for
+// The OpenAI-compatible transport. Mirrors `anthropic.test.ts` case for
 // case, because the two answer to the same `RawProvider` contract and the
 // wrapper above them cannot tell which one it is holding.
 //
@@ -130,8 +130,8 @@ describe("openai-compatible transport — request shape", () => {
     expect("temperature" in bodyOf(http)).toBe(false);
   });
 
-  it("sends a temperature of zero, which is the only one §11 mandates", async () => {
-    // §11 fixes JSON tasks at temperature 0, so this is the value that actually
+  it("sends a temperature of zero, which is the only one mandated", async () => {
+    // JSON tasks are fixed at temperature 0, so this is the value that actually
     // travels on `inventory` and `seed-selection` — every compile's two calls.
     // Testing 0.5 and undefined leaves the interesting one untested: `if
     // (request.temperature)` passes both of those and silently drops this.
@@ -141,7 +141,7 @@ describe("openai-compatible transport — request shape", () => {
     expect(bodyOf(http)["temperature"]).toBe(0);
   });
 
-  it("sends images as data URIs ahead of the text (§6.1's vision pass)", async () => {
+  it("sends images as data URIs ahead of the text (the vision pass)", async () => {
     const { http, raw } = transport([OK]);
     await raw.complete({
       ...REQUEST,

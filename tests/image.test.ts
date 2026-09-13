@@ -39,7 +39,7 @@ describe("dimension sniffing (header bytes only, no decode)", () => {
   });
 });
 
-describe("inline image localization (§6.3)", () => {
+describe("inline image localization", () => {
   it("writes a kept image to raw/assets and rewrites the link", async () => {
     const result = await run("Figure below.\n\n![diagram](https://ex.com/fig1.png)\n", {
       "https://ex.com/fig1.png": { headers: PNG_HEADERS, bytes: pngBytes(600, 400) },
@@ -172,7 +172,7 @@ describe("inline image localization (§6.3)", () => {
     expect(recovered.localized).toBe(1);
   });
 
-  it("fetches at most four images at once (§6.3 fixed concurrency)", async () => {
+  it("fetches at most four images at once (fixed concurrency)", async () => {
     let inFlight = 0;
     let peak = 0;
     const release: (() => void)[] = [];

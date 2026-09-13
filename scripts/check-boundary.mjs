@@ -1,4 +1,4 @@
-// Enforces handoff.md invariant 6: nothing under src/core/ imports `obsidian`.
+// Enforces invariant 6: nothing under src/core/ imports `obsidian`.
 // Exits non-zero listing every offending file:line.
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";

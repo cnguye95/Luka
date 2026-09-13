@@ -1,4 +1,4 @@
-// Hostile bytes through the whole M1 pipeline.
+// Hostile bytes through the whole ingest pipeline.
 //
 // Everything under `raw/` is content Luka did not write: a user drops files in
 // and compile has to survive them. The properties asserted here are the ones

@@ -8,7 +8,7 @@ import {
 } from "../src/core/markers";
 
 describe("markers", () => {
-  it("matches the §4 wording exactly", () => {
+  it("matches the fixed wording exactly", () => {
     expect(imageNotFetched("fig3.png", "fetch failed, HTTP 404")).toBe(
       "<!-- image not fetched: fig3.png — fetch failed, HTTP 404 -->",
     );
@@ -29,7 +29,7 @@ describe("markers", () => {
   });
 });
 
-describe("markers stay a single HTML comment (§4, invariant 4)", () => {
+describe("markers stay a single HTML comment (invariant 4)", () => {
   /** Every marker is one comment: exactly one opener and one closer, one line. */
   function isOneComment(marker: string): boolean {
     return (
@@ -43,7 +43,7 @@ describe("markers stay a single HTML comment (§4, invariant 4)", () => {
   it("neutralizes a `-->` inside an image name", () => {
     // The name comes from a URL the model or the source document supplied.
     // Left alone it ends the comment early and the rest becomes live markdown:
-    // a working wikilink is a graph edge (§7.1) nothing actually cites.
+    // a working wikilink is a graph edge nothing actually cites.
     const marker = imageNotFetched("a-->[[Injected]].png", "fetch failed, network error");
 
     expect(isOneComment(marker)).toBe(true);

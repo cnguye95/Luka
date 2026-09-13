@@ -1,4 +1,4 @@
-// The retrieval graph (handoff.md §7.1), and invariant 8's exclusion of
+// The retrieval graph, and invariant 8's exclusion of
 // `_`-prefixed infrastructure from the node set.
 import { describe, expect, it } from "vitest";
 import { buildGraph } from "../src/core/graph/build";
@@ -22,7 +22,7 @@ const build = (fs: MemFs) => buildGraph({ fs, manifestPath: MANIFEST });
 const nodePaths = (graph: GraphSnapshot) => graph.nodes.map((n) => n.path);
 const pairs = (graph: GraphSnapshot) => graph.edges.map((e) => `${e.a}|${e.b}`);
 
-describe("the node set (§7.1)", () => {
+describe("the node set", () => {
   it("takes wiki pages and every manifest source's readable markdown", async () => {
     const fs = new MemFs({
       "wiki/concepts/PageRank.md": page("PageRank", "concept", "Body."),
@@ -38,7 +38,7 @@ describe("the node set (§7.1)", () => {
 
     const graph = await build(fs);
 
-    // The PDF is not a node; the markdown extracted from it is (§7.1's
+    // The PDF is not a node; the markdown extracted from it is (the rule:
     // "the source itself if `.md`/`.txt`, else its derivative").
     expect(nodePaths(graph)).toEqual([
       "raw/note.md",
@@ -89,8 +89,8 @@ describe("the node set (§7.1)", () => {
   });
 });
 
-describe("a node carries its summary (§9's tooltip)", () => {
-  // §9's hover tooltip is "title, kind, summary". Carrying §4's summary on the
+describe("a node carries its summary (the pane's tooltip)", () => {
+  // The hover tooltip is "title, kind, summary". Carrying the summary on the
   // node is what lets the pane draw it without a second read of the vault —
   // the pane has no `FsAdapter` and hovering must cost no IO.
   const summarized = (kind: string, summary: string) =>
@@ -121,7 +121,7 @@ describe("a node carries its summary (§9's tooltip)", () => {
   });
 });
 
-describe("edges (§7.1)", () => {
+describe("edges", () => {
   it("draws them from the body, the citation block and frontmatter source:", async () => {
     const fs = new MemFs({
       // Body link.
@@ -216,7 +216,7 @@ describe("edges (§7.1)", () => {
 
   it("does not let a page alias take a manifest path away from its raw node", async () => {
     // Call A sees only the body and asks for "obvious variants", so a dataset's
-    // descriptor page comes back aliased with the dataset's own path. §4 makes
+    // descriptor page comes back aliased with the dataset's own path. By design
     // every citation block and `source:` key name that path; if the alias won,
     // each of them would be an edge to the wrong node and the raw node would
     // sit at degree 0, unreported because the orphan filter skips raw.
@@ -263,7 +263,7 @@ describe("the graph does not depend on the order the vault is read in", () => {
     // with every sort in `build.ts` deleted.
     //
     // What is observable, and what a caller depends on, is that the output is
-    // ordered. §7.2 ranks over `graph.nodes` and expects "node order
+    // ordered. PageRank ranks over `graph.nodes` and expects "node order
     // lexicographic by path".
     const graph = await build(new MemFs(seed));
 
@@ -280,7 +280,7 @@ describe("the graph does not depend on the order the vault is read in", () => {
   });
 });
 
-describe("the graph is rebuilt after compile (§7.1)", () => {
+describe("the graph is rebuilt after compile", () => {
   it("fires the rebuild callback and answers getGraph from the new vault", async () => {
     const fs = new MemFs({ "raw/note.md": "PageRank matters.\n" });
     const provider = new StubProvider((request) =>
@@ -300,7 +300,7 @@ describe("the graph is rebuilt after compile (§7.1)", () => {
     const seen: GraphSnapshot[] = [];
     const unsubscribe = core.onGraphRebuilt((graph) => seen.push(graph));
 
-    // §5: the callback fires "after compile and after load". The first build
+    // The callback fires "after compile and after load". The first build
     // is the load-time one, and the vault has nothing in it yet.
     expect((await core.getGraph()).nodes).toEqual([]);
     expect(seen).toHaveLength(1);
@@ -374,7 +374,7 @@ describe("the graph is rebuilt after compile (§7.1)", () => {
   });
 });
 
-describe("a forced read walks the vault again (§9's Refresh)", () => {
+describe("a forced read walks the vault again (the pane's Refresh)", () => {
   const coreOver = (fs: MemFs) =>
     createCore({
       fs,
@@ -385,10 +385,10 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     });
 
   it("re-reads a vault that changed underneath the cache, and publishes what it finds", async () => {
-    // The §14 finding: a page written into `wiki/` from outside Obsidian left
+    // The finding: a page written into `wiki/` from outside Obsidian left
     // the pane's counts unchanged, because nothing could make `getGraph`
     // re-walk. Both halves matter — the cache still answers the unforced call
-    // (§15's "opens under a second"), and the forced one sees the new page.
+    // ("opens under a second"), and the forced one sees the new page.
     const fs = new MemFs({
       "wiki/concepts/A.md": page("A", "concept", "Body."),
       [MANIFEST]: "{}",
@@ -466,7 +466,7 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
   it("refreshes again, and again, as a button must", async () => {
     // The slot that collapses two simultaneous presses has to be released
     // afterwards, or the second press ever made returns the first press's
-    // answer — a Refresh that cannot refresh, which is the §14 finding this
+    // answer — a Refresh that cannot refresh, which is the finding this
     // whole path exists to close, reintroduced one layer up.
     const fs = new MemFs({
       "wiki/concepts/A.md": page("A", "concept", "Body."),
@@ -671,9 +671,9 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
   });
 
   it("refreshes during the scope preview, which holds the lock and writes nothing", async () => {
-    // §8.1 holds the lock across preview, confirm and work, and the modal can
+    // Compile holds the lock across preview, confirm and work, and the modal can
     // stay open indefinitely. Refusing to refresh for all of it would
-    // reproduce the §14 complaint — a Refresh that returns the same numbers —
+    // reproduce the original complaint — a Refresh that returns the same numbers —
     // during the one phase where there is nothing to be wrong about.
     const fs = new MemFs({
       "wiki/concepts/A.md": page("A", "concept", "Body."),
@@ -697,7 +697,7 @@ describe("a forced read walks the vault again (§9's Refresh)", () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    // A source that left the vault puts the run through the preview (§6.6),
+    // A source that left the vault puts the run through the preview,
     // where it waits on the answer.
     const compiling = core.compile({
       confirm: async () => {

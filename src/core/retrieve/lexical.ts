@@ -1,10 +1,10 @@
-// Mode A's ranking, and the follow-up round's expansion (handoff.md §7.4, §8.2).
+// Mode A's ranking, and the follow-up round's expansion.
 //
-// §7.4 step 3: "Mode A: wiki pages only; lexical score = title exact 10, alias
+// Mode A ranking: "wiki pages only; lexical score = title exact 10, alias
 // exact 8, title/alias substring 4, keyword in summary 2, keyword in body 1
 // (per keyword, body scan affordable because Mode A implies a small vault)."
 //
-// The signature takes keywords and nothing else on purpose. §8.2's follow-up
+// The signature takes keywords and nothing else on purpose. The follow-up
 // round scores the model's `missing_information` strings with this same
 // function — "lexical-score the missing-information strings (as keywords) over
 // wiki pages" — and there is no question to score against there, so a scorer
@@ -12,7 +12,7 @@
 import { handleOf } from "../compile/pagetable";
 
 /**
- * §17 marks these fixed, so they are module constants rather than settings.
+ * These are fixed, so they are module constants rather than settings.
  * The tiers are ordered: a keyword scores the highest one it reaches and only
  * that one, then the keywords are summed.
  */
@@ -63,7 +63,7 @@ function tierOf(
   if (keyword === title) return TITLE_EXACT;
   if (aliases.includes(keyword)) return ALIAS_EXACT;
   // Either direction: "PageRank" is a substring of the query word "pageranks",
-  // and the keyword "rank" is a substring of the title. §7.4 says "title/alias
+  // and the keyword "rank" is a substring of the title. The rule is "title/alias
   // substring" without naming which contains which, and both readings are the
   // same fuzzy-match intent.
   if (contains(title, keyword) || aliases.some((alias) => contains(alias, keyword))) {

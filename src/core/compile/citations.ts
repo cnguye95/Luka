@@ -1,7 +1,7 @@
-// The citation block (handoff.md §4): code-written, at page foot,
+// The citation block: code-written, at page foot,
 // idempotently regenerated. Every wiki page has one.
 //
-// §6.5 makes it load-bearing beyond display: "The citation block is the
+// It is load-bearing beyond display: "The citation block is the
 // persistent citer record" — a page's citing set on the next compile is read
 // back out of the block written on this one. Parsing must therefore recover
 // exactly what rendering wrote, for every path a user can create, and a page
@@ -84,7 +84,7 @@ export function withCitationBlock(body: string, entries: readonly string[]): str
 }
 
 /**
- * First occurrence wins; callers own the ordering policy (§6.5's union).
+ * First occurrence wins; callers own the ordering policy (the citer union).
  * A newline in an entry would render as two lines that no longer parse back,
  * so such an entry is dropped rather than written unreadably.
  */

@@ -1,4 +1,4 @@
-// Inline image localization (handoff.md §6.3).
+// Inline image localization.
 //
 // Remote references are fetched, filtered, and rewritten to a vault-local asset.
 // Anything rejected keeps its original remote link and gains a marker — the pass
@@ -11,7 +11,7 @@ import { extname } from "../paths";
 
 export const ASSETS_FOLDER = "raw/assets";
 
-// handoff.md §17 marks all four fixed, so they are constants rather than settings.
+// All four are fixed, so they are constants rather than settings.
 const MIN_BYTES = 5 * 1024;
 const MIN_DIMENSION = 100;
 const FETCH_CONCURRENCY = 4;

@@ -1,4 +1,4 @@
-// The only way src/core touches the outside world (handoff.md §3).
+// The only way src/core touches the outside world.
 // Implementations: src/plugin (Obsidian Vault + requestUrl), tests and eval (node:fs + fetch).
 
 /** All paths are vault-relative and use forward slashes, with no leading `./` or `/`. */
@@ -25,7 +25,7 @@ export interface FsAdapter {
   /**
    * Removes the file at `path`, leaving the path free. Where the host offers a
    * recovery path — a trash — that is what this uses; nothing here promises a
-   * permanent unlink, and §16 forbids Luka keeping its own backups.
+   * permanent unlink, and Luka keeping its own backups is a non-goal.
    *
    * Deleting a path that does not exist **may reject**: the in-memory and Node
    * adapters resolve, Obsidian's does not, and callers must not read one

@@ -38,7 +38,7 @@ const item = (title: string, aliases: string[] = []) => ({
 
 describe("an alias belongs to one page", () => {
   it("is not adopted when it is another page's title", () => {
-    // §4 gives titles and aliases one namespace, and the link post-pass
+    // Titles and aliases share one namespace, and the link post-pass
     // resolves a handle to exactly one page. Handing Beta the alias "Alpha"
     // writes a claim into frontmatter that every [[Alpha]] link contradicts.
     const work = mergeInventories(
@@ -99,7 +99,7 @@ describe("a title the filesystem will refuse never reaches the write", () => {
     }
   });
 
-  it("leaves length alone, because §6.5 matches through this function", () => {
+  it("leaves length alone, because dedup matches through this function", () => {
     expect(sanitizeTitle("x".repeat(400))).toBe("x".repeat(400));
   });
 
@@ -162,8 +162,8 @@ describe("the index write cannot discard the run", () => {
 describe("a page says when a citer was left out of its own generation", () => {
   it("marks the page, not just the prompt", async () => {
     // The budget marker reaches the model but never the reader, so the citation
-    // block claims a source the page was not grounded in — and §6.5 makes that
-    // block the persistent citer record.
+    // block claims a source the page was not grounded in — and that block is
+    // the persistent citer record.
     const big = (word: string) => `${word} `.repeat(30_000);
     const fs = new MemFs({
       "raw/a.md": `PageRank. ${big("alpha")}`,
@@ -193,7 +193,7 @@ describe("a page says when a citer was left out of its own generation", () => {
   });
 });
 
-// §4 gives titles and aliases one namespace. A namespace needs one spelling
+// Titles and aliases share one namespace. A namespace needs one spelling
 // rule: every table keyed by a handle — the page table, the link index, the
 // owner map, the dedup index — has to agree on what makes two strings the
 // same handle, or a name is free in one table and taken in another.
@@ -247,7 +247,7 @@ describe("a handle has one canonical form", () => {
 
 describe("the length bound is a filename rule, not a matching rule", () => {
   it("does not merge two distinct titles that share a long prefix", () => {
-    // §6.5 dedups on "each item's title and aliases". A prefix is not a title,
+    // Dedup matches on "each item's title and aliases". A prefix is not a title,
     // so bounding the matching key merges concepts that share an opening.
     const prefix = "A".repeat(130);
     const work = mergeInventories(
@@ -302,7 +302,7 @@ describe("a page names every source the model did not fully receive", () => {
   });
 
   it("names a source that was truncated, not only ones that were dropped", async () => {
-    // §7.4 truncates the first item rather than dropping it, so it stays in
+    // Packing truncates the first item rather than dropping it, so it stays in
     // the packed set while the model saw only part of it. A page that names
     // only the dropped ones implies the first arrived whole.
     const body = await generatePageBody(
@@ -337,7 +337,7 @@ describe("a page names every source the model did not fully receive", () => {
 
 describe("a source with no body is not grounding", () => {
   it("names a citer whose file is empty, though it fitted the budget", async () => {
-    // §6.5 writes the citation block from the full citer set, so an empty file
+    // The citation block is written from the full citer set, so an empty file
     // is the same false claim as a dropped one by a different route: the model
     // received a header with nothing under it.
     const body = await generatePageBody(
@@ -360,7 +360,7 @@ describe("a source with no body is not grounding", () => {
 });
 
 describe("a page whose title was cut can still be found again", () => {
-  // §4 stores a page's title only as its filename, so a cut is the one place
+  // A page's title is stored only as its filename, so a cut is the one place
   // the namespace can lose identity. The stored key and the lookup key have to
   // be the same rule — a name free in one table and taken in another is the
   // defect handleOf exists to prevent, one axis over.
@@ -418,7 +418,7 @@ describe("naming and lookup are inverses", () => {
   });
 
   it("finds the page the uniqueness suffix was forced onto", () => {
-    // §4 requires titles unique across all of wiki/, so a concept whose name a
+    // Titles are unique across all of wiki/, so a concept whose name a
     // source page already holds is named `X-2`. Nothing the model returns next
     // compile ever spells `X-2`, so without a lookup that inverts the suffix
     // the merge creates `X-3`, then `X-4`, for ever — one page and one Call B
@@ -456,7 +456,7 @@ describe("naming and lookup are inverses", () => {
     expect(work.newPages.map((p) => p.title)).toEqual(["Q3"]);
   });
 
-  it("gives one page to two spellings §4 calls one name", () => {
+  it("gives one page to two spellings the namespace calls one name", () => {
     // handleOf folds case; the stem's tag must fold it too, or a long title
     // re-emitted in another casing takes a second permanent page.
     const a = `${"Q".repeat(250)} Zebra`;

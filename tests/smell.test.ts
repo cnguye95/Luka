@@ -16,7 +16,7 @@ function prosePage(marker: string): string {
   ].join("\n");
 }
 
-describe("smellPdfExtraction (§6.5)", () => {
+describe("smellPdfExtraction", () => {
   it("passes a clean multi-page extraction", () => {
     expect(smellPdfExtraction({ pages: [prosePage("One"), prosePage("Two")], pageCount: 2 })).toEqual(
       [],
@@ -153,7 +153,7 @@ describe("smellPdfExtraction — each threshold at its boundary", () => {
   });
 });
 
-describe("smellPdfExtraction — reason order (§4's marker text)", () => {
+describe("smellPdfExtraction — reason order (the marker text)", () => {
   it("reports every reason it finds, in a fixed order", () => {
     // A short document of repeated fragments trips all three heuristics at once.
     const line = "column header";

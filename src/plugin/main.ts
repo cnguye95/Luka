@@ -32,12 +32,12 @@ export default class LukaPlugin extends Plugin implements GraphHost {
       GRAPH_VIEW_TYPE,
       (leaf) => new LukaGraphView(leaf, this.core, this.settings, this),
     );
-    // §8.1: "One ribbon icon: the graph pane." The only one Luka adds.
+    // One ribbon icon, the graph pane. The only one Luka adds.
     this.addRibbonIcon("git-fork", "Luka: Open graph", () => {
       void this.openGraph();
     });
     registerCommands(this);
-    // §7.1: the graph is "built in memory at plugin load and after compile".
+    // The graph is built in memory at plugin load and after compile.
     // Not awaited — `onload` must not block Obsidian on a vault walk, and every
     // reader goes through `getGraph()`, which joins this build if it is still
     // running. A failure here is not fatal: the next `getGraph()` retries.
@@ -52,7 +52,7 @@ export default class LukaPlugin extends Plugin implements GraphHost {
           const message = progressMessage(event);
           if (message !== null) progress.setMessage(message);
         },
-        // §8.1: the lock is already held around this, so the preview cannot go
+        // The lock is already held around this, so the preview cannot go
         // stale while the modal is open.
         confirm: (preview) => confirmScope(this.app, preview),
       });
@@ -68,9 +68,9 @@ export default class LukaPlugin extends Plugin implements GraphHost {
   }
 
   /**
-   * §8.1's "Ask the wiki". The modal runs *before* the lock is taken: holding
+   * "Ask the wiki". The modal runs *before* the lock is taken: holding
    * it across a modal the user may leave open indefinitely would block compile
-   * for no work, and §8.1 only asks compile's preview to be held that way.
+   * for no work, and only compile's preview is held that way.
    */
   async runAsk(): Promise<void> {
     const question = await askQuestion(this.app);
@@ -81,7 +81,7 @@ export default class LukaPlugin extends Plugin implements GraphHost {
       const result = await this.core.ask(question);
       progress.hide();
       reportAnswer(result);
-      // §8.3: "Open the note in a new leaf on success."
+      // Open the note in a new leaf on success.
       await this.app.workspace.openLinkText(result.path, "", true);
     } catch (error) {
       progress.hide();
@@ -93,7 +93,7 @@ export default class LukaPlugin extends Plugin implements GraphHost {
     }
   }
 
-  /** §8.1's "Health check". No model calls (§10), so no progress notice. */
+  /** "Health check". No model calls, so no progress notice. */
   async runHealthCheck(): Promise<void> {
     try {
       await this.core.healthCheck();
@@ -106,10 +106,10 @@ export default class LukaPlugin extends Plugin implements GraphHost {
   }
 
   /**
-   * §8.1's "Open graph": reveal the pane if it is already open, else put one in
+   * "Open graph": reveal the pane if it is already open, else put one in
    * the right sidebar.
    *
-   * Reveal-not-duplicate because §9's pane is a view of one snapshot; a second
+   * Reveal-not-duplicate because the pane is a view of one snapshot; a second
    * copy would be a second simulation over the same data, and the ribbon is a
    * button users press more than once.
    */
@@ -122,7 +122,7 @@ export default class LukaPlugin extends Plugin implements GraphHost {
   }
 
   /**
-   * §9's "Show retrieval on graph": open the pane, then hand it the note.
+   * "Show retrieval on graph": open the pane, then hand it the note.
    *
    * The parse and the overlay are the view's — this only routes, so the command
    * and the pane's own button reach the same code by the same path.
@@ -147,11 +147,11 @@ export default class LukaPlugin extends Plugin implements GraphHost {
     return this.app.vault.read(file);
   }
 
-  /** §8.4's "File this answer", on the active answer note. */
+  /** "File this answer", on the active answer note. */
   async runFileBack(answerPath: string): Promise<void> {
     try {
       await this.core.fileBack(answerPath);
-      // §8.4 pins this string, and it is deliberately not a compile trigger:
+      // This string is fixed, and it is deliberately not a compile trigger:
       // invariant 1 has no auto-compile.
       new Notice("Filed. Run Compile to integrate.", 6000);
     } catch (error) {

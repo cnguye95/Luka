@@ -37,7 +37,7 @@ describe("buildTitleIndex", () => {
   });
 });
 
-describe("resolveLinks (§4, §14)", () => {
+describe("resolveLinks", () => {
   it("rewrites an alias to [[Title|Alias]]", () => {
     expect(resolveLinks("We rank with [[PPR]] here.", INDEX)).toBe(
       "We rank with [[Personalized PageRank|PPR]] here.",
@@ -66,7 +66,7 @@ describe("resolveLinks (§4, §14)", () => {
     expect(resolveLinks(body, INDEX)).toBe(body);
   });
 
-  it("leaves full-path source links untouched even when one resolves (§4)", () => {
+  it("leaves full-path source links untouched even when one resolves", () => {
     // The alias is the raw path itself, so the exemption — not a failed
     // lookup — is what has to keep the link intact.
     const index = buildTitleIndex([page("Paper", ["raw/paper.md"])]);

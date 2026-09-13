@@ -1,14 +1,14 @@
-// §9's graph pane: an `ItemView` over the §7.1 snapshot.
+// The graph pane: an `ItemView` over the graph snapshot.
 //
 // Read-only by construction. It holds a `Core` and no `FsAdapter`, so the only
-// vault access it has is what §5's façade offers — and none of what §9 asks for
+// vault access it has is what the façade offers — and none of what the pane does
 // here writes anything. It is "never blocked by the lock" for the same reason:
 // every entry point it uses (`getGraph`, `computePPR`, `inspect`) is lock-free.
 //
 // Invariant 1 has no watchers and no timers, and this file has neither: no
 // `setTimeout`, no `setInterval`, no vault listener. The pane refreshes on
 // exactly two things — the graph-rebuilt event and its own refresh button. The
-// one loop it runs is §9's own sanction, d3's simulation, from a reheat until
+// one loop it runs is the sanctioned one, d3's simulation, from a reheat until
 // it cools past `alphaMin`; every frame is scheduled by an event, never by a
 // standing `requestAnimationFrame` chain. A deferral was tried for the
 // double-click case and removed: it was both a timer the invariant forbids and
@@ -31,18 +31,18 @@ import { createSim, type Sim, type SimNode } from "./sim";
 
 export const GRAPH_VIEW_TYPE = "luka-graph";
 
-/** §9: "empty vault → pointer at Compile." */
+/** Empty vault: point at Compile. */
 const EMPTY_VAULT_MESSAGE = "No graph yet. Run Luka: Compile to build one.";
 
-/** §9's wording, verbatim. The live counts follow it. */
+/** Fixed wording; the checklist reads it. The live counts follow it. */
 const MODE_A_BANNER = "Mode A (lexical) active — graph ranking off";
 
-/** §9's label, verbatim — and a claim about cost `Core.inspect` has to keep. */
+/** The label, verbatim — and a claim about cost `Core.inspect` has to keep. */
 const INSPECT_LABEL = "Inspect (1 model call)";
 
 /**
- * Interaction constants. §9 and §17 fix none of these, so §0 takes the smallest
- * option: module-local, not settings fields.
+ * Interaction constants. Nothing fixes these, so the smallest option
+ * applies: module-local, not settings fields.
  */
 const ZOOM_SENSITIVITY = 0.002;
 const MIN_SCALE = 0.15;
@@ -59,7 +59,7 @@ const clamp = (value: number, low: number, high: number): number =>
  * itself — `main.ts` imports this module, so importing it back would be a cycle.
  */
 export interface GraphHost {
-  /** §9 gates the replay button on "an answer note is active". */
+  /** The replay button is gated on "an answer note is active". */
   activeAnswerPath(): string | null;
   readNote(path: string): Promise<string>;
 }
@@ -79,7 +79,7 @@ export class LukaGraphView extends ItemView {
   private statusEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private bodyEl!: HTMLElement;
-  /** §9's scrubber: the row, its slider and its label. Hidden without a walk. */
+  /** The scrubber: the row, its slider and its label. Hidden without a walk. */
   private scrubEl: HTMLElement | null = null;
   private sliderEl: HTMLInputElement | null = null;
   private scrubLabelEl: HTMLElement | null = null;
@@ -94,7 +94,7 @@ export class LukaGraphView extends ItemView {
    *
    * `press.ts` owns what it becomes: a press starts nothing, and the drag —
    * with its reheat and its pin — begins on the move that passes `CLICK_SLOP`.
-   * Before that the gesture is still a candidate click, and §9 gives a click no
+   * Before that the gesture is still a candidate click, and a click has no
    * business moving the layout.
    */
   private press: Press | null = null;
@@ -115,7 +115,7 @@ export class LukaGraphView extends ItemView {
    * The overlay standing before the current run of click-PPRs, so opening a
    * page can put it back.
    *
-   * §9 gives Esc the job of clearing an overlay. A double-click's own first
+   * Esc has the job of clearing an overlay. A double-click's own first
    * press produces a click-PPR overlay on the way past, and discarding an
    * Inspect or replay overlay the user deliberately asked for is not something
    * "double-click opens the page" licenses.
@@ -138,7 +138,7 @@ export class LukaGraphView extends ItemView {
   constructor(leaf: WorkspaceLeaf, core: Core, settings: LukaSettings, host: GraphHost) {
     super(leaf);
     this.core = core;
-    // The plugin's live object, not a copy: §17's numbers are read when they
+    // The plugin's live object, not a copy: the settings are read when they
     // are used, so a change in the settings tab reaches the next overlay.
     this.settings = settings;
     this.host = host;
@@ -164,12 +164,12 @@ export class LukaGraphView extends ItemView {
     const toolbar = root.createDiv({ cls: "luka-graph-toolbar" });
     const refresh = toolbar.createEl("button", { text: "Refresh" });
     this.registerDomEvent(refresh, "click", () => {
-      // Forced: checklist §5.5 asks this button to see a compile run in another
+      // Forced: checklist item 5.5 asks this button to see a compile in another
       // window or a vault sync, and neither fires this window's rebuild event.
       void this.reload(true);
     });
 
-    // §9: "lexical filter box dims non-matches (no model call)". Nothing here
+    // The lexical filter box dims non-matches, with no model call. Nothing here
     // touches the provider, and the handler is a plain substring test.
     const filter = toolbar.createEl("input", {
       type: "search",
@@ -181,8 +181,8 @@ export class LukaGraphView extends ItemView {
       this.schedule();
     });
 
-    // §9: "'Show retrieval on graph' (command + button when an answer note is
-    // active)". The command lives in `commands.ts`; this is the button half.
+    // "Show retrieval on graph" is a command plus a button, both gated on an
+    // active answer note. The command lives in `commands.ts`; this is the button.
     this.replayEl = toolbar.createEl("button", { text: "Show retrieval" });
     this.registerDomEvent(this.replayEl, "click", () => {
       const path = this.host.activeAnswerPath();
@@ -193,8 +193,8 @@ export class LukaGraphView extends ItemView {
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncReplayButton()));
     this.syncReplayButton();
 
-    // §9's query inspection: a query box and a button whose label is a promise
-    // about cost. `Core.inspect` runs §7.4 steps 1–3 and stops, which is what
+    // Query inspection: a query box and a button whose label is a promise
+    // about cost. `Core.inspect` ranks and stops without assembling, which is what
     // makes the promise true — see `runInspect`.
     const query = toolbar.createEl("input", {
       type: "text",
@@ -210,13 +210,13 @@ export class LukaGraphView extends ItemView {
       if (event.key === "Enter") submit();
     });
 
-    // §9's "PNG export button".
+    // The PNG export button.
     const exportEl = toolbar.createEl("button", { text: "Export PNG" });
     this.registerDomEvent(exportEl, "click", () => {
       this.exportPng();
     });
 
-    // §9: "Esc clears overlay". On the container rather than the canvas so it
+    // Esc clears the overlay. On the container rather than the canvas so it
     // works wherever focus sits inside the pane.
     this.registerDomEvent(root, "keydown", (event: KeyboardEvent) => {
       if (event.key !== "Escape" || this.overlay === null) return;
@@ -230,7 +230,7 @@ export class LukaGraphView extends ItemView {
     this.bannerEl.hide();
     this.statusEl = root.createDiv({ cls: "luka-graph-status" });
 
-    // §9's scrubber. It sits between the status line and the canvas rather
+    // The scrubber. It sits between the status line and the canvas rather
     // than in the toolbar because it belongs to the overlay the status line is
     // naming, and because it is absent far more often than it is present.
     this.scrubEl = root.createDiv({ cls: "luka-graph-scrub" });
@@ -243,7 +243,7 @@ export class LukaGraphView extends ItemView {
     this.sliderEl = slider;
     this.scrubLabelEl = this.scrubEl.createDiv({ cls: "luka-graph-scrub-label" });
     this.scrubEl.hide();
-    // One scheduled frame per event (S24), and no model call: the vectors were
+    // One scheduled frame per event, and no model call: the vectors were
     // retained by the walk that built this overlay, so scrubbing is arithmetic
     // over data already in hand.
     this.registerDomEvent(slider, "input", () => {
@@ -254,7 +254,7 @@ export class LukaGraphView extends ItemView {
 
     this.bodyEl = root.createDiv({ cls: "luka-graph-body" });
 
-    // §7.1's rebuild signal. Subscribed before the first load so a compile that
+    // The rebuild signal. Subscribed before the first load so a compile that
     // finishes mid-load is not missed.
     this.unsubscribe = this.core.onGraphRebuilt((graph) => {
       if (this.closed) return;
@@ -265,7 +265,7 @@ export class LukaGraphView extends ItemView {
     });
 
     // A theme switch changes no data, so it schedules a repaint and nothing
-    // else — that is what §15's dark/light criterion needs.
+    // else — that is what the dark/light acceptance criterion needs.
     this.registerEvent(this.app.workspace.on("css-change", () => this.schedule()));
 
     await this.reload();
@@ -316,7 +316,7 @@ export class LukaGraphView extends ItemView {
    * empty state, because that one is accurate.
    *
    * Forced only from the Refresh button. Opening the pane reads the cache:
-   * §15's "opens under a second" is a promise about the cached snapshot, and
+   * "opens under a second" is a promise about the cached snapshot, and
    * the plugin already walked the vault at load.
    */
   private async reload(force = false): Promise<void> {
@@ -334,7 +334,7 @@ export class LukaGraphView extends ItemView {
     // A refresh redraws a snapshot the overlay may predate: its paths can be
     // gone and its scores were computed against a different edge set. The
     // filter survives because it is a predicate over whatever is on screen
-    // rather than a result computed from a particular graph — §9 says only
+    // rather than a result computed from a particular graph — the rule says only
     // that Esc clears the overlay, so this pairing is ours.
     this.overlay = null;
     this.render();
@@ -352,7 +352,7 @@ export class LukaGraphView extends ItemView {
       this.resize = null;
       this.statusEl.setText("");
       this.syncScrub();
-      // §9's two states are exclusive: an empty vault is pointed at Compile, not
+      // The two states are exclusive: an empty vault is pointed at Compile, not
       // told its link ratio.
       this.bannerEl.hide();
       this.bodyEl.empty();
@@ -376,7 +376,7 @@ export class LukaGraphView extends ItemView {
       this.attachPointer(this.canvas);
     }
 
-    // §9's refresh keeps surviving nodes where they are and hash-seeds the new
+    // A refresh keeps surviving nodes where they are and hash-seeds the new
     // ones, so a compile does not throw away the layout the user is reading.
     if (this.sim === null) this.sim = createSim(graph, () => this.schedule());
     else this.sim.replace(graph);
@@ -385,7 +385,7 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * §9's interactions: pan/zoom, hover, drag-to-pin, double-click.
+   * The interactions: pan/zoom, hover, drag-to-pin, double-click.
    *
    * All of them resolve a pointer through `render.ts`'s camera transform —
    * `hitTest` for what is under the cursor, `toGraph` for where a drag is
@@ -413,7 +413,7 @@ export class LukaGraphView extends ItemView {
       }
       // Recorded, not started. Which gesture this is depends on travel that has
       // not happened yet, and `dragStart` reheats and pins — neither of which
-      // §9 asks a click for.
+      // a click is for.
       this.press = pressOn(node.path, point.x, point.y);
     });
 
@@ -468,15 +468,15 @@ export class LukaGraphView extends ItemView {
       this.press = null;
       this.panFrom = null;
 
-      // A press that never began a drag is a click. §9 gives the two gestures
+      // A press that never began a drag is a click. The two gestures have
       // different jobs on the same button, and `press.ts` is where they are
-      // told apart — releasing a drag runs no PPR (checklist §7.6), and a drag that has
+      // told apart — releasing a drag runs no PPR (checklist item 7.6), and a drag that has
       // begun is still one however near its origin it is let go.
       if (press === null || sim === null) return;
       const point = at(event);
       const clicked = pressEnded(press, sim, point.x, point.y);
       if (clicked === null) return;
-      // §9 wants this "instant", so it runs on the press rather than waiting to
+      // This is meant to be instant, so it runs on the press rather than wait to
       // learn whether a second one is coming. Two earlier attempts to suppress
       // the first half of a double-click were both wrong — `event.detail` is 0
       // on `pointerup` so that guard never fired, and a 250ms deferral is
@@ -524,23 +524,23 @@ export class LukaGraphView extends ItemView {
       this.clickEpoch += 1;
       this.setOverlay(this.beforeClick);
       this.beforeClick = null;
-      // The active leaf: §8.3 asks for a new one, and only for answer notes.
+      // The active leaf: a new one is opened only for answer notes.
       void this.app.workspace.openLinkText(node.path, "", false);
     });
   }
 
   /**
-   * §9's "Inspect (1 model call)": overlay §7.4 steps 1–3 for a question.
+   * "Inspect (1 model call)": overlay seed selection and ranking for a question.
    *
-   * The button is disabled while the call is in flight. §16 rules out session
-   * state, so there is no queue and no history — a second press before the
+   * The button is disabled while the call is in flight. Session state is a
+   * non-goal, so there is no queue and no history — a second press before the
    * first returns would be a second call the label did not promise.
    */
   private async runInspect(question: string): Promise<void> {
     const asked = question.trim();
     if (asked === "") return;
     if (this.graph === null || this.graph.nodes.length === 0) {
-      // §9 points an empty vault at Compile. Spending a model call to overlay
+      // An empty vault is pointed at Compile. Spending a model call to overlay
       // a graph that does not exist would contradict the pointer beside it.
       new Notice("Luka: no graph to inspect yet. Run Luka: Compile.", 6000);
       return;
@@ -553,7 +553,7 @@ export class LukaGraphView extends ItemView {
       const result = await this.core.inspect(asked, { snapshots: true });
       if (this.closed) return;
       // Mode A ranks lexically and returns no vectors, so it gets no slider —
-      // the same absence §9 explains with "without a PPR heat ramp".
+      // the same absence as "without a PPR heat ramp".
       this.setOverlay(
         withScrub(fromInspect(result, this.topK(), asked), {
           scores: new Map(result.ranked.map((node) => [node.path, node.score])),
@@ -575,7 +575,7 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * §9's PNG export.
+   * PNG export.
    *
    * Rendered again at `PNG_SCALE` rather than lifted off the on-screen canvas,
    * so the file is crisp rather than whatever the display's pixel ratio
@@ -583,10 +583,10 @@ export class LukaGraphView extends ItemView {
    * which is what keeps the file opaque — an exported canvas inherits nothing
    * from the page, and a transparent PNG reads as broken on a dark backdrop.
    *
-   * The file goes to the OS download path, not into the vault. §9 asks for an
-   * export button and says nothing about where; a vault write would put a
-   * binary the user did not ask for inside the tree compile walks, and §0 takes
-   * the smaller option.
+   * The file goes to the OS download path, not into the vault. Nothing says
+   * where an export should land; a vault write would put a
+   * binary the user did not ask for inside the tree compile walks, so the
+   * smaller option applies.
    */
   private exportPng(): void {
     const frame = this.currentFrame();
@@ -629,7 +629,7 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * §9's maturity banner: below §7.3's predicate, say so, with live counts.
+   * The maturity banner: below the mode predicate, say so, with live counts.
    *
    * The predicate comes from `modeOf` on the façade rather than a copy of "≥ 20
    * nodes and ≥ 1.5 link pairs per node" here. A second copy is one that can
@@ -645,14 +645,14 @@ export class LukaGraphView extends ItemView {
     const edges = graph.edges.length;
     const ratio = nodes === 0 ? 0 : edges / nodes;
     this.bannerEl.setText(
-      // §9 fixes this string; the counts after it are what makes it actionable.
+      // The string is fixed; the counts after it are what makes it actionable.
       `${MODE_A_BANNER} (${String(nodes)} nodes, ${String(edges)} link pairs, ` +
         `${ratio.toFixed(2)} per node)`,
     );
     this.bannerEl.show();
   }
 
-  /** §9 shows the replay button only while an answer note is active. */
+  /** The replay button shows only while an answer note is active. */
   private syncReplayButton(): void {
     const button = this.replayEl;
     if (button === null) return;
@@ -661,7 +661,7 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * §9's trace replay: "parses the trace and overlays, zero calls, graceful
+   * Trace replay: "parses the trace and overlays, zero calls, graceful
    * notice if the note has no trace".
    *
    * Recorded data only. The graph on screen may not be the graph the answer was
@@ -679,7 +679,7 @@ export class LukaGraphView extends ItemView {
       return;
     }
     if (trace === null) {
-      // §9 asks for this to be graceful: a note whose block the user deleted,
+      // This has to be graceful: a note whose block the user deleted,
       // or an answer from before the trace existed, is not an error.
       new Notice("Luka: that note has no retrieval trace to show.", 6000);
       return;
@@ -697,10 +697,10 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * §9: "click a node → instant PPR from that node (no model call)".
+   * Click a node → instant PPR from that node, no model call.
    *
    * `computePPR` takes no lock, so this works while a compile runs — and makes
-   * no provider call, which is why §9 calls it instant.
+   * no provider call, which is why it can be instant.
    */
   private async runClickPPR(path: string): Promise<void> {
     const epoch = this.clickEpoch;
@@ -708,9 +708,9 @@ export class LukaGraphView extends ItemView {
     // would otherwise record the first one's own overlay.
     if (this.overlay?.source !== "click") this.beforeClick = this.overlay;
     try {
-      // §9's scrubber wants the walk's own iterations, so they are asked for
+      // The scrubber wants the walk's own iterations, so they are asked for
       // here and ride on the overlay — released with it, and never more than
-      // §7.2's hundred.
+      // a hundred.
       const result = await this.core.computePPR([path], { snapshots: true });
       if (this.closed || epoch !== this.clickEpoch) return;
       this.setOverlay(withScrub(fromClickPPR(result.scores, path, this.topK()), result));
@@ -719,7 +719,7 @@ export class LukaGraphView extends ItemView {
     }
   }
 
-  /** §9's top-K stroke uses §17's existing K; M4 adds no tunable. */
+  /** The top-K stroke uses the existing K; the pane adds no tunable. */
   private topK(): number {
     return normalizeSettings(this.settings).assemblyCap;
   }
@@ -732,7 +732,7 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * Shows §9's slider for an overlay that has a walk behind it, and hides it
+   * Shows the slider for an overlay that has a walk behind it, and hides it
    * for one that does not.
    *
    * Called from `render` as well as from `setOverlay`, because `reload` and the
@@ -767,7 +767,7 @@ export class LukaGraphView extends ItemView {
     return this.overlay === null ? counts : `${counts} — ${this.overlay.label}`;
   }
 
-  /** §9's hover tooltip: "title, kind, summary" — from the node, never the vault. */
+  /** The hover tooltip: title, kind, summary — from the node, never the vault. */
   private showTooltip(node: SimNode | null, x: number, y: number): void {
     const tooltip = this.tooltipEl;
     if (tooltip === null) return;

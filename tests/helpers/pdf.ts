@@ -1,4 +1,4 @@
-// A byte-exact, uncompressed PDF with a real text layer, so the M1 extraction
+// A byte-exact, uncompressed PDF with a real text layer, so the extraction
 // path is exercised without committing an opaque binary blob to the repo.
 import { utf8 } from "../../src/core/hash";
 

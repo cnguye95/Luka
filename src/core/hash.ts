@@ -1,4 +1,4 @@
-// SHA-256 over bytes (handoff.md §6.2 — timestamps are never used) plus the
+// SHA-256 over bytes (timestamps are never used) plus the
 // byte/text helpers that go with it. WebCrypto is a global in Node >= 20 and in
 // the Electron renderer, so src/core needs no `node:` imports.
 

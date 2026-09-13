@@ -1,4 +1,4 @@
-# Eval queries for the committed fixture vault (handoff.md §13).
+# Eval queries for the committed fixture vault.
 #
 # Each entry is a question and the page paths it should surface. The mix is
 # deliberate: some name a page outright, some name only an alias, and some
@@ -7,7 +7,7 @@
 # carry information.
 #
 # `Compiler-2.md` is not a typo. `raw/compiler.md` is a source, so its source
-# page holds the title "compiler", and §4's uniqueness rule gives the concept
+# page holds the title "compiler", and the uniqueness rule gives the concept
 # the next free name. A real vault does this.
 #
 # Floors are the first measured means, less 0.05. The metrics are deterministic,
@@ -17,7 +17,7 @@
 # Each mode carries two sets. The outer three are the mean over all 16 queries.
 # The `ranking` three are the mean over only the queries marked `*` in the
 # harness's output: the ones whose expected pages are not all force-included as
-# seeds by §7.4 step 2. For the other 8 the answer is already a seed before
+# seeds by the force-include rule. For the other 8 the answer is already a seed before
 # ranking begins, so they score 1.00/1.00/1.000 whatever the ranker does, and
 # carrying them in the only mean with a floor is what let a PPR regression pass.
 

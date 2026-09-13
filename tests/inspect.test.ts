@@ -1,4 +1,4 @@
-// §9's "Inspect (1 model call)" — §7.4 steps 1–3 and nothing after them.
+// "Inspect (1 model call)" — seed selection and ranking, and nothing after them.
 //
 // The button's label is a promise to the user, so the count is the property
 // under test here, alongside invariant 2's other half: the pane is never
@@ -59,7 +59,7 @@ describe("invariant 12: the label says one call, so it makes one call", () => {
   });
 
   it("writes nothing to the vault", async () => {
-    // §9's pane is read-only. `ask` writes a note; inspection is the same
+    // The pane is read-only. `ask` writes a note; inspection is the same
     // retrieval with none of the consequences.
     const { fs, provider } = await compiled();
     fs.resetCounters();
@@ -72,7 +72,7 @@ describe("invariant 12: the label says one call, so it makes one call", () => {
   });
 });
 
-describe("invariant 2: the pane is never blocked by the lock (§9)", () => {
+describe("invariant 2: the pane is never blocked by the lock", () => {
   it("answers while a compile holds the lock", async () => {
     const { fs } = await compiled();
 
@@ -107,9 +107,9 @@ describe("invariant 2: the pane is never blocked by the lock (§9)", () => {
   });
 });
 
-describe("§7.4 steps 1–3, as retrieval runs them", () => {
+describe("the retrieval steps, as retrieval runs them", () => {
   it("force-includes a page the question names, even when the model returns none", async () => {
-    // §7.4 step 2 is additive to the model's choices, and this proves it is the
+    // Force-inclusion is additive to the model's choices, and this proves it is the
     // force-include rule doing the work rather than the reply.
     const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
     const provider = new StubProvider((request: CompletionRequest) =>
@@ -122,7 +122,7 @@ describe("§7.4 steps 1–3, as retrieval runs them", () => {
     expect(result.seeds).toContain("wiki/concepts/PageRank.md");
   });
 
-  it("reports the mode §7.3's predicate gives for the graph it ranked against", async () => {
+  it("reports the mode the predicate gives for the graph it ranked against", async () => {
     const { fs, provider } = await compiled();
     const instance = core(fs, provider);
     const graph = await instance.getGraph();
@@ -135,7 +135,7 @@ describe("§7.4 steps 1–3, as retrieval runs them", () => {
   });
 
   it("ranks wiki pages only in Mode A", async () => {
-    // §7.4 step 3: "Mode A: wiki pages only". A raw node appearing here would
+    // "Mode A: wiki pages only". A raw node appearing here would
     // mean the graph ranker ran under the lexical mode's banner.
     const { fs, provider } = await compiled();
     const instance = core(fs, provider);
@@ -157,7 +157,7 @@ describe("§7.4 steps 1–3, as retrieval runs them", () => {
   });
 });
 
-describe("§9: the overlay is over the snapshot the pane is drawing", () => {
+describe("the overlay is over the snapshot the pane is drawing", () => {
   /** A page written straight to disk, so the cached graph cannot know it. */
   const GHOST = "wiki/concepts/Ghost.md";
   const ghostPage =
@@ -200,7 +200,7 @@ describe("§9: the overlay is over the snapshot the pane is drawing", () => {
     expect(result.ranked.length).toBeGreaterThan(0);
   });
 
-  it("reports Mode A for a vault below §7.3's predicate", async () => {
+  it("reports Mode A for a vault below the predicate", async () => {
     // Read as a literal rather than from `modeOf`: an expectation derived from
     // the function under test agrees with it however wrong it becomes. The
     // fixture is a two-page vault, which is far below "≥ 20 nodes".
@@ -271,11 +271,11 @@ describe("a rebuild racing a compile does not hand back a stale graph", () => {
   });
 });
 
-// §9's scrubber: "when an overlay was computed with snapshots, a slider scrubs
+// The scrubber: "when an overlay was computed with snapshots, a slider scrubs
 // per-iteration PPR vectors". The vectors have to come from the walk that
 // produced the ranking — a second walk would agree here and would be free to
 // stop agreeing later.
-describe("§9's scrubber frames are the walk that ranked", () => {
+describe("the scrubber frames are the walk that ranked", () => {
   /** The demo vault is two nodes, so Mode B is reached through the predicate. */
   function modeB(fs: MemFs, provider: StubProvider) {
     return core(fs, provider, {
@@ -322,7 +322,7 @@ describe("§9's scrubber frames are the walk that ranked", () => {
   it("retains nothing in Mode A, which runs no walk", async () => {
     const { fs, provider } = await compiled();
 
-    // §17's shipped predicate over a two-node vault: Mode A.
+    // The shipped predicate over a two-node vault: Mode A.
     const result = await core(fs, provider).inspect("What ranks pages?", { snapshots: true });
 
     expect(result.mode).toBe("A");

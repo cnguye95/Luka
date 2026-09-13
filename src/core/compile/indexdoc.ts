@@ -1,7 +1,7 @@
-// The index document `wiki/_index.md` (handoff.md §4), regenerated each
+// The index document `wiki/_index.md`, regenerated each
 // compile from the in-memory page table.
 //
-// §7.4 step 1 reuses this exact renderer: "Page table (wiki pages only)
+// The seed call reuses this exact renderer: "Page table (wiki pages only)
 // renders to the same text as `_index.md`" — the seed call and the file the
 // user reads must never drift apart, so there is one renderer, not two.
 import { comparePaths } from "../paths";
@@ -42,10 +42,10 @@ function entryLine(page: PageMeta): string {
 }
 
 /**
- * Summaries and aliases originate in the model's Call A JSON (§6.5). Invariant
+ * Summaries and aliases originate in the model's Call A JSON. Invariant
  * 5 gives the model prose only — never structure — so a newline in one of them
  * must not be able to inject a heading or a second entry into this document.
- * That matters twice over: §7.4 step 1 feeds this same text to the seed call.
+ * That matters twice over: this same text is fed to the seed call.
  */
 function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();

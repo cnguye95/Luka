@@ -1,12 +1,12 @@
-// The smell test (handoff.md §6.5): "PDF-derived only — flag suspiciously
+// The smell test: "PDF-derived only — flag suspiciously
 // short output vs page count, repeated lines at intervals (running headers),
 // high sentence-fragment ratio → marker at head of the normalized file."
 //
 // These are heuristics over an extraction Luka already performed, not a
 // judgement about the PDF. They exist to tell the user "this extraction looks
-// wrong, go repair the derivative" — §6.2 makes editing a derivative the
-// sanctioned repair path. Every threshold here is a choice handoff.md leaves
-// open; each is recorded in BUILD-NOTES.
+// wrong, go repair the derivative" — editing a derivative is the
+// sanctioned repair path. Every threshold here is a chosen value the
+// specification left open, not a number it names.
 
 /** Below this many characters per page on average, extraction looks starved. */
 const MIN_CHARS_PER_PAGE = 200;

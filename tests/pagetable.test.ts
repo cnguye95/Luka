@@ -96,8 +96,8 @@ describe("loadPageTable", () => {
   });
 });
 
-describe("sanitizeTitle (§4)", () => {
-  it("strips exactly the characters §4 names", () => {
+describe("sanitizeTitle", () => {
+  it("strips exactly the forbidden characters", () => {
     expect(sanitizeTitle("A[b]c#d^e|f\\g/h:i")).toBe("Abcdefghi");
   });
 
@@ -126,7 +126,7 @@ describe("sanitizeTitle (§4)", () => {
   });
 });
 
-describe("uniqueTitle (§4: unique across wiki/)", () => {
+describe("uniqueTitle (unique across wiki/)", () => {
   it("returns the title unchanged when free", () => {
     expect(uniqueTitle("Fresh", new Set())).toBe("Fresh");
   });
@@ -151,7 +151,7 @@ describe("uniqueTitle (§4: unique across wiki/)", () => {
 });
 
 describe("pagePathForKind", () => {
-  it("files each kind under its §4 folder", () => {
+  it("files each kind under its folder", () => {
     expect(pagePathForKind("Paper", "source")).toBe("wiki/sources/Paper.md");
     expect(pagePathForKind("Ada", "entity")).toBe("wiki/entities/Ada.md");
     expect(pagePathForKind("PageRank", "concept")).toBe("wiki/concepts/PageRank.md");

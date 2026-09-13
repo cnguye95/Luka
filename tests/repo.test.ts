@@ -19,7 +19,7 @@ function repo(extra: Record<string, string> = {}) {
   });
 }
 
-describe("repo detection (§6.4)", () => {
+describe("repo detection", () => {
   it("recognizes a .luka-repo marker and a .git directory", async () => {
     await expect(isRepoDirectory(repo(), ROOT)).resolves.toBe(true);
     const gitRepo = new MemFs({ "raw/other/.git/HEAD": "ref: refs/heads/main\n" });

@@ -1,4 +1,4 @@
-// The health check (handoff.md §10).
+// The health check.
 //
 // "'Luka: Health check' rewrites `wiki/_health.md` wholesale from one vault
 // scan, no model calls: unresolved wikilinks grouped by target (labeled
@@ -8,7 +8,7 @@
 //
 // Every section is a question about the vault that has a right answer today and
 // a different one tomorrow, which is why the file is rewritten wholesale rather
-// than merged: §16 forbids an LLM-driven health check, and a half-stale report
+// than merged: an LLM-driven check is a non-goal, and a half-stale report
 // is worse than none.
 import type { FsAdapter } from "./adapters";
 import { decodeUtf8 } from "./hash";
@@ -30,14 +30,14 @@ export interface HealthDeps {
   now?: () => Date;
 }
 
-/** Rewrites `wiki/_health.md`. No model calls, by §10 and §16. */
+/** Rewrites `wiki/_health.md`. No model calls, by design. */
 export async function healthCheck(deps: HealthDeps): Promise<void> {
   const { fs, manifestPath } = deps;
   const pages = await loadPageTable(fs);
   const manifest = await loadManifest(fs, manifestPath);
   const graph = await buildGraph({ fs, manifestPath });
   // One scan for both link-reading sections, which each opened every page
-  // before. Not §10's "one vault scan" in full — the page table and the graph
+  // before. Not quite "one vault scan" — the page table and the graph
   // build read the files on their own account — but the report's own reads are
   // now one pass. The answer note's `## Add next` section resolves against the
   // same *rule* rather than the same scan — it reads the pages one answer was
@@ -68,16 +68,15 @@ export async function healthCheck(deps: HealthDeps): Promise<void> {
 }
 
 /**
- * §10's "unresolved wikilinks grouped by target (labeled 'article
- * candidates')".
+ * Unresolved wikilinks grouped by target, labeled "article candidates".
  *
- * §4 calls an unresolved link "a future-article signal, not an error", so the
+ * An unresolved link is a future-article signal, not an error, so the
  * report reads as a list of things worth writing rather than a list of faults —
  * and the ones many pages reach for come first.
  */
 function articleCandidates(pages: readonly PageMeta[], scans: readonly PageScan[]): string[] {
   // Grouping and resolution live in `gaps.ts`, shared with the answer note's
-  // `## Add next` section. §10 keeps its own presentation, and its own scope:
+  // `## Add next` section. The report keeps its own presentation and scope:
   // every candidate, not the few an answer names.
   const targets = unresolvedTargets(pages, scans);
 
@@ -97,7 +96,7 @@ function articleCandidates(pages: readonly PageMeta[], scans: readonly PageScan[
   return [
     "## Article candidates",
     "",
-    "Links that resolve to nothing yet — §4 calls these future-article signals, not errors.",
+    "Links that resolve to nothing yet — future-article signals, not errors.",
     "",
     ...ordered.map(
       ({ display, from }) =>
@@ -106,7 +105,7 @@ function articleCandidates(pages: readonly PageMeta[], scans: readonly PageScan[
   ];
 }
 
-/** §10's "orphan pages (no inbound links)". */
+/** Orphan pages: no inbound links. */
 function orphanPages(graph: Awaited<ReturnType<typeof buildGraph>>): string[] {
   // The graph is undirected, so "no inbound links" and "degree 0" are the same
   // question — a page nothing links to and which links to nothing reachable.
@@ -126,9 +125,9 @@ function orphanPages(graph: Awaited<ReturnType<typeof buildGraph>>): string[] {
 }
 
 /**
- * §10's "citation entries pointing at raw files absent from the manifest".
+ * Citation entries pointing at raw files absent from the manifest.
  *
- * A citation block is §6.5's persistent citer record, so an entry naming a
+ * A citation block is the persistent citer record, so an entry naming a
  * source the manifest does not know is a page claiming grounding that compile
  * cannot account for.
  */
@@ -152,7 +151,7 @@ function danglingCitations(scans: readonly PageScan[], manifest: IngestManifest)
   return ["## Citations without a source", "", ...dangling.sort(comparePaths)];
 }
 
-/** §10's "filed answer-sources list with ages". */
+/** Filed answer-sources, with ages. */
 async function filedAnswers(
   fs: FsAdapter,
   manifest: IngestManifest,
@@ -177,7 +176,7 @@ async function filedAnswers(
  * How long ago the answer was asked, from its own `asked` frontmatter.
  *
  * "unknown" when the key is missing or unreadable rather than falling back to a
- * file mtime: §4 records when the question was asked, and a sync or a copy
+ * file mtime: `asked` is when the question was asked, and a sync or a copy
  * would make the filesystem answer a different question.
  */
 async function ageOf(fs: FsAdapter, path: string, now: Date): Promise<string> {
@@ -197,7 +196,7 @@ async function ageOf(fs: FsAdapter, path: string, now: Date): Promise<string> {
   return `${String(days)} day${days === 1 ? "" : "s"} old`;
 }
 
-/** §10's "count summaries". */
+/** Count summaries. */
 function counts(
   pages: readonly PageMeta[],
   graph: Awaited<ReturnType<typeof buildGraph>>,

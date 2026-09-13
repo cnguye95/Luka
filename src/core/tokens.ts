@@ -1,6 +1,6 @@
-// Context-budget arithmetic (handoff.md §17: "Context budget 40,000 tokens
-// ≈ chars/4"). Shared by generation's citing-source assembly (§6.5) and
-// retrieval's top-K assembly (§7.4), so both obey one definition of "fits".
+// Context-budget arithmetic (the default budget is 40,000 tokens, counted as
+// chars/4). Shared by generation's citing-source assembly and
+// retrieval's top-K assembly, so both obey one definition of "fits".
 import { truncatedForContextBudget } from "./markers";
 
 const CHARS_PER_TOKEN = 4;
@@ -47,16 +47,16 @@ export interface Packed<T> {
 /**
  * Takes whole items in the order given until one does not fit, then stops —
  * it never skips a large item to pull a later small one forward, because
- * §6.5 and §7.4 both assemble in a meaningful order (citation order, rank
+ * both callers assemble in a meaningful order (citation order, rank
  * order) that cherry-picking would destroy.
  *
- * §7.4: "Never split a page; a single page over the whole budget is
- * tail-truncated with the marker" — so the first item is truncated rather
+ * Never split a page; a single page over the whole budget is tail-truncated
+ * with the marker — so the first item is truncated rather
  * than dropped, which is the only way a budget smaller than one page still
  * yields context.
  *
  * That exception is for the *whole* budget. A caller packing into what is
- * left of one — §8.2's follow-up round, which appends "under the remaining
+ * left of one — the follow-up round, which appends "under the remaining
  * context budget" — passes `truncateFirst: false`, and a first item that does
  * not fit is dropped like any other: a remnant that holds no page whole yields
  * nothing, rather than a fragment a model call would then be spent on.

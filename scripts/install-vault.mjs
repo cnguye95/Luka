@@ -16,7 +16,7 @@ try {
 
 await mkdir(dest, { recursive: true });
 // Obsidian loads `styles.css` from the plugin directory on its own, so it has
-// to travel with the build — §9's pane has no layout without it.
+// to travel with the build — the graph pane has no layout without it.
 for (const file of ["main.js", "manifest.json", "styles.css"]) {
   await copyFile(path.join(root, file), path.join(dest, file));
 }

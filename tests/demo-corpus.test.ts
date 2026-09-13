@@ -1,4 +1,4 @@
-// M1's acceptance criterion, automated: ingesting demo/raw/ produces the right
+// The ingest acceptance criterion, automated: demo/raw/ produces the right
 // derivatives, frontmatter and markers, and an immediate second compile is a
 // no-op that does zero work.
 import { cp, mkdtemp, rm } from "node:fs/promises";
@@ -61,8 +61,8 @@ describe("demo corpus", { timeout: SLOW }, () => {
   /**
    * The extraction phases are stubbed, but not to silence: every source names
    * one shared concept and one entity of its own, so the demo corpus really
-   * does produce all three page kinds and M2's acceptance criteria can be
-   * asserted on the corpus §15 names rather than on a stand-in vault.
+   * does produce all three page kinds and the compile acceptance criteria can
+   * be asserted on the demo corpus rather than on a stand-in vault.
    */
   function replyFor(request: CompletionRequest): unknown {
     if (request.task === "vision") return "A generated fixture image, 160 by 120 pixels.";
@@ -106,7 +106,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(result.added).toBe(EXPECTED_SOURCES.length);
     expect(result.failed).toEqual([]);
     // Every file in the demo corpus is a supported format, the orphan image
-    // included — §6.1's vision row makes it a source with its own page.
+    // included — the vision pass makes it a source with its own page.
     expect(result.skipped).toEqual([]);
 
     const manifest = JSON.parse(await read(MANIFEST)) as Record<string, ManifestEntry>;
@@ -153,7 +153,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
   it("writes a derivative for every converting format", async () => {
     await compile();
 
-    // raw/orphan.md is §6.1's vision-pass derivative. It appeared in this
+    // raw/orphan.md is the vision-pass derivative. It appeared in this
     // suite only as a *value* in the manifest-ownership map, which asserts
     // what the entry says and not that a file stands there — so the vision
     // pass could stop writing it, or write it empty, undetected.
@@ -233,7 +233,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // §15's M2 criterion: "demo corpus compiles into a three-kind wiki where
+  // Acceptance criterion: "demo corpus compiles into a three-kind wiki where
   // every page has a valid citation block and appears in `_index.md`".
   it("compiles into a three-kind wiki, every page cited and indexed", async () => {
     await compile();
@@ -255,7 +255,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     }
   });
 
-  // §15's M2 criterion: "re-compile makes zero model calls (assert via a call
+  // Acceptance criterion: "re-compile makes zero model calls (assert via a call
   // counter)" — on the demo corpus, against the provider's own counter.
   it("makes zero model calls on a re-compile of the demo corpus", async () => {
     await compile();
@@ -269,7 +269,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // §15's M2 criterion: "deleting a demo source shows the preview then
+  // Acceptance criterion: "deleting a demo source shows the preview then
   // regenerates/deletes correctly".
   it("shows the scope preview for a deleted source, then deletes its page", async () => {
     await compile();
@@ -320,7 +320,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // §15's M2 criterion: "modified source reprocesses".
+  // Acceptance criterion: "modified source reprocesses".
   it("reprocesses a modified demo source and only the pages citing it", async () => {
     await compile();
     const note = await read("raw/note.md");

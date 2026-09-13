@@ -5,8 +5,8 @@ import {
   withCitationBlock,
 } from "../src/core/compile/citations";
 
-// handoff.md §4 gives the format literally; this is that sample.
-const SPEC_SAMPLE = [
+// The format, literally; this is the sample the code must reproduce.
+const FIXED_SAMPLE = [
   "<!-- citations:start -->",
   "## Sources",
   "- [[raw/paper.md]]",
@@ -14,8 +14,8 @@ const SPEC_SAMPLE = [
 ].join("\n");
 
 describe("renderCitationBlock", () => {
-  it("matches the §4 format byte for byte", () => {
-    expect(renderCitationBlock(["raw/paper.md"])).toBe(SPEC_SAMPLE);
+  it("matches the format byte for byte", () => {
+    expect(renderCitationBlock(["raw/paper.md"])).toBe(FIXED_SAMPLE);
   });
 
   it("renders one line per entry, in the order given", () => {
@@ -37,7 +37,7 @@ describe("renderCitationBlock", () => {
   });
 });
 
-describe("parseCitationBlock — the persistent citer record (§6.5)", () => {
+describe("parseCitationBlock — the persistent citer record", () => {
   it("recovers exactly what render wrote", () => {
     const entries = ["raw/a.md", "raw/sub/b.pdf", "raw/answers/c.md"];
     const page = withCitationBlock("Body.", entries);
@@ -70,7 +70,7 @@ describe("parseCitationBlock — the persistent citer record (§6.5)", () => {
   });
 });
 
-describe("withCitationBlock — idempotent regeneration (§4, §14)", () => {
+describe("withCitationBlock — idempotent regeneration", () => {
   it("produces identical bytes when applied twice", () => {
     const once = withCitationBlock("Body text.", ["raw/a.md", "raw/b.md"]);
     const twice = withCitationBlock(once, ["raw/a.md", "raw/b.md"]);
@@ -150,7 +150,7 @@ describe("shapes a real vault produces", () => {
     // `|` reads as display-text syntax in prose, but a citation entry is a
     // path and code never writes display text into one. Splitting here would
     // truncate `raw/a|b.md` to `raw/a`, which then fails the citer union and
-    // silently drops the source — the §6.5 record is the only copy.
+    // silently drops the source — the citer record is the only copy.
     const rendered = renderCitationBlock(["raw/a|b.md"]);
     expect(parseCitationBlock(rendered).entries).toEqual(["raw/a|b.md"]);
   });
@@ -170,7 +170,7 @@ describe("shapes a real vault produces", () => {
   it("consumes a fenced sample of the exact block shape — logged fence-blindness", () => {
     const body = "Docs:\n\n```\n" + renderCitationBlock(["raw/example.md"]) + "\n```\n\nEnd.";
     // Pinned as characterization, not endorsement: the same limitation the
-    // link post-pass has, recorded in BUILD-NOTES.
+    // link post-pass has, recorded as a known limitation.
     expect(parseCitationBlock(body).entries).toEqual(["raw/example.md"]);
   });
 });

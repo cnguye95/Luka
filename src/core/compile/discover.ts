@@ -1,4 +1,4 @@
-// Source discovery and the four change-detection rules (handoff.md §4, §6.2).
+// Source discovery and the four change-detection rules.
 //
 // Who is a source: everything under raw/ except raw/assets/ and except files
 // carrying `derived-from`. A repo directory is one source and is never
@@ -50,7 +50,7 @@ export interface DiscoveryResult {
   /** Never manifested, so they resurface next compile rather than failing silently. */
   skipped: SkippedSource[];
   /**
-   * Sources whose recorded markdown could not be read, so §6.2's
+   * Sources whose recorded markdown could not be read, so the
    * missing-derivative test could not be answered either way. The entry stands
    * — the alternative re-extracts over a file on a transient failure — but the
    * source is not healthy, and compile reports it rather than reading
@@ -76,17 +76,17 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
       recorded.hash !== source.hash ||
       !(await hasDerivative(fs, source, recorded, unreadable))
     ) {
-      // §6.2: a manifested source whose derivative went missing reprocesses as modified.
+      // A manifested source whose derivative went missing reprocesses as modified.
       modified.push(source);
     } else {
       unchanged.push(source);
     }
   }
 
-  // A skipped source is not a deleted one. §6.1 has an unsupported or
-  // unrecordable file "surface again each compile rather than failing
-  // silently", which means it is still sitting in the vault — so handing its
-  // path to §6.6's cascade would delete the pages of a source that never went
+  // A skipped source is not a deleted one. An unsupported or unrecordable
+  // file surfaces again each compile rather than failing silently, which
+  // means it is still sitting in the vault — so handing its
+  // path to the cascade would delete the pages of a source that never went
   // away. This matters most when the skip rules themselves change: a path that
   // compiled cleanly yesterday must not be cascaded on today.
   // A skipped *folder* is never descended into, so every source beneath it is
@@ -104,11 +104,11 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 
   // A rename is always a rename: the manifest path and every wiki reference
   // follow the file. Reporting the old path as deleted instead would hand
-  // §6.6's cascade a source that never went away, and a plain folder move —
+  // the cascade a source that never went away, and a plain folder move —
   // which always leaves the derivative behind — would delete the pages citing
   // it.
   //
-  // A rename is never *also* modified here. §6.2's missing-derivative rule is
+  // A rename is never *also* modified here. The missing-derivative rule is
   // about a source whose markdown is gone; a renamed source's markdown is a
   // question about where the carry can put it, which `carryRenames` answers
   // against the vault at the moment it acts. A rename it cannot complete
@@ -128,7 +128,7 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 }
 
 /**
- * §6.2's missing-derivative test. The entry says which file, so no candidate is
+ * The missing-derivative test. The entry says which file, so no candidate is
  * guessed from the stem — that guess is what invariant II removes, and with it
  * the whole class of defects where a neighbour sharing a stem was mistaken for
  * a source's markdown.
@@ -141,7 +141,7 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
  * `derived-from` remains a guard and nothing else.
  *
  * The cost is one read and one YAML parse per unchanged converting source per
- * compile, which M2d weighed and accepted for the same reason: reads are not
+ * compile, weighed and accepted for the same reason: reads are not
  * writes, and an unchanged vault still performs literally zero writes.
  *
  * A converting source carrying no pointer at all is an entry written before
@@ -232,7 +232,7 @@ function pairRenames(
       remainingAdded.push(source);
       continue;
     }
-    // Two byte-identical sources make the pairing ambiguous, and §4's identity
+    // Two byte-identical sources make the pairing ambiguous, and the identity
     // rule offers no tiebreak — but the vault usually does. Prefer the vanished
     // path that shares this one's basename, then its directory, before falling
     // back to the first in code-point order: a user who deletes one copy and
@@ -252,17 +252,17 @@ function pairRenames(
 
 /**
  * Characters that make a path impossible for Luka to record faithfully, with
- * the reason for the §6.1-style skip notice. `null` means the path is fine.
+ * the reason for the skip notice. `null` means the path is fine.
  *
- * §6.5 makes the citation block the persistent citer record and §4 writes a
- * source page's origin as `source: "[[<path>]]"`. Both are single-line forms,
+ * The citation block is the persistent citer record and a source page's
+ * origin is written as `source: "[[<path>]]"`. Both are single-line forms,
  * so a path containing any line terminator cannot be read back — it would be
  * silently dropped from the record, which costs the user a source (and, once
- * the §6.6 cascade lands, the page). A backslash is equally unrepresentable:
+ * the cascade lands, the page). A backslash is equally unrepresentable:
  * vault paths are forward-slash only, so a literal one in a filename is
  * indistinguishable from a separator and would relocate the derivative.
  *
- * Skipping is the §6.1 idiom — named in a notice, never manifested, and so it
+ * Skipping is the idiom — named in a notice, never manifested, and so it
  * resurfaces every compile rather than failing silently or corrupting a record.
  */
 function unrepresentable(path: string): string | null {
@@ -275,7 +275,7 @@ function unrepresentable(path: string): string | null {
   // path that fails to round-trip, not whitespace inside it. Every source path
   // starts with `raw/`, which leaves a trailing-space basename as the reachable
   // case: a file needs an extension to be a source, but a repo directory does
-  // not, so `raw/my repo ` is legal. Under §6.6 a citer that no longer matches
+  // not, so `raw/my repo ` is legal. A citer that no longer matches
   // is not just a lost line in the record; it can cost the page.
   if (path !== path.trim()) return "path starts or ends with whitespace";
   return null;

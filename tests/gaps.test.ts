@@ -1,4 +1,4 @@
-// §10's link resolution, shared by the health check and the answer note's
+// Link resolution, shared by the health check and the answer note's
 // `## Add next` section.
 //
 // One question — which of a page's wikilink targets resolve to nothing — asked
@@ -24,9 +24,9 @@ async function targetsOf(fs: MemFs) {
   return unresolvedTargets(pages, scans);
 }
 
-describe("what counts as a target that resolves to nothing (§10)", () => {
+describe("what counts as a target that resolves to nothing", () => {
   it("merges case variants under one target, spelled the way a page would be", async () => {
-    // §4's namespace folds case, so `[[Zeppelin]]` and `[[zeppelin]]` name one
+    // The namespace folds case, so `[[Zeppelin]]` and `[[zeppelin]]` name one
     // page — and therefore one gap wanted by two, not two wanted by one each.
     // The spelling shown is the `comparePaths`-minimum, so it does not depend
     // on which page the scan reached first.
@@ -62,7 +62,7 @@ describe("what counts as a target that resolves to nothing (§10)", () => {
   });
 
   it("skips source links, heading references and block references", async () => {
-    // §4: links into sources are full-path and are not title-resolved, and a
+    // Links into sources are full-path and are not title-resolved, and a
     // heading or block reference addresses a place inside a page rather than a
     // page. None of the three is a missing article.
     const fs = new MemFs({
@@ -132,7 +132,7 @@ describe("scanPages", () => {
   });
 });
 
-describe("§10's report and the answer's section cannot disagree about what resolves", () => {
+describe("the health report and the answer's section cannot disagree about what resolves", () => {
   it("lists the same unresolved targets the health check does", async () => {
     // The two consume one function. If they ever stop agreeing, the wiki has
     // two answers to "does this link resolve" and one of them is wrong.
@@ -161,7 +161,7 @@ describe("§10's report and the answer's section cannot disagree about what reso
     }
     expect(written).toContain("- **Zeppelin** — wanted by 3: A, B, D");
     // And nothing beyond them: every candidate line the report carries is one
-    // of these. `_index` is a candidate for §10, which lists everything.
+    // of these. `_index` is a candidate for the report, which lists everything.
     const lines = written.split("\n").filter((line) => line.startsWith("- **"));
     expect(lines).toHaveLength(shared.length);
     expect(shared.map((target) => target.display)).toContain("_index");
@@ -170,7 +170,7 @@ describe("§10's report and the answer's section cannot disagree about what reso
 
 describe("the graph the answer draws against", () => {
   it("holds no node for a target that resolves to nothing", async () => {
-    // §7.1 drops a link that resolves to nothing, so a name the section
+    // The graph drops a link that resolves to nothing, so a name the section
     // recommends can never have become a node. The section's diagram draws
     // those as ghosts precisely because the graph does not carry them.
     const fs = new MemFs({

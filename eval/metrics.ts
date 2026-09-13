@@ -1,14 +1,14 @@
-// Ranking metrics for the eval harness (handoff.md §13).
+// Ranking metrics for the eval harness.
 //
 // "reports recall@5, recall@10, MRR per query and mean; exits nonzero below a
 // floor recorded in the YAML."
 //
 // Separate from `run.ts` so the arithmetic can be checked against hand-computed
-// numbers without running a process — §3's tree does not name this file, and it
+// numbers without running a process. It has a file of its own because it
 // exists for the same reason `pagetable.ts` did: the thing several callers read
 // gets one home rather than being inlined where it cannot be tested.
 //
-// The means come in two flavours. §7.4 step 2 force-includes every page whose
+// The means come in two flavours. Retrieval force-includes every page whose
 // title or alias appears in the question, so for a query that names all of its
 // expected pages the answer is handed to the ranker before ranking happens:
 // that query scores perfectly whatever the ranker does. Half of `queries.yaml`

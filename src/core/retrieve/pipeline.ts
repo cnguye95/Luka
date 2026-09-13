@@ -1,4 +1,4 @@
-// §7.4's retrieval pipeline, and §7.3's mode predicate.
+// The retrieval pipeline, and the mode predicate.
 //
 // "1. Page table (wiki pages only) renders to the same text as `_index.md`.
 //  2. Seed call (strict JSON) … Returned paths are validated against the page
@@ -34,7 +34,7 @@ export interface SeedSelection {
 }
 
 /**
- * §7.4 step 2. A path the model invented is dropped rather than failing the
+ * The seed call. A path the model invented is dropped rather than failing the
  * query — the same treatment Call A gives a malformed inventory item, and for
  * the same reason: one bad entry should not cost the user the whole answer.
  */
@@ -76,10 +76,10 @@ export async function selectSeeds(
 }
 
 /**
- * §7.4 step 2's force-include: "Any wiki page whose full title or alias appears
+ * The force-include rule: "Any wiki page whose full title or alias appears
  * case-insensitively as a substring of the question."
  *
- * Additive and uncapped. The caps in §17 bound what the *model* may return; a
+ * Additive and uncapped. The caps bound what the *model* may return; a
  * page the question names outright is not a guess that needs rationing.
  */
 export function forceIncludeSeeds(question: string, pages: readonly PageMeta[]): string[] {
@@ -97,10 +97,10 @@ export function forceIncludeSeeds(question: string, pages: readonly PageMeta[]):
 }
 
 /**
- * §7.3: "Mode B (graph) iff node count ≥ 20 AND (total distinct written link
+ * "Mode B (graph) iff node count ≥ 20 AND (total distinct written link
  * pairs / node count) ≥ 1.5; else Mode A."
  *
- * `edges` is already deduplicated per pair by §7.1, so its length is the
+ * `edges` is already deduplicated per pair by the builder, so its length is the
  * "distinct written link pairs" the predicate asks for.
  */
 export function modeOf(graph: GraphSnapshot, settings: LukaSettings): RetrievalMode {
@@ -116,25 +116,25 @@ export interface RankedNode {
   score: number;
 }
 
-/** §7.2: "ties in ranking break lexicographically". */
+/** Ties in ranking break lexicographically. */
 function byScoreThenPath(a: RankedNode, b: RankedNode): number {
   return b.score - a.score || comparePaths(a.path, b.path);
 }
 
 /**
- * §7.2's two settings, as `computePPR` wants them.
+ * PageRank's two settings, as `computePPR` wants them.
  *
  * Shared so the three callers that rank a walk — Mode B, the pane's click-PPR,
- * and §9's query inspection — cannot drift apart on α or the iteration ceiling.
+ * and query inspection — cannot drift apart on α or the iteration ceiling.
  */
 export function pprOptions(settings: LukaSettings): PPROptions {
   return { alpha: settings.pprAlpha, maxIterations: settings.pprMaxIterations };
 }
 
 /**
- * §7.4 step 3's ranking, given a walk that has already run.
+ * The ranking, given a walk that has already run.
  *
- * Split from `rankModeB` so a caller that needs the walk itself — §9's
+ * Split from `rankModeB` so a caller that needs the walk itself — the
  * scrubber wants its per-iteration vectors — can rank the very walk it
  * retained rather than running a second one and hoping the two agree.
  */
@@ -153,8 +153,8 @@ export function rankByScores(
 }
 
 /**
- * §7.4 step 3, Mode B: PPR over the *full* graph — wiki pages and raw source
- * nodes alike, which is what lets step 4 assemble source content in this mode.
+ * Ranking, Mode B: PPR over the *full* graph — wiki pages and raw source
+ * nodes alike, which is what lets assembly use source content in this mode.
  */
 export function rankModeB(
   graph: GraphSnapshot,
@@ -165,7 +165,7 @@ export function rankModeB(
 }
 
 /**
- * §7.4 step 3, Mode A: "wiki pages only". Seeds count as candidates even when
+ * Ranking, Mode A: "wiki pages only". Seeds count as candidates even when
  * no keyword touches them — the model chose them from the index, which is a
  * judgement the lexical score cannot express.
  */

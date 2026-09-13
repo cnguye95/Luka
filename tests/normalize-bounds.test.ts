@@ -13,7 +13,7 @@ describe("a wide dataset is summarised, not tabulated", () => {
   it("renders a 4000-column file without walking every column against every row", () => {
     // The cost used to be columns x rows regardless of how many cells the file
     // actually holds, so a ragged file blocked the global operation lock for
-    // close to a minute. §6.1 asks for a schema, a row count and a ten-row
+    // close to a minute. A card is a schema, a row count and a ten-row
     // head — none of which requires a row per column.
     const started = Date.now();
     const out = datasetToMarkdown(wide(4000, 4000), "raw/wide.csv");
@@ -47,7 +47,7 @@ describe("repo identity frames path and content", () => {
   it("does not confuse a file boundary with file content", async () => {
     // Concatenating every path and every file's bytes into one buffer made
     // these two repos hash identically, so a repo mutating between them read as
-    // unchanged under §6.2's four rules and was never reprocessed.
+    // unchanged under the four rules and was never reprocessed.
     const a = await repoContentHash(await repo({ "docs/a.md": "X", "docs/b.md": "Y" }));
     const b = await repoContentHash(await repo({ "docs/a.md": "Xdocs/b.mdY" }));
     expect(a).not.toBe(b);
@@ -70,7 +70,7 @@ describe("repo identity frames path and content", () => {
   });
 
   it("covers content that is too big to render", async () => {
-    // BUILD-NOTES is explicit that identity ignores the size caps: an over-cap
+    // Repo identity deliberately ignores the size caps: an over-cap
     // file's change must still register.
     const big = (fill: string) => fill.repeat(200 * 1024);
     const a = await repoContentHash(await repo({ "big.md": big("a") }));

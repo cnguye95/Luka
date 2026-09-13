@@ -1,13 +1,13 @@
 // The ingest manifest: vault-relative source path -> what this source's last
-// successful ingest produced (handoff.md §3, §6.2). Written only for sources
+// successful ingest produced. Written only for sources
 // that completed successfully (invariant 3); a missing manifest is a first run,
 // never an error.
 //
-// §3 describes the file as "path -> SHA-256 content hash". The entry is an
+// The obvious shape is "path -> SHA-256 content hash". The entry is an
 // object instead, because the hash alone cannot say *which* file is this
 // source's derivative — and deriving that from the filename every compile is
-// what produced the M2d defect cluster (see BUILD-NOTES "M2e"). Ownership is
-// recorded here so nothing downstream has to infer it.
+// what made the first rename subsystem unsafe (design_decisions.md, decision
+// 6). Ownership is recorded here so nothing downstream has to infer it.
 import type { FsAdapter } from "./adapters";
 import { decodeUtf8 } from "./hash";
 import { comparePaths, dirname } from "./paths";
@@ -15,11 +15,11 @@ import type { IngestManifest, ManifestEntry } from "./types";
 import { readableMarkdown } from "./readable";
 
 /**
- * The hash recorded for a source that left the vault but whose §6.6 cascade
- * could not be completed, so §6.2 sees the path leave again next compile and
- * the cascade retries.
+ * The hash recorded for a source that left the vault but whose cascade could
+ * not be completed, so the four rules see the path leave again next compile
+ * and the cascade retries.
  *
- * Deliberately not a SHA-256. §6.2 identifies sources by content hash, and a
+ * Deliberately not a SHA-256. Sources are identified by content hash, and a
  * restored real hash would sit in the manifest for as many runs as the failure
  * lasts, waiting to pair as a rename against any unrelated file that happens to
  * share those bytes. Nothing can hash to this, so the entry can only ever be
@@ -35,8 +35,8 @@ export function isPending(entry: ManifestEntry): boolean {
 }
 
 /**
- * §7.1's "every manifest source's readable markdown (the source itself if
- * `.md`/`.txt`, else its derivative)" — the whole point of recording the
+ * Every manifest source's readable markdown (the source itself if `.md`/`.txt`,
+ * else its derivative) — the whole point of recording the
  * derivative. `null` for a source that is not readable: one whose cascade is
  * still pending, and so is not in the vault at all.
  *

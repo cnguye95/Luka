@@ -1,4 +1,4 @@
-// Personalized PageRank over §7.1's graph (handoff.md §7.2).
+// Personalized PageRank over the link graph.
 //
 // "Exact power iteration. Personalization: uniform over seed nodes. Update:
 // `v' = α·A·v + (1−α)·p` with α = 0.85, A the degree-normalized undirected
@@ -13,8 +13,8 @@ import { comparePaths } from "../paths";
 import { PPR_EPSILON, type GraphSnapshot } from "../types";
 
 /**
- * §17 marks the scrubber's snapshot cap fixed, so it is a constant here rather
- * than a setting. §7.2 bounds retained vectors at "≤ 100" independently of the
+ * The scrubber's snapshot cap is fixed, so it is a constant here rather
+ * than a setting. Retained vectors are bounded at 100 independently of the
  * iteration limit, which a hand-edited `pprMaxIterations` could otherwise push
  * past.
  */
@@ -23,7 +23,7 @@ const SNAPSHOT_CAP = 100;
 export interface PPROptions {
   alpha: number;
   maxIterations: number;
-  /** §7.2: "retains v after each iteration (≤ 100) for the pane". */
+  /** Retain v after each iteration (≤ 100) for the pane. */
   snapshots?: boolean;
 }
 
@@ -31,10 +31,10 @@ export interface PPRResult {
   scores: ReadonlyMap<string, number>;
   iterations: number;
   /**
-   * Whether the iteration reached §7.2's L1 threshold, or stopped at the
+   * Whether the iteration reached the L1 threshold, or stopped at the
    * limit with the vector still moving.
    *
-   * Worth reporting because the spec's own defaults truncate on ordinary
+   * Worth reporting because the shipped defaults truncate on ordinary
    * topologies.
    *
    * No mechanism is claimed here, and the reason is worth stating: four
@@ -43,7 +43,7 @@ export interface PPRResult {
    * experiment against the helpers in `ppr.test.ts`. The fourth was written in
    * the same commit that removed the third and declared no mechanism claimed.
    * Anything below that reads like a rule is a defect; these are measurements,
-   * at α = 0.85 against §7.2's cap of 100 and threshold of 1e-8.
+   * at α = 0.85 against the cap of 100 and threshold of 1e-8.
    *
    * - Chains of 2 through 16 need 118 and truncate — size does not predict it.
    * - Cycles of 3, 5, 7, 9, 11 settle in 24, 53, 73, 87, 96; cycles of 13, 31,
@@ -125,7 +125,7 @@ export function computePPR(
     const next = new Array<number>(size).fill(0);
     for (let from = 0; from < size; from++) {
       const list = neighbours[from] as number[];
-      // §7.2: a degree-0 node is a zero column. It propagates nothing — its
+      // A degree-0 node is a zero column. It propagates nothing — its
       // mass is not redistributed, it simply leaves — and holds only what
       // teleport puts back.
       if (list.length === 0) continue;

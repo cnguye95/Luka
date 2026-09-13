@@ -1,9 +1,9 @@
-// Repository sources (handoff.md §6.4).
+// Repository sources.
 //
 // A directory under raw/ is a repo iff it holds `.git/` or a `.luka-repo`
 // marker; its files are never individual sources. Identity is the directory
-// path and the hash is taken over the ordered selection, so the four rules in
-// §6.2 apply to repos unchanged.
+// path and the hash is taken over the ordered selection, so the four
+// change-detection rules apply to repos unchanged.
 import type { FsAdapter } from "../adapters";
 import { concatBytes, decodeUtf8, sha256Hex, utf8 } from "../hash";
 import { repoFileOmitted } from "../markers";
@@ -11,7 +11,7 @@ import { basename, comparePaths, dirname, extname, isUnder, joinPath } from "../
 
 export const REPO_MARKER_FILE = ".luka-repo";
 
-// handoff.md §17 marks the caps fixed.
+// The caps are fixed, not settings.
 const MAX_FILE_BYTES = 100 * 1024;
 const MAX_TOTAL_BYTES = 1024 * 1024;
 
@@ -127,7 +127,7 @@ export async function selectRepoFiles(fs: FsAdapter, root: string): Promise<Repo
  * The framing is the point. Concatenating the path and the bytes with nothing
  * between them made a file boundary indistinguishable from content that happens
  * to spell the next file's path, so two structurally different repos could hash
- * identically — and under §6.2's four rules a repo mutating between those
+ * identically — and under the four rules a repo mutating between those
  * shapes read as unchanged and was never reprocessed.
  */
 async function fileDigest(relative: string, bytes: Uint8Array): Promise<string> {

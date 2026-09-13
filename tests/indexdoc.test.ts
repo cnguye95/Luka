@@ -13,8 +13,8 @@ function page(
   return { path: `wiki/${title}.md`, title, kind, aliases, summary, updated: "2026-08-20" };
 }
 
-describe("renderIndex (§4)", () => {
-  it("matches the §4 sample byte for byte", () => {
+describe("renderIndex", () => {
+  it("matches the sample byte for byte", () => {
     const rendered = renderIndex([page("Paper Title", "source", "one-line summary", ["a", "b"])]);
     expect(rendered).toBe(
       [
@@ -28,7 +28,7 @@ describe("renderIndex (§4)", () => {
     );
   });
 
-  it("keeps the three headings in §4's order even when sections are empty", () => {
+  it("keeps the three headings in order even when sections are empty", () => {
     expect(renderIndex([])).toBe("# Index\n## Sources\n## Entities\n## Concepts\n");
   });
 
@@ -64,7 +64,7 @@ describe("renderIndex (§4)", () => {
     );
   });
 
-  it("lives at the §4 path, which is infrastructure", () => {
+  it("lives at the fixed path, which is infrastructure", () => {
     expect(INDEX_PATH).toBe("wiki/_index.md");
   });
 

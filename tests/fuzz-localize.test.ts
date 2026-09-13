@@ -1,4 +1,4 @@
-// Injection tests for §6.3's image localizer and §4's marker idiom.
+// Injection tests for the image localizer and the marker idiom.
 //
 // Both take strings Luka did not write — a URL from the source document, alt
 // text from whoever wrote the markdown — and place them somewhere those strings
@@ -191,7 +191,7 @@ describe("localizer and markers under randomised input", () => {
               : roll < 0.75
                 ? gifBytes(200, 200)
                 : roll < 0.85
-                  ? pngBytes(10, 10) // under the §17 dimension floor
+                  ? pngBytes(10, 10) // under the dimension floor
                   : pngBytes(200, 200, 100); // under 5KB
         const typeRoll = next();
         const headers: Record<string, string> =

@@ -27,7 +27,7 @@ function from(sourcePath: string, ...items: InventoryItem[]): SourceInventoryEnt
   return { sourcePath, items };
 }
 
-describe("mergeInventories — matching against the existing table (§6.5, §14)", () => {
+describe("mergeInventories — matching against the existing table", () => {
   it("matches an item title against an existing page title", () => {
     const work = mergeInventories([page("Personalized PageRank")], [from("raw/a.md", item("Personalized PageRank"))]);
 
@@ -37,14 +37,14 @@ describe("mergeInventories — matching against the existing table (§6.5, §14)
     expect(work.regenerate[0]?.newCiters).toEqual(["raw/a.md"]);
   });
 
-  it("matches an item title against an existing page's alias (§14: alias hit)", () => {
+  it("matches an item title against an existing page's alias (alias hit)", () => {
     const work = mergeInventories([page("Personalized PageRank", ["PPR"])], [from("raw/a.md", item("PPR"))]);
 
     expect(work.newPages).toEqual([]);
     expect(work.regenerate[0]?.page.title).toBe("Personalized PageRank");
   });
 
-  it("matches an item's alias against an existing page title (§14: alias hit, reversed)", () => {
+  it("matches an item's alias against an existing page title (alias hit, reversed)", () => {
     const work = mergeInventories(
       [page("Personalized PageRank")],
       [from("raw/a.md", item("PPR", "concept", ["Personalized PageRank"]))],
@@ -59,7 +59,7 @@ describe("mergeInventories — matching against the existing table (§6.5, §14)
     expect(work.regenerate[0]?.page.title).toBe("Obsidian");
   });
 
-  it("ignores kind when matching (§6.5)", () => {
+  it("ignores kind when matching", () => {
     // The existing page is an entity; the model calls it a concept. Still one page.
     const work = mergeInventories([page("Mercury", [], "entity")], [from("raw/a.md", item("Mercury", "concept"))]);
 
@@ -83,7 +83,7 @@ describe("mergeInventories — matching against the existing table (§6.5, §14)
   });
 });
 
-describe("mergeInventories — qualified titles (§14: qualified-title collision)", () => {
+describe("mergeInventories — qualified titles (qualified-title collision)", () => {
   const pages = [page("Mercury (element)", ["quicksilver"], "entity")];
 
   it("matches the qualified title exactly", () => {
@@ -323,7 +323,7 @@ describe("mergeInventories — regeneration details", () => {
     expect(work.regenerate[0]?.newSummary).toBe("From B.");
   });
 
-  it("queues a requeued page even when no item matched it (§6.5)", () => {
+  it("queues a requeued page even when no item matched it", () => {
     const cited = page("Cited By Modified");
     const work = mergeInventories([cited], [], [cited.path]);
 
@@ -364,13 +364,13 @@ describe("mergeInventories — titles that are not plain ASCII", () => {
   });
 
   it("keeps a title made only of emoji rather than losing the page", () => {
-    // Surrogate pairs survive sanitization: none of §4's forbidden characters
+    // Surrogate pairs survive sanitization: none of the forbidden characters
     // appear in them, so the title is legal and must not collapse to Untitled.
     const work = mergeInventories([], [from("raw/a.md", item("🚀 Launch", "concept"))]);
     expect(work.newPages[0]?.title).toBe("🚀 Launch");
   });
 
-  it("strips every §4 character out of a model title before it becomes a filename", () => {
+  it("strips every forbidden character out of a model title before it becomes a filename", () => {
     const work = mergeInventories([], [from("raw/a.md", item("A[b]c#d^e|f\\g/h:i", "concept"))]);
     expect(work.newPages[0]?.title).toBe("Abcdefghi");
   });

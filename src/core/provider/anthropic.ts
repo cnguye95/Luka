@@ -1,4 +1,4 @@
-// Anthropic Messages API transport (handoff.md §11).
+// Anthropic Messages API transport.
 //
 // Invariant 9: the API key is read from settings at call time and sent in one
 // place — the x-api-key header of a request to the Anthropic endpoint. It is
@@ -76,7 +76,7 @@ function extractText(bytes: Uint8Array): string {
   if (!Array.isArray(content)) {
     throw new ProviderError("provider response has no content array", { retryable: false });
   }
-  // §11 caps max_tokens per task, and a reply that hit the cap is a fragment.
+  // max_tokens is capped per task, and a reply that hit the cap is a fragment.
   // Unchecked, a JSON task burns the repair retry and then fails saying the
   // reply was not valid JSON, which is true but not the reason; a prose task
   // is worse, because the fragment is written into wiki/ under a code-written

@@ -1,4 +1,4 @@
-// §15's M3 acceptance criteria, on the corpus §15 names.
+// The retrieval, ask and filing acceptance criteria, on the demo corpus.
 //
 // "AC: eval CI mode runs and reports; asking on the compiled demo vault yields
 // an answer note whose inline links all validate; filing moves the note and the
@@ -6,7 +6,7 @@
 // notice verified."
 //
 // The first is `npm run eval` and `tests/eval-*.test.ts`; the last is asserted
-// at core level in `ask-m3.test.ts` and on screen by the README checklist. The
+// at core level in `ask.test.ts` and on screen by the manual checklist. The
 // middle two are here, over a real filesystem with real pdf.js, because a
 // stand-in vault would not be the corpus the criterion names.
 import { cp, mkdtemp, rm } from "node:fs/promises";
@@ -29,11 +29,11 @@ const DEMO = path.resolve(import.meta.dirname, "..", "demo", "raw");
 const MANIFEST = ".obsidian/plugins/luka/ingest-manifest.json";
 const SLOW = 30_000;
 
-/** §8.2's reply shape: prose, then exactly one fenced JSON block. */
+/** The synthesis reply shape: prose, then exactly one fenced JSON block. */
 const answerWith = (body: string) =>
   `${body}\n\n\`\`\`json\n${JSON.stringify({ missing_information: [] })}\n\`\`\``;
 
-describe("§15's M3 acceptance criteria, on the demo corpus", { timeout: SLOW }, () => {
+describe("the ask and filing acceptance criteria, on the demo corpus", { timeout: SLOW }, () => {
   let vault: string;
   let fs: NodeFs;
 
@@ -55,14 +55,14 @@ describe("§15's M3 acceptance criteria, on the demo corpus", { timeout: SLOW },
     }
     if (request.task === "seed-selection") {
       return {
-        // One real page, and one the model invented — §7.4 step 2 drops it.
+        // One real page, and one the model invented — the seed call drops it.
         seeds: ["wiki/concepts/Graph Retrieval.md", "wiki/concepts/Invented.md"],
         keywords: ["retrieval", "graph"],
       };
     }
     if (request.task === "synthesis") {
       // A link by title, a link by alias, and a link to a page that is not in
-      // the retrieved set — §8.3 must keep the first two and unlink the third.
+      // the retrieved set — validation must keep the first two and unlink the third.
       return answerWith(
         "Retrieval walks the graph: see [[Graph Retrieval]], sometimes written [[PPR]]. " +
           "It has nothing to do with [[Photosynthesis]].",
@@ -102,7 +102,7 @@ describe("§15's M3 acceptance criteria, on the demo corpus", { timeout: SLOW },
     const { body } = parseFrontmatter(note);
     const prose = body.slice(0, body.indexOf("<!-- sources:start -->"));
     // "Validate" means each link resolves to a page that was retrieved — not
-    // that it spells that page's title. §4 gives titles and aliases one
+    // that it spells that page's title. Titles and aliases share one
     // namespace, so resolution goes through the same title table the vault
     // uses, and an alias is as valid a name as the title.
     const table = await loadPageTable(fs);
@@ -154,7 +154,7 @@ describe("§15's M3 acceptance criteria, on the demo corpus", { timeout: SLOW },
     expect(sourcePage?.kind).toBe("source");
 
     // And the sources block it kept is now graph material — which is the
-    // reason §8.4 strips the trace and not the sources.
+    // reason filing strips the trace and not the sources.
     const graph = await buildGraph({ fs, manifestPath: MANIFEST });
     expect(graph.nodes.map((node) => node.path)).toContain(filed);
     expect(
@@ -167,7 +167,7 @@ describe("§15's M3 acceptance criteria, on the demo corpus", { timeout: SLOW },
     await core().compile();
     await core().ask("How does graph retrieval work?");
 
-    // An answer under `answers/` is not under `raw/`, so §4's discovery never
+    // An answer under `answers/` is not under `raw/`, so discovery never
     // sees it and compile has nothing new to do.
     const after = await core().compile();
 

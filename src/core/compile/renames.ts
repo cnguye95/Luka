@@ -2,10 +2,11 @@
 // path expects it, and sweeping the markdown a departed source left behind.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// DESIGN INVARIANTS (M2e)
+// DESIGN INVARIANTS
 //
-// M2d was functionally correct and took five review rounds, because each
-// round's fix added another compensation and the compensations interacted.
+// The first version of this subsystem was functionally correct and took five
+// review rounds, because each round's fix added another compensation and the
+// compensations interacted.
 // This list is what a fix is checked against. A reviewer-found bug is fixed at
 // this level; if no invariant covers it, the list is incomplete and gets
 // extended deliberately, in the same commit — never patched where it surfaced
@@ -25,8 +26,8 @@
 //        and a rename has to decide whether markdown at the destination is the
 //        same file the user moved, `carryOne` computes `<stem>.md` and reads
 //        the origin there. Nothing else may. It is the price of letting a user
-//        move a source and its markdown together, it is written up in
-//        BUILD-NOTES, and it can only ever adopt a file naming the source's own
+//        move a source and its markdown together (design_decisions.md, decision
+//        6), and it can only ever adopt a file naming the source's own
 //        old path. It is not *reported* at runtime: the carry succeeded and
 //        nothing was lost, so there is nothing to tell the user.
 //        VII neither widens nor narrows this: the carve-out fires only when the
@@ -72,10 +73,10 @@
 //        the pass buys tidiness rather than correctness: a resolvable chain
 //        lands at `<stem>.md`, and only a true cycle floats.
 //
-//  (VII) THE POINTER IS THE ADDRESS; `<stem>.md` IS A PREFERENCE. §6.1 names
+//  (VII) THE POINTER IS THE ADDRESS; `<stem>.md` IS A PREFERENCE. The rule is
 //        where a normalization *writes* — `<original-stem>.md` beside the
-//        original — not where a derivative must forever live afterwards (user
-//        decision, BUILD-NOTES "M2f"). A carry whose destination is occupied
+//        original — not where a derivative must forever live afterwards
+//        (design_decisions.md, decision 7). A carry whose target is occupied
 //        leaves the file where the entry already says it is, repoints it there
 //        and records that location: a float. No reader may treat `<stem>.md` as
 //        where a derivative *is*.
@@ -83,8 +84,8 @@
 //        prefers the canonical path, so a floated source lands back home the
 //        next time it is extracted with the stem free, and a carry moves it
 //        home the next time it is renamed with the stem free. Nothing hunts for
-//        floats to re-home on an unchanged vault — that would write where §6.2
-//        requires zero writes.
+//        floats to re-home on an unchanged vault — that would write where the
+//        four rules require zero writes.
 //
 //  (VI)  READABLE MARKDOWN IS LOOKED UP, NEVER RECONSTRUCTED. A source's body
 //        comes from this run's outcomes, or else from the file its entry names.
@@ -102,7 +103,8 @@
 // The failure policy is deliberately blunt (policy B): the happy paths carry a
 // derivative at zero model calls, and ANY complication falls back to plain
 // re-extraction and says so. There are no retry state machines and no attempts
-// to preserve a repair through a failure — those are what bred M2d's defects.
+// to preserve a repair through a failure — those are what bred the first
+// version's defects.
 //
 // A float is not a complication. An occupied destination used to be one, and
 // cost a model call and often a repair; under VII it costs nothing at all, so
@@ -126,7 +128,7 @@ export interface Report {
  * What this run owes a rename, decided in one pass before extraction (V).
  *
  * `carried` means the derivative is at `derivative` and the source needs no
- * work — §6.2's rename shortcut, zero model calls. `fallback` means the source
+ * work — the rename shortcut, zero model calls. `fallback` means the source
  * joins the normalize worklist: nothing was taken from the vault to arrange it,
  * and the reason is reported.
  */
@@ -147,7 +149,7 @@ export interface CarryResult {
  * repointing in place keeps that record true no matter what happens next: a
  * failed move leaves a file that is exactly where the manifest says, naming the
  * new path, and re-running finishes the job. Moving first would leave a file
- * the entry no longer locates, which is what made M2d need a rollback — and a
+ * the entry no longer locates, which once forced a rollback — and a
  * rollback that itself fails needs a third recovery, which is how that spiral
  * started. Here no failure needs undoing, so nothing has to be undone (III).
  */
@@ -371,7 +373,7 @@ export interface SweepResult {
 }
 
 /**
- * Removes the markdown of sources that left the vault (§6.6).
+ * Removes the markdown of sources that left the vault.
  *
  * The entry names the file, so there is no candidate to compute and no stem to
  * collide (II). One guard stands before the delete: the file must still name
@@ -422,7 +424,7 @@ export async function sweepDeparted(
  * Points a derivative at its source's new path, touching only that one line,
  * and reports whether anything was written.
  *
- * A user may have repaired this file by hand (§6.2), so the rest of their
+ * A user may have repaired this file by hand, so the rest of their
  * frontmatter — comments, key order, scalar styles — is left alone; a full
  * re-serialize would restyle all of it for the sake of one value.
  */

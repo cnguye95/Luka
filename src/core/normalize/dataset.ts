@@ -1,11 +1,11 @@
-// Dataset sources become a descriptor card; the original file is retained
-// (handoff.md §6.1). Head sample is fixed at 10 rows by §17.
+// Dataset sources become a descriptor card; the original file is retained.
+// The head sample is fixed at 10 rows.
 import { datasetColumnsOmitted } from "../markers";
 import { basename } from "../paths";
 
 const HEAD_ROWS = 10;
 /**
- * A bound §17 does not set, because §6.1 assumes a file that is actually
+ * A bound with no setting: the descriptor assumes a file that is actually
  * tabular. Both tables below walk columns against rows, so without it a ragged
  * file — one very wide header, many short rows — costs columns x rows while the
  * file itself stays small: 478KB measured at 53 seconds, holding the global
@@ -85,7 +85,7 @@ export function datasetToMarkdown(text: string, sourcePath: string): string {
   // Both tables below walk columns against rows, so an unbounded column count
   // multiplies against an unbounded row count — and a ragged file (one very
   // wide header, many short rows) makes that product enormous while the file
-  // itself stays small. §6.1 asks for a schema, a row count and a ten-row head;
+  // itself stays small. A card is a schema, a row count and a ten-row head;
   // none of that needs a table row per column of a file that is not really
   // tabular. Both dimensions are bounded here, and anything dropped is named.
   const shown = columns.slice(0, MAX_SCHEMA_COLUMNS);

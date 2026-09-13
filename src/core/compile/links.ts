@@ -1,4 +1,4 @@
-// The link post-pass (handoff.md §4).
+// The link post-pass.
 //
 // "A code post-pass over every generated body resolves links against the
 // title+alias table, rewriting `[[Alias]]` → `[[Title|Alias]]`; links that
@@ -64,7 +64,7 @@ export function resolveLinks(body: string, index: TitleIndex): string {
     const display = pipe === -1 ? undefined : inner.slice(pipe + 1);
 
     if (target === "") return full;
-    // §4: links into sources are full-path and are not title-resolved.
+    // Links into sources are full-path and are not title-resolved.
     if (target.startsWith("raw/")) return full;
     // Heading and block references address a place inside a page, not a page.
     if (target.includes("#") || target.includes("^")) return full;

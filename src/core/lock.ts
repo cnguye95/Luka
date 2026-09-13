@@ -1,4 +1,4 @@
-// handoff.md invariant 2: one global operation lock; compile and ask are
+// invariant 2: one global operation lock; compile and ask are
 // mutually exclusive and a second invocation is refused, never queued.
 import type { OperationName } from "./types";
 

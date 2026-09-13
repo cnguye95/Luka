@@ -1,4 +1,4 @@
-// The reliability wrapper (handoff.md §11, invariant 10).
+// The reliability wrapper (invariant 10).
 //
 // Every provider call in Luka goes through here: per-attempt timeout, retries
 // with exponential backoff and jitter honoring Retry-After, per-task
@@ -41,7 +41,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
    * and the plugin mutates its settings object *in place* while `createCore`
    * runs once in `onload()` — so a copy taken here makes a freshly typed key
    * invisible until Obsidian reloads, with the settings tab and data.json both
-   * reporting success. §17's numbers are made safe on the way past;
+   * reporting success. The settings numbers are made safe on the way past;
    * `normalizeSettings` is idempotent, so a caller that already normalized
    * loses nothing.
    */
@@ -72,7 +72,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     try {
       return await attemptLoop(task, model, system, user, maxTokens, temperature, images);
     } catch (error) {
-      // §11 fixes JSON tasks at temperature 0, but some current models reject
+      // JSON tasks run at temperature 0, but some current models reject
       // sampling parameters outright with a 400. Re-run once without the
       // parameter rather than failing every call on such a model.
       if (temperature !== undefined && isTemperatureRejection(error)) {
@@ -165,7 +165,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
       typeof requested === "number" && Number.isFinite(requested) && requested >= 1
         ? Math.min(Math.floor(requested), cap)
         : cap;
-    // §11: JSON tasks run at temperature 0, unconditionally.
+    // JSON tasks run at temperature 0, unconditionally.
     const temperature = request.json ? 0 : request.temperature;
 
     const text = await callWithRetries(
@@ -182,7 +182,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     try {
       return JSON.parse(unfence(text)) as unknown;
     } catch (parseError) {
-      // §11: one repair retry, appending the parse error.
+      // One repair retry, appending the parse error.
       const repairUser =
         `${request.user}\n\n` +
         `Your previous reply could not be parsed as JSON (${describe(parseError)}). ` +
@@ -218,7 +218,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
 /**
  * Unwraps a JSON reply the model returned inside a markdown fence.
  *
- * §11 asks only for "parse, one repair retry", and the repair was written for
+ * The rule is "parse, one repair retry", and the repair was written for
  * exactly this shape — but it re-asks the same model, so it is a fix only when
  * the model complies the second time. `claude-haiku-4-5-20251001` fences the
  * repair reply too: every source of a real compile failed at `inventory` and
@@ -229,7 +229,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
  * block is unwrapped, so prose that merely contains a fence still fails to
  * parse and still reaches the repair retry — the case that genuinely needs
  * another look at the model. `synthesize.ts` strips the *trailing* block out of
- * prose, which is §8.2's different question and stays where it is; unifying
+ * prose, which is a different question and stays where it is; unifying
  * the two would put one regex in front of two grammars.
  */
 function unfence(text: string): string {
@@ -237,7 +237,7 @@ function unfence(text: string): string {
   return fenced === null ? text : (fenced[1] as string);
 }
 
-/** §12's provider selector, resolved to a transport. */
+/** The provider selector, resolved to a transport. */
 function rawFor(provider: ProviderName, http: HttpAdapter, settings: LukaSettings): RawProvider {
   return provider === "openai-compatible"
     ? createOpenAICompatProvider(http, settings)

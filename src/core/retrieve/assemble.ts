@@ -1,12 +1,12 @@
-// §7.4 step 4: "Assemble top-K whole nodes (wiki or source content) in rank
+// Assembly: "Assemble top-K whole nodes (wiki or source content) in rank
 // order under the context budget (default 40,000 tokens ≈ chars/4; K cap 12).
 // Never split a page; a single page over the whole budget is tail-truncated
 // with the marker."
 //
 // Every one of those rules is already `packUnderBudget`'s contract — it stops
 // at the first item that does not fit rather than cherry-picking a later small
-// one, and it truncates the first item rather than dropping it. §6.5's page
-// assembly and §7.4's top-K assembly share that definition of "fits" on
+// one, and it truncates the first item rather than dropping it. Compile's
+// source assembly and this top-K assembly share that definition of "fits" on
 // purpose, so this module supplies the texts and the cap and nothing else.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
@@ -32,8 +32,8 @@ export interface Assembly {
 
 export interface AssembleOptions {
   /**
-   * Take only nodes that fit whole. §7.4's tail-truncation is for a page over
-   * the *whole* budget; a round packing into the remainder of one (§8.2) has
+   * Take only nodes that fit whole. Tail-truncation is for a page over
+   * the *whole* budget; a round packing into the remainder of one has
    * no such licence, so a first node that does not fit is dropped instead.
    */
   wholeOnly?: boolean;
@@ -57,7 +57,7 @@ export async function assemble(
 ): Promise<Assembly> {
   const readable: { node: RankedNode; text: string }[] = [];
   for (const node of ranked) {
-    // Stop reading once enough whole nodes are in hand: §7.4 takes the top K,
+    // Stop reading once enough whole nodes are in hand: only the top K matter,
     // so reading the rest of a large vault would be work nothing consumes.
     if (readable.length === cap) break;
     let text: string;
@@ -94,13 +94,13 @@ export async function assemble(
   return { nodes, usedTokens: packed.usedTokens };
 }
 
-/** True when any assembled node carries §7.4's truncation marker. */
+/** True when any assembled node carries the truncation marker. */
 export function wasTruncated(assembly: Assembly): boolean {
   return assembly.nodes.some((node) => node.truncated);
 }
 
 /**
- * The marker §7.4 asks for on a tail-truncated node, so a caller rendering the
+ * The marker a tail-truncated node carries, so a caller rendering the
  * prompt does not have to know how `tokens.ts` spells it.
  */
 export const TRUNCATION_MARKER = truncatedForContextBudget();

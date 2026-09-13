@@ -12,9 +12,9 @@ import {
   type LukaSettings,
 } from "../src/core/types";
 
-// handoff.md §17 — the defaults table is normative.
+// The defaults are normative.
 describe("default settings", () => {
-  it("matches the §17 parameter table", () => {
+  it("matches the documented defaults", () => {
     expect(DEFAULT_SETTINGS.pprAlpha).toBe(0.85);
     expect(PPR_EPSILON).toBe(1e-8);
     expect(DEFAULT_SETTINGS.pprMaxIterations).toBe(100);
@@ -42,7 +42,7 @@ describe("default settings", () => {
   });
 
   it("defaults to Anthropic, with Anthropic model ids to match", () => {
-    // §11 names Anthropic as the adapter and §17's ids are Anthropic's, so the
+    // Anthropic is the default provider and the default ids are its own, so the
     // two have to agree: shipping an OpenAI-compatible default would point
     // every task at a model the configured endpoint does not have.
     expect(DEFAULT_SETTINGS.provider).toBe("anthropic");
@@ -98,12 +98,12 @@ describe("a hand-edited provider selection cannot reach the transport unrecogniz
 });
 
 describe("a hand-edited data.json cannot make compile unsafe", () => {
-  // §17 fixes these values, but `data.json` is a file a user can edit and
+  // These values have defaults, but `data.json` is a file a user can edit and
   // `loadSettings` validates nothing. wrapper.ts wrote this threat model down
   // for `maxRetries` and it was never applied to the three settings beside it.
   const nonsense = [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, "two" as unknown as number];
 
-  it("falls back to §17's default for a budget that would silence every source", () => {
+  it("falls back to the default for a budget that would silence every source", () => {
     for (const value of nonsense) {
       expect(normalizeSettings({ ...DEFAULT_SETTINGS, contextBudgetTokens: value })
         .contextBudgetTokens).toBe(DEFAULT_SETTINGS.contextBudgetTokens);
@@ -123,7 +123,7 @@ describe("a hand-edited data.json cannot make compile unsafe", () => {
       expect(settings.compileConcurrency).toBeGreaterThanOrEqual(1);
       expect(Number.isInteger(settings.compileConcurrency)).toBe(true);
     }
-    // A large value is capped rather than allowed to ignore §11's budget.
+    // A large value is capped rather than allowed to ignore the concurrency budget.
     expect(
       normalizeSettings({ ...DEFAULT_SETTINGS, compileConcurrency: 5000 }).compileConcurrency,
     ).toBe(16);
@@ -131,7 +131,7 @@ describe("a hand-edited data.json cannot make compile unsafe", () => {
 
   it("clamps the retry budget in the same place as the rest", () => {
     // A number outside the range is clamped into it; a value that is not a
-    // number at all falls back to §17's default, which is what the rule says
+    // number at all falls back to the default, which is what the rule says
     // and what a quoted `"maxRetries": "3"` in data.json deserves.
     expect(normalizeSettings({ ...DEFAULT_SETTINGS, maxRetries: -1 }).maxRetries).toBe(0);
     expect(normalizeSettings({ ...DEFAULT_SETTINGS, maxRetries: 5000 }).maxRetries).toBe(10);
@@ -140,7 +140,7 @@ describe("a hand-edited data.json cannot make compile unsafe", () => {
     );
   });
 
-  it("answers §17's default for a quoted number, not the range floor", () => {
+  it("answers the default for a quoted number, not the range floor", () => {
     const quoted = "4" as unknown as number;
 
     expect(normalizeSettings({ ...DEFAULT_SETTINGS, compileConcurrency: quoted })
@@ -233,11 +233,11 @@ describe("a run sees one settings state", () => {
   });
 });
 
-describe("§7.2's numbers survive a hand-edited data.json", () => {
+describe("PageRank's numbers survive a hand-edited data.json", () => {
   it("falls back for a damping factor the iteration cannot use", () => {
     // Outside (0,1) the update stops being a contraction: at 1 it never
     // teleports, at 0 it never walks. Neither boundary is a usable clamp, so
-    // an unusable value takes §17's default instead.
+    // an unusable value takes the default instead.
     for (const value of [0, 1, -0.5, 1.5, Number.NaN, "0.9" as unknown as number]) {
       expect(normalizeSettings({ ...DEFAULT_SETTINGS, pprAlpha: value }).pprAlpha).toBe(
         DEFAULT_SETTINGS.pprAlpha,
@@ -258,8 +258,8 @@ describe("§7.2's numbers survive a hand-edited data.json", () => {
   });
 });
 
-describe("§8.2's follow-up toggle survives a hand-edited data.json", () => {
-  it("takes §17's default for anything that is not a boolean", () => {
+describe("the follow-up toggle survives a hand-edited data.json", () => {
+  it("takes the default for anything that is not a boolean", () => {
     // A string or a number is not a decision either way, so it falls back
     // rather than taking JavaScript's idea of whether it is truthy.
     for (const value of ["false" as unknown as boolean, 0 as unknown as boolean, null as unknown as boolean]) {

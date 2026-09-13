@@ -1,7 +1,7 @@
-// The façade the plugin, tests and eval all drive (handoff.md §5).
-// At M2d this exposes the full compile — discover → normalize → extract
-// (Call A) → generate (Call B) → post-process → index — with §6.6's cascade
-// folded through it, plus the scope preview §5 names.
+// The façade the plugin, tests and eval all drive.
+// It exposes the full compile — discover → normalize → extract
+// (Call A) → generate (Call B) → post-process → index — with the cascade
+// folded through it, plus the scope preview.
 import type { FsAdapter, HttpAdapter } from "./adapters";
 import { mapWithConcurrency } from "./concurrency";
 import { cascadeScope, type ScopePreview } from "./compile/cascade";
@@ -84,12 +84,12 @@ export type { FsAdapter, HttpAdapter } from "./adapters";
 export { BusyError } from "./lock";
 export type { ScopePreview } from "./compile/cascade";
 export type { SkippedSource } from "./compile/discover";
-// §17's clamps are core's, so a consumer reading a settings number gets the
-// same value the operation would — the pane's top-K is §17's own K.
+// The settings clamps are core's, so a consumer reading a settings number gets
+// the same value the operation would — the pane's top-K is the same K.
 export { DEFAULT_SETTINGS, normalizeSettings } from "./types";
 export type { IngestManifest, LukaSettings, ManifestEntry, ProviderTask } from "./types";
 export type { GraphEdge, GraphNode, GraphSnapshot, RetrievalMode } from "./types";
-// §7.1's node set — "every manifest source's readable markdown" — is exactly
+// A raw graph node is a manifest source's readable markdown, which is exactly
 // this value per entry. Exported here rather than from manifest.ts so callers
 // outside core keep going through the one façade.
 export { readablePathOf } from "./manifest";
@@ -103,7 +103,7 @@ export {
   type Trace,
 } from "./answer/trace";
 export type { PPROptions, PPRResult } from "./graph/ppr";
-// §9's maturity banner is §7.3's predicate, and a second copy of it in the
+// The pane's banner is the mode predicate, and a second copy of it in the
 // plugin would be a copy that could disagree with the one retrieval uses.
 export { modeOf, type RankedNode } from "./retrieve/pipeline";
 // The raw transport (provider/anthropic.ts) is deliberately NOT exported:
@@ -122,7 +122,7 @@ export interface CoreDeps {
   /** Injected so `ingested` dates are reproducible in tests. */
   now?: () => Date;
   /**
-   * Test seam. Defaults to the §11 reliability wrapper over the configured
+   * Test seam. Defaults to the reliability wrapper over the configured
    * provider — the seam is at wrapper level, never at transport level, so
    * invariant 10 cannot be bypassed through it.
    */
@@ -152,12 +152,12 @@ export interface CompileResult {
   reported: CompileFailure[];
   /** Wiki pages written this run. */
   pagesWritten: number;
-  /** Wiki pages the §6.6 cascade deleted — their last citer is gone. */
+  /** Wiki pages the cascade deleted — their last citer is gone. */
   pagesDeleted: number;
   /**
    * Files under `raw/` the cascade removed: derivatives orphaned by a source
    * leaving its path. `raw/` is the user's folder, so a compile says when it
-   * has taken something out of it (§6.6's preview covers pages only).
+   * has taken something out of it (the scope preview covers pages only).
    */
   derivativesDeleted: number;
   /** Provider calls this run — invariant 12's deterministic count. */
@@ -179,42 +179,42 @@ export type ProgressEvent =
 export interface CompileOptions {
   onProgress?: (event: ProgressEvent) => void;
   /**
-   * §8.1's confirm step. Called — inside the operation lock, before any work —
+   * The confirm step. Called — inside the operation lock, before any work —
    * whenever the diff includes deletions or modifications, which is exactly
-   * when §6.6 asks for the scope preview. Returning false abandons the run
+   * when the scope preview is shown. Returning false abandons the run
    * having written nothing. Omitting it proceeds unconfirmed, which is what
    * tests and the headless eval harness want; the modal is the plugin's.
    */
   confirm?: (preview: ScopePreview) => Promise<boolean> | boolean;
 }
 
-/** What §9's query inspection overlays: §7.4 steps 1–3, with nothing assembled. */
+/** What query inspection overlays: seeds and ranking, with nothing assembled. */
 export interface InspectResult {
-  /** §7.3's predicate over the graph this ranked against. */
+  /** The mode predicate over the graph this ranked against. */
   mode: RetrievalMode;
   /**
-   * Seed page paths: the model's choices union §7.4 step 2's force-includes,
+   * Seed page paths: the model's choices union the force-includes,
    * narrowed to nodes that are on the snapshot this ranked against.
    *
-   * The narrowing can drop a page the question named outright, which §7.4
-   * step 2 calls "not a guess that needs rationing" — but a page absent from
+   * The narrowing can drop a page the question named outright, which is
+   * "not a guess that needs rationing" — but a page absent from
    * the snapshot cannot be lit on a pane drawing that snapshot, and showing
    * it as a seed the overlay then ignores would be the worse lie. Refresh is
-   * the control §9 gives the user for it.
+   * the control the pane gives the user for it.
    */
   seeds: string[];
   /** The keywords the seed call returned, which Mode A ranks with. */
   keywords: string[];
-  /** §7.4 step 3's ranking, best first. */
+  /** The ranking, best first. */
   ranked: RankedNode[];
   /**
-   * §7.2's per-iteration vectors, for §9's scrubber — Mode B only, and only
+   * PageRank's per-iteration vectors, for the scrubber — Mode B only, and only
    * when `InspectOptions.snapshots` asked for them.
    *
    * These are the walk that produced `ranked`, not a second one seeded the
    * same way. A re-run would agree today and would stop agreeing the moment
    * anything about the ranking's inputs moved, which is the class of drift
-   * §9's overlay exists to make visible rather than to introduce.
+   * the overlay exists to make visible rather than to introduce.
    */
   snapshots?: ReadonlyMap<string, number>[];
   /** How many iterations that walk took. Present exactly when `snapshots` is. */
@@ -222,7 +222,7 @@ export interface InspectResult {
 }
 
 export interface InspectOptions {
-  /** Retain §7.2's per-iteration vectors (≤ 100). Mode B only. */
+  /** Retain PageRank's per-iteration vectors (≤ 100). Mode B only. */
   snapshots?: boolean;
 }
 
@@ -230,10 +230,11 @@ export interface GetGraphOptions {
   /**
    * Walk the vault again even when a snapshot is cached.
    *
-   * §7.1's trigger list — "at plugin load and after compile" — was read as a
-   * floor rather than a closed enumeration (BUILD-NOTES, 2026-09-02), because
-   * checklist §5.5 asks Refresh to see a compile run in another window or a
-   * vault sync, and neither fires this window's rebuild event. Any build in
+   * The graph's rebuild triggers — plugin load and the end of a compile — are
+   * a floor rather than a closed enumeration (design_decisions.md, decision
+   * 18), because checklist item 5.5 asks Refresh to see a compile run in
+   * another window or a vault sync, and neither fires this window's rebuild
+   * event. Any build in
    * flight is retired first, so the answer describes the vault as it stands
    * now rather than as it stood when an earlier walk began.
    *
@@ -247,11 +248,11 @@ export interface GetGraphOptions {
 
 export interface Core {
   compile(options?: CompileOptions): Promise<CompileResult>;
-  /** §5's read-only scope preview: no lock, no model call, no write. */
+  /** The read-only scope preview: no lock, no model call, no write. */
   previewCompile(): Promise<ScopePreview>;
   /**
-   * §7.1's graph, built in memory and cached until the next compile. Async
-   * because the build reads the vault, and §7.1 asks for one at plugin load —
+   * The graph, built in memory and cached until the next compile. Async
+   * because the build reads the vault, and one is built at plugin load —
    * which the plugin starts by calling this.
    *
    * `{ force: true }` walks the vault again and publishes what it finds to
@@ -259,31 +260,31 @@ export interface Core {
    */
   getGraph(options?: GetGraphOptions): Promise<GraphSnapshot>;
   /**
-   * §5's `ask`: §7's retrieval into §8's answer note. Holds the operation lock
+   * Ask: retrieval into an answer note. Holds the operation lock
    * (invariant 2) and writes the note atomically on success only
    * (invariant 11).
    */
   ask(question: string): Promise<AnswerResult>;
   /**
-   * §8.4: moves an answer note into `raw/answers/`, stripping the trace and
+   * Filing: moves an answer note into `raw/answers/`, stripping the trace and
    * keeping the sources block, and returns where it landed. No auto-compile —
    * the next compile picks it up through the normal path.
    */
   fileBack(answerPath: string): Promise<string>;
   /**
-   * §10: rewrites `wiki/_health.md` from one vault scan, with no model
+   * Health check: rewrites `wiki/_health.md` from one vault scan, with no model
    * calls. Holds the lock — it reads the whole vault and writes a file, so a
    * compile running underneath it would make the report describe a vault that
    * no longer exists.
    */
   healthCheck(): Promise<void>;
-  /** §7.2's personalized PageRank over the current graph. */
+  /** Personalized PageRank over the current graph. */
   computePPR(
     seedPaths: readonly string[],
     options?: { snapshots?: boolean },
   ): Promise<PPRResult>;
   /**
-   * §9's "Inspect (1 model call)": §7.4 steps 1–3 and nothing after them.
+   * "Inspect (1 model call)": seed selection and ranking, and nothing after.
    *
    * Steps 4 and 5 — assembly and the ungrounded skip — belong to answering,
    * not to showing what retrieval selected, and they are what the second and
@@ -291,13 +292,14 @@ export interface Core {
    * makes the button's label true.
    *
    * Takes no lock and writes nothing, so it answers while a compile runs —
-   * §9's pane is never blocked by the lock.
+   * the pane is never blocked by the lock.
    */
   inspect(question: string, options?: InspectOptions): Promise<InspectResult>;
   /**
-   * §7.1: "Built in memory at plugin load and after compile" — and published
-   * again after a forced read, §9's Refresh, which §5 does not list because
-   * the force path is this branch's addition (BUILD-NOTES, 2026-09-02). A
+   * Built in memory at plugin load and after compile — and published again
+   * after a forced read, the pane's Refresh, which the original contract did
+   * not list because the force path was added later (design_decisions.md,
+   * decision 18). A
    * listener therefore hears from a gesture as well as from a compile.
    * Returns an unsubscribe, so a view that closes stops hearing about
    * rebuilds.
@@ -308,7 +310,7 @@ export interface Core {
 
 export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
-  // §7.1's graph lives here and nowhere on disk: "built in memory at plugin
+  // The graph lives here and nowhere on disk: "built in memory at plugin
   // load and after compile; no cache file". `building` collapses concurrent
   // callers onto one build rather than letting two walk the vault at once —
   // unforced callers here, forced ones on `forcing` below, and between them
@@ -333,8 +335,8 @@ export function createCore(deps: CoreDeps): Core {
    * that started before the change publishes nothing when it lands.
    *
    * `building` collapses concurrent callers onto one walk, which is right while
-   * the vault is still — but M4 gave the graph readers that run *outside* the
-   * lock (§9's pane calls `getGraph`, `computePPR` and `inspect` while a compile
+   * the vault is still — but the pane has graph readers that run *outside* the
+   * lock (the pane calls `getGraph`, `computePPR` and `inspect` while a compile
    * runs). Without this, a rebuild the pane started before a compile's writes
    * was still in flight when the compile finished, and the compile's own
    * `rebuildGraph()` adopted it: a snapshot missing every page that compile had
@@ -425,7 +427,7 @@ export function createCore(deps: CoreDeps): Core {
   // `deps` is passed through, not copied. The plugin mutates its settings
   // object in place and this runs once in `onload()`, so a snapshot here would
   // freeze the API key as it stood at load — invariant 9 requires it be read
-  // when the call is made. Each run makes §17's numbers safe for itself.
+  // when the call is made. Each run makes the settings numbers safe for itself.
   return {
     compile: async (options: CompileOptions = {}) => {
       // Two signals, because a walk can overlap the phase from either side: a
@@ -453,7 +455,7 @@ export function createCore(deps: CoreDeps): Core {
       } finally {
         writes.end();
       }
-      // "and after compile" (§7.1). A declined preview changed nothing, so
+      // "and after compile". A declined preview changed nothing, so
       // there is nothing to rebuild from.
       if (!result.cancelled) {
         // Retire first: a build begun before these writes cannot describe them,
@@ -481,7 +483,7 @@ export function createCore(deps: CoreDeps): Core {
       return result;
     },
     ask: (question: string) => lock.run("ask", () => runAsk(deps, question)),
-    // Outside the lock: no model calls, no compile, and §8.4 ends at a notice.
+    // Outside the lock: no model calls, no compile, and filing ends at a notice.
     fileBack: (answerPath: string) => fileBack(deps.fs, answerPath),
     healthCheck: () =>
       lock.run("health check", () =>
@@ -523,7 +525,7 @@ export function createCore(deps: CoreDeps): Core {
       });
     },
     // Outside the lock, like `computePPR` and for the same reason: it writes
-    // nothing, and §9's pane is never blocked by the lock.
+    // nothing, and the pane is never blocked by the lock.
     inspect: async (question: string, options?: InspectOptions) =>
       runInspect(
         deps,
@@ -536,8 +538,8 @@ export function createCore(deps: CoreDeps): Core {
       return () => listeners.delete(callback);
     },
     // Deliberately outside the lock: it does no work and writes nothing, so it
-    // can answer while a compile runs — the same reason §9's pane is never
-    // blocked by the lock. §8.1's flow does not use it; compile's own confirm
+    // can answer while a compile runs — the same reason the pane is never
+    // blocked by the lock. Compile does not use it; its own confirm
     // callback holds the lock across preview → confirm → work.
     previewCompile: () => runPreview(deps),
     get busyWith(): OperationName | null {
@@ -547,18 +549,18 @@ export function createCore(deps: CoreDeps): Core {
 }
 
 /**
- * §9's query inspection: §7.4 steps 1–3 over the graph the pane is showing.
+ * Query inspection: seeds and ranking over the graph the pane is showing.
  *
  * The first three stanzas are `runAsk`'s, deliberately in the same order and
  * reading the same settings, because the overlay claims to show what an ask
  * *would* retrieve. Two differences, both forced by what the pane is:
  *
  * It ranks against the snapshot it is handed rather than building a fresh one.
- * §9 says the pane "renders the last-built snapshot", and an overlay ranked
+ * The pane renders the last-built snapshot, and an overlay ranked
  * over a graph the user cannot see would light nodes that are not on screen.
  *
  * It stops after ranking. Assembly reads every candidate page off disk to fill
- * a context budget nothing here will spend, and §7.4 step 5's ungrounded branch
+ * a context budget nothing here will spend, and the ungrounded branch
  * is a property of an answer, not of a ranking.
  */
 async function runInspect(
@@ -572,7 +574,7 @@ async function runInspect(
 
   const pages = await loadPageTable(deps.fs);
 
-  // §7.4 step 1: the renderer that writes `wiki/_index.md`, so the seed call
+  // Step 1: the renderer that writes `wiki/_index.md`, so the seed call
   // sees the same text the user does.
   const indexText = renderIndex(pages);
   // Step 2, and invariant 12's one call. Everything after this is arithmetic.
@@ -589,7 +591,7 @@ async function runInspect(
   // that has to be true in both modes.
   //
   // The page table is read fresh, because the seed call needs `_index.md`'s
-  // text and §4's aliases, and neither survives on a `GraphNode`. So the two
+  // text and the aliases, and neither survives on a `GraphNode`. So the two
   // can disagree: a page written since the last rebuild is in `pages` and not
   // in `graph`. Left alone that showed up twice, differently — Mode B fed such
   // a seed to `computePPR`, which drops seeds it cannot find and returns an
@@ -598,17 +600,17 @@ async function runInspect(
   // ranking over the snapshot was supposed to prevent.
   //
   // Both are narrowed to the snapshot here. What the user does about a page
-  // that is missing is Refresh, which is the control §9 gives them.
+  // that is missing is Refresh, which is the control the pane gives them.
   const onGraph = new Set(graph.nodes.map((node) => node.path));
   const seeds = chosenSeeds.filter((path) => onGraph.has(path));
   const candidates = pages.filter((page) => onGraph.has(page.path));
 
-  // §7.3: the seed call runs in both modes; the mode governs ranking only.
+  // The seed call runs in both modes; the mode governs ranking only.
   const mode = modeOf(graph, deps.settings);
 
   if (mode !== "B") {
     const ranked = await rankModeA(deps.fs, candidates, seeds, chosen.keywords);
-    // §9 gives Mode A "seeds and lexical top-K without a PPR heat ramp": there
+    // Mode A overlays "seeds and lexical top-K without a PPR heat ramp": there
     // is no walk, so there is nothing for a scrubber to step through.
     return { mode, seeds, keywords: chosen.keywords, ranked };
   }
@@ -631,7 +633,7 @@ async function runInspect(
   };
 }
 
-/** §5's `previewCompile`. Every step here reads; none of them writes. */
+/** The scope preview. Every step here reads; none of them writes. */
 async function runPreview(input: CoreDeps): Promise<ScopePreview> {
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const manifest = await loadManifest(deps.fs, deps.manifestPath);
@@ -640,17 +642,17 @@ async function runPreview(input: CoreDeps): Promise<ScopePreview> {
   return cascadeScope(pages, await readCitations(deps.fs, pages), discovery);
 }
 
-/** §5's `ask`. §8.3 names what the caller needs back. */
+/** What an ask hands back to its caller. */
 export interface AnswerResult {
   /** Vault path of the note written. */
   path: string;
   mode: RetrievalMode;
   grounded: boolean;
-  /** Whether §8.2's follow-up round ran. */
+  /** Whether the follow-up round ran. */
   round2: boolean;
   /**
    * Logical model calls, which is what invariant 12 bounds at three — not
-   * transport attempts. §11's retries and its one repair recover a single
+   * transport attempts. Retries and the one repair retry recover a single
    * logical call; counting them here would report a violation whenever the
    * network hiccuped.
    */
@@ -658,7 +660,7 @@ export interface AnswerResult {
 }
 
 /**
- * §7.4's pipeline into §8.2's synthesis into §8.3's note.
+ * The retrieval pipeline into synthesis into the answer note.
  *
  * Invariant 11: "Answer notes are written atomically on success only; a failed
  * query writes nothing." Every model call happens, the whole note is rendered
@@ -667,14 +669,14 @@ export interface AnswerResult {
  * single-commit shape as the manifest.
  *
  * Invariant 12 bounds this at three calls: one seed selection, one synthesis,
- * and at most one more for §8.2's follow-up round.
+ * and at most one more for the follow-up round.
  */
 async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> {
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
   // Invariant 12 bounds *logical* calls: "ask = ≤ 3 calls". `stats().requests`
   // and `byTask` both count transport attempts — they increment together
-  // inside the retry loop — so neither is this number. §11's retries and its
+  // inside the retry loop — so neither is this number. The retries and the
   // one repair are recovery of a single logical call, not extra calls, and
   // reporting them as calls would make the invariant look violated whenever
   // the network hiccuped. Counted here, where the calls are made.
@@ -687,7 +689,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   const pages = await loadPageTable(deps.fs);
   const graph = await buildGraph({ fs: deps.fs, manifestPath: deps.manifestPath });
 
-  // §7.4 step 1: the same renderer that writes `wiki/_index.md`, so the seed
+  // Step 1: the same renderer that writes `wiki/_index.md`, so the seed
   // call and the file the user reads can never drift apart.
   const indexText = renderIndex(pages);
   const chosen = await called(
@@ -697,12 +699,12 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     }),
   );
 
-  // §7.4 step 2: force-includes are additive to whatever the model chose.
+  // Step 2: force-includes are additive to whatever the model chose.
   const seedPaths = [...new Set([...chosen.seeds, ...forceIncludeSeeds(question, pages)])].sort(
     comparePaths,
   );
 
-  // §7.3: the seed call runs in both modes; the mode governs ranking only.
+  // The seed call runs in both modes; the mode governs ranking only.
   const mode = modeOf(graph, deps.settings);
   const ranked =
     mode === "B"
@@ -716,12 +718,12 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     deps.settings.assemblyCap,
   );
 
-  // §7.4 step 5: "Zero seeds and zero lexical candidates → skip retrieval;
+  // Step 5: "Zero seeds and zero lexical candidates → skip retrieval;
   // synthesis runs from model knowledge and the answer is labeled ungrounded."
   const grounded = assembly.nodes.length > 0;
   let reply = await called(synthesize(provider, question, assembly.nodes));
 
-  // §8.2's follow-up round: "identical in both modes: lexical-score the
+  // The follow-up round: "identical in both modes: lexical-score the
   // missing-information strings (as keywords) over wiki pages, take the
   // highest scorers not already assembled, append them under the remaining
   // context budget, and synthesize again with the union. No second seed call,
@@ -729,7 +731,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   let round2 = false;
   if (reply.missing.length > 0 && deps.settings.followUpEnabled) {
     const already = new Set(assembly.nodes.map((node) => node.path));
-    // Wiki pages only, whatever the mode ranked — §8.2 says so, and it is why
+    // Wiki pages only, whatever the mode ranked — by design, and it is why
     // this uses the lexical scorer rather than re-running the walk.
     const candidates = await rankModeA(
       deps.fs,
@@ -741,7 +743,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     const room = deps.settings.assemblyCap - assembly.nodes.length;
 
     if (candidates.length > 0 && remaining > 0 && room > 0) {
-      // Whole pages only. §7.4 lets a page over the *whole* budget be
+      // Whole pages only. Assembly lets a page over the *whole* budget be
       // tail-truncated; this round packs into what the first left, and a
       // remnant that holds no page whole must append nothing — a page cut to
       // a few characters would still count as "something new to read" below
@@ -768,7 +770,7 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     mode,
     grounded,
     // The *last* synthesis's list: `reply` is reassigned by the follow-up
-    // round above, and §8.2's one expansion is the wiki's own attempt to close
+    // round above, and the one expansion is the wiki's own attempt to close
     // the gap — so what is still missing afterwards is what it could not.
     missing: cleanMissing(reply.missing),
     body: reply.body,
@@ -779,10 +781,10 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     pages,
     trace: {
       mode,
-      // Named the way §8.3's example names them, and the way §4 spells a link:
+      // Named the way a link is spelled:
       // a wiki page by its title, a raw source by its path. `top` already did;
       // seeds carried vault paths, so one four-line block used two vocabularies
-      // and §5's shared `parseTrace` had to resolve both.
+      // and the shared `parseTrace` had to resolve both.
       seeds: seedPaths.map((path) => labelFor(path, pages)),
       round2,
       unparsed: [],
@@ -806,13 +808,13 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
   };
 }
 
-/** §4's link form for a node: a wiki page by title, anything else by path. */
+/** The link form for a node: a wiki page by title, anything else by path. */
 function labelFor(path: string, pages: readonly PageMeta[]): string {
   return pages.find((page) => page.path === path)?.title ?? path;
 }
 
 /**
- * §8.4's suffix idiom, applied to the answer folder: two questions asked in one
+ * The collision suffix, applied to the answer folder: two questions in one
  * minute would otherwise name one file, and the second would overwrite the
  * first.
  */
@@ -829,7 +831,7 @@ async function freeAnswerPath(fs: FsAdapter, wanted: string): Promise<string> {
  * A citing source whose readable markdown cannot be located — it is in the
  * vault but outside what compile can process, so no retry of anyone else's
  * work would produce it. Distinguished from an ordinary failure because the
- * §6.5 citer set cannot be satisfied at all, rather than not yet.
+ * citer set cannot be satisfied at all, rather than not yet.
  */
 class UnreadableCiter extends Error {
   constructor(path: string) {
@@ -855,7 +857,7 @@ interface NormalizedSource {
  * Wraps a provider so every `complete()` is counted once.
  *
  * Sits *above* the wrapper, never below it, so invariant 10 still holds — the
- * transport is untouched and §11's retries happen inside the call being
+ * transport is untouched and the retries happen inside the call being
  * counted. That is what makes the tally logical rather than transport: one
  * count per call the worklist asked for, whatever the network did with it.
  */
@@ -873,7 +875,7 @@ function countingProvider(inner: LLMProvider, onCall: () => void): LLMProvider {
 /**
  * How `runCompile` tells the façade that the vault is being rewritten.
  *
- * §7.1's graph is read from `wiki/` and the manifest, and the manifest is
+ * The graph is read from `wiki/` and the manifest, and the manifest is
  * committed last — so for the whole write phase those two describe different
  * moments, and a walk that reads both sees a vault that never existed. The
  * façade closes that by retiring any walk which overlaps the phase; it cannot
@@ -897,8 +899,8 @@ async function runCompile(
   const emit = options.onProgress ?? (() => {});
   const wrapped = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
   // Invariant 12 bounds compile by "S inventory calls + P page-generation calls
-  // (+1 vision call per orphan image)" — a function of the worklist. §11's
-  // retries and its one repair are transport, not worklist, so a `requests`
+  // (+1 vision call per orphan image)" — a function of the worklist. The
+  // retries and the one repair are transport, not worklist, so a `requests`
   // delta reports a number the invariant never promised: one source whose
   // inventory needs repairing reads 2, and a 503 storm reads more still. This
   // is the counter `runAsk` was given for the same reason; compile kept the
@@ -920,10 +922,10 @@ async function runCompile(
   let pages = await loadPageTable(deps.fs);
   let citations = await readCitations(deps.fs, pages);
 
-  // ── Scope preview (§6.6, §8.1) ─────────────────────────────────────────
+  // ── Scope preview ─────────────────────────────────────────
   // "with scope preview when the diff includes deletions or modifications".
   // This sits inside the lock the façade already holds, so the lock spans
-  // preview → confirm → work exactly as §8.1 requires, and a second invocation
+  // preview → confirm → work exactly as required, and a second invocation
   // during the modal gets invariant 2's busy notice.
   if ((discovery.deleted.length > 0 || discovery.modified.length > 0) && options.confirm) {
     const preview = cascadeScope(pages, citations, discovery);
@@ -952,12 +954,12 @@ async function runCompile(
   let wrote = false;
 
   // Departed sources whose cascade could not be completed, and why. Their
-  // manifest entry is kept at the end, so §6.2's rules see the path leave
+  // manifest entry is kept at the end, so the four rules see the path leave
   // again next compile and the cascade retries — the same shape invariant 3
   // gives a failed ingest.
   const blockedDeleted = new Map<string, string[]>();
 
-  // ── Sweep (§6.6) ───────────────────────────────────────────────────────
+  // ── Sweep ───────────────────────────────────────────────────────
   // The markdown of sources that left the vault. Before the carry and before
   // normalization, so a derivative location a departed source was holding is
   // free for whoever wants it in this very run.
@@ -971,12 +973,12 @@ async function runCompile(
   for (const entry of swept.blocked) block(blockedDeleted, entry.path, entry.reason);
   reported.push(...swept.reported);
 
-  // ── Carry (§6.2) ───────────────────────────────────────────────────────
-  // A renamed source keeps its derivative rather than rebuilding it: §6.2 says
-  // a derivative persists until its original changes, and a rename does not
+  // ── Carry ───────────────────────────────────────────────────────
+  // A renamed source keeps its derivative rather than rebuilding it: a
+  // derivative persists until its original changes, and a rename does not
   // change the original — identical bytes are how it was detected. Carrying it
-  // costs no model call and preserves a hand-repaired extraction, which §6.2
-  // calls the sanctioned repair path.
+  // costs no model call and preserves a hand-repaired extraction, which is
+  // the sanctioned repair path.
   //
   // Every outcome is decided here, in one pass, before any extraction (V).
   // Nothing is written to the manifest yet: a carry that cannot complete simply
@@ -990,7 +992,7 @@ async function runCompile(
   );
 
   // ── Normalize ──────────────────────────────────────────────────────────
-  // Serial, and deliberately so: normalization writes files, and the §11
+  // Serial, and deliberately so: normalization writes files, and the
   // concurrency budget of 2 is for model calls.
   //
   // A rename that could not be carried joins the worklist here. It may
@@ -1073,7 +1075,7 @@ async function runCompile(
   }
 
   // ── Renames ────────────────────────────────────────────────────────────
-  // §6.2 skips *regeneration* for a rename, not bookkeeping: §4 makes the
+  // A rename skips *regeneration*, not bookkeeping: the
   // vault path a source's identity, so every reference to the old path has to
   // follow it. Repointing is a pure text rewrite — no model call — and without
   // it the source page keeps a dead `source:` key, is never found again by the
@@ -1089,9 +1091,9 @@ async function runCompile(
   }
 
   // ── Source pages ───────────────────────────────────────────────────────
-  // Assembled by code from Call A's source_summary — no Call B (§6.5).
+  // Assembled by code from Call A's source_summary — no Call B.
   //
-  // These are named first because §4 requires titles unique across all of
+  // These are named first because titles must be unique across all of
   // wiki/: allocating them before the merge lets the merge see the names they
   // took, so a concept the model happens to name after a filename cannot end
   // up sharing a title with its own source page.
@@ -1111,7 +1113,7 @@ async function runCompile(
       aliases: existing?.aliases ?? [],
       summary: inventory.sourceSummary,
       body: inventory.sourceSummary,
-      // §4: "A source page's block cites its own raw file."
+      // A source page's block cites its own raw file.
       citers: [entry.source.path],
       sourcePath: entry.source.path,
     });
@@ -1123,7 +1125,7 @@ async function runCompile(
     items: inventories.get(entry.source.path)?.items ?? [],
   }));
 
-  // §6.5: "Also queued: every page citing a modified/deleted source." §6.6's
+  // Also queued: every page citing a modified/deleted source. The
   // cascade is exactly this queue plus the zero-citer rule below — modification
   // and deletion use one machinery, and one pass over the page table is the
   // visited set, since a page cited twice enters the queue once.
@@ -1176,7 +1178,7 @@ async function runCompile(
     const cached = bodies.get(path);
     if (cached !== undefined) return cached;
     const target = readable.get(path) ?? (await readableFromManifest(deps.fs, manifest, path));
-    // §6.5 gives Call B "the full normalized bodies of *all* citing sources".
+    // Call B gets "the full normalized bodies of *all* citing sources".
     // A citer whose markdown cannot be found is not an empty source: passing
     // "" would have the model write a page grounded in a subset while code
     // wrote a citation block claiming the lot, and `wiki/` is rewritten
@@ -1197,7 +1199,7 @@ async function runCompile(
     return text;
   };
 
-  // §6.6's "surviving citing sources": the file is still in the vault. Being
+  // "Surviving citing sources": the file is still in the vault. Being
   // present is enough — a source that failed to normalize or inventory this run
   // has not gone anywhere, and deleting the page it cites because one run went
   // badly is not recoverable the way retrying an ingest is.
@@ -1247,7 +1249,7 @@ async function runCompile(
     })),
   ];
 
-  // §6.6: "a page with zero remaining source citations is deleted". The citer
+  // A page with zero remaining source citations is deleted. The citer
   // union is what decides it, which is what makes the preview's list a "may":
   // a modified or new source whose inventory named this page again has already
   // added itself above, and the page regenerates instead.
@@ -1309,7 +1311,7 @@ async function runCompile(
     const reason = `page generation failed for ${result.target.title} — ${result.reason}`;
     // A citer Luka cannot read is not something re-inventorying anyone would
     // fix — the file is in the vault but outside what compile can process, and
-    // §6.1 already names it in a skip notice. Blocking the page's *other*
+    // discovery already names it in a skip notice. Blocking the page's *other*
     // citers would leave them unmanifested and re-inventoried on every compile
     // for as long as it sits there. The page keeps the text it has.
     if (result.unreadable) failed.push({ path: result.target.path, reason });
@@ -1332,11 +1334,11 @@ async function runCompile(
   ]);
 
   // A page title comes from the model, and `sanitizeTitle` removes only the
-  // characters §4 names — not every name a filesystem will refuse (`?`, `*`,
+  // characters it names — not every name a filesystem will refuse (`?`, `*`,
   // a reserved Windows name, or simply one too long for the host). An
   // unguarded write would throw straight out of compile, past the manifest
   // step, discarding the record for every source that succeeded and making the
-  // next run re-spend every model call it already paid for. §11's rule is that
+  // next run re-spend every model call it already paid for. The rule is that
   // a failure costs one source, so this degrades the same way.
   let pagesWritten = 0;
   for (const page of toWrite) {
@@ -1354,7 +1356,7 @@ async function runCompile(
     }
   }
 
-  // ── Delete (§6.6) ──────────────────────────────────────────────────────
+  // ── Delete ──────────────────────────────────────────────────────
   // After the writes and before the index, so the index is re-derived from a
   // page table that no longer contains them. Doomed and written pages are
   // disjoint: entity/concept pages reach `toWrite` only with a live citer, and
@@ -1372,12 +1374,12 @@ async function runCompile(
     }
   }
 
-  // §6.5 ends every compile by regenerating the index, so it is always
+  // Every compile ends by regenerating the index, so it is always
   // re-derived from the page table on disk — never conditioned on whether this
   // run happened to write a page. It is only *written* when the bytes differ,
-  // which is what keeps an unchanged vault at zero writes (§6.2).
+  // which is what keeps an unchanged vault at zero writes.
   const table = await loadPageTable(deps.fs);
-  // Nothing to index and no index yet means an empty vault: §6.5's step is
+  // Nothing to index and no index yet means an empty vault: the step is
   // vacuous there, and writing a heading-only file would create wiki/ for a
   // user who has never compiled anything.
   if (table.length > 0 || (await deps.fs.exists(INDEX_PATH))) {
@@ -1397,7 +1399,7 @@ async function runCompile(
         wrote = true;
       }
     } catch (error) {
-      // §6.5 re-derives the index from the page table every compile, so the
+      // The index is re-derived from the page table every compile, so the
       // next run rebuilds it from scratch; nothing has to be remembered. That
       // is the definition of `reported` rather than `failed` — and it matters
       // to what the user is told, because `failed` is rendered as "skipped
@@ -1410,7 +1412,7 @@ async function runCompile(
   // Built here, once, from outcomes that are already complete. Nothing above
   // has touched it, so every failure recovery in this whole compile is the same
   // one thing: the entry that was never rewritten still describes the vault as
-  // it was, and §6.2 presents the same work again next run. There is nothing to
+  // it was, and the next run presents the same work again. There is nothing to
   // withdraw, restore, or roll back.
   const next: IngestManifest = { ...manifest };
   const settled = new Map(ready.map((entry) => [entry.source.path, entry]));
@@ -1427,7 +1429,7 @@ async function runCompile(
   }
 
   // A departure is only recorded once its cascade completed. Leaving the path
-  // in makes §6.2 see it leave again next compile, which re-runs the cascade
+  // in makes the next compile see it leave again, which re-runs the cascade
   // idempotently — retry with no extra state, exactly as a failed ingest
   // retries by not being manifested.
   for (const path of discovery.deleted) {
@@ -1442,15 +1444,15 @@ async function runCompile(
       // Deliberately not checking `blockedBy`. A page can fail while naming a
       // carried rename among its citers, but a page is only ever *queued* by a
       // source that was added, modified or deleted — never by a rename, which
-      // §6.2 exempts from regeneration. So the source that owes this page is
+      // is exempt from regeneration. So the source that owes this page is
       // un-manifested in the usual way and brings it back on its own.
       // Withholding the rename as well buys the page nothing it does not
       // already have, and costs the carry: it would leave the old entry naming
       // a path the carry had already vacated, so the retry could not recognise
-      // its own work and would re-extract over §6.2's sanctioned repair.
+      // its own work and would re-extract over the sanctioned repair.
       // Withholding the entry here instead threw away a carry that had already
       // moved the file, leaving the old entry naming a vacated path so the
-      // retry could not recognise its own work and re-extracted over §6.2's
+      // retry could not recognise its own work and re-extracted over the
       // sanctioned repair.
       delete next[rename.from];
       next[to] = entryFor(rename.source.hash, outcome.derivative);
@@ -1478,7 +1480,7 @@ async function runCompile(
     // comes from the `ready` loop below, so nothing is added here.
     //
     // Not settled at all means the re-extraction failed too, and that failure
-    // is already reported with the promise of a retry — M2d's rule holds, one
+    // is already reported with the promise of a retry — the rule holds: one
     // problem, one notice. Saying separately that the carry fell back would
     // describe a detour that led nowhere.
     const done = settled.get(to);
@@ -1563,7 +1565,7 @@ async function runCompile(
   };
 }
 
-/** §8.1's declined preview: the diff, and the fact that nothing was done. */
+/** A declined preview: the diff, and the fact that nothing was done. */
 function cancelled(discovery: DiscoveryResult): CompileResult {
   return {
     added: discovery.added.length,
@@ -1587,9 +1589,9 @@ function cancelled(discovery: DiscoveryResult): CompileResult {
  * Points every wiki reference at a renamed source's new path, without a model
  * call. Returns whether anything was written.
  *
- * Only the two places code owns are touched: §4's `source:` frontmatter key and
+ * Only the two places code owns are touched: the `source:` frontmatter key and
  * the citation block. The model's prose is left exactly as it is — a rename is
- * not a reason to rewrite a page body, and §6.2 says regeneration is skipped.
+ * not a reason to rewrite a page body, and regeneration is skipped for one.
  */
 async function repointRenames(
   fs: FsAdapter,
@@ -1667,7 +1669,7 @@ function toMeta(page: PageToWrite): PageMeta {
 
 /**
  * The readable markdown of a source this run did not touch — needed when an
- * unchanged source still cites a page being regenerated (§6.5's "*all* citing
+ * unchanged source still cites a page being regenerated ("*all* citing
  * sources").
  *
  * The entry names the file, so nothing is guessed. The old version derived a
@@ -1686,7 +1688,7 @@ async function readableFromManifest(
   // of the manifest object and be read as a manifested source.
   if (!Object.hasOwn(manifest, path)) return null;
   const entry = manifest[path] as ManifestEntry;
-  // Where §7.1 says the markdown is — including its `null`s, which are a
+  // Where the markdown is — including its `null`s, which are a
   // pending source (gone from the vault) and a converting source whose
   // derivative was never located. Handing back the source itself for the
   // second would put a PDF's raw bytes into a Call B prompt under the label of

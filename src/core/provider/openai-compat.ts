@@ -1,5 +1,5 @@
-// §11's second transport: "(M5: OpenAI-compatible adapter, base URL
-// configurable.)"
+// The second transport: an OpenAI-compatible adapter with a configurable
+// base URL.
 //
 // Chat Completions rather than Messages, and the base URL is a setting because
 // the point of the shape is that many servers speak it — OpenAI itself, a
@@ -25,7 +25,7 @@ import {
 import { ProviderError, type RawProvider, type RawRequest } from "./types";
 
 /**
- * Which field carries §11's per-task cap.
+ * Which field carries the per-task cap.
  *
  * Current OpenAI models reject `max_tokens` and name `max_completion_tokens`
  * in the 400; most other servers speaking this shape know only the older name.
@@ -85,7 +85,7 @@ export function createOpenAICompatProvider(
 /**
  * The Chat Completions endpoint under a configured root.
  *
- * Refused rather than repaired when it does not parse: §17's normalization
+ * Refused rather than repaired when it does not parse: settings normalization
  * deliberately leaves a malformed value as the user typed it, because
  * substituting OpenAI's address for a mistyped local one would send their key
  * somewhere they never named. This is where that decision is paid — before any
@@ -148,14 +148,14 @@ function defaultTokenField(url: string): TokenField {
  *
  * Surfaced as a *retryable* error rather than handled inside the transport, so
  * the wrapper does the retrying: the attempt is counted like every other one
- * (M2a: "the call counter counts transport attempts"), and no request happens
+ * (the call counter counts transport attempts), and no request happens
  * that the layer above cannot see. `retryAfterMs: 1` because the ladder's
  * first rung is a second and there is nothing to wait for — the next request
  * differs from this one.
  *
  * It costs one unit of that call's retry budget, so with `maxRetries` at 0 the
- * first call of a run against such a server fails. §17's default of 2 covers
- * it; recorded in BUILD-NOTES rather than worked around.
+ * first call of a run against such a server fails. The default of 2 covers
+ * it; recorded as a known limitation rather than worked around.
  *
  * Learning runs one way only: `max_tokens` → `max_completion_tokens`, never
  * back. A multi-model gateway whose next model wants the older name therefore
@@ -163,7 +163,7 @@ function defaultTokenField(url: string): TokenField {
  * one — the memo is per-transport and a transport is per operation, and
  * invariant 3 only manifests sources that succeeded, so each compile starts
  * from the host's default again and carries the sources it can. Accepted, and
- * recorded as a limitation (BUILD-NOTES S74) rather than fixed, because the
+ * recorded as a known limitation rather than fixed, because the
  * reverse direction needs a second signal this code cannot read: a 400 naming
  * `max_completion_tokens` is equally consistent with the field being wrong and
  * with its *value* being wrong.
@@ -232,7 +232,7 @@ function extractText(bytes: Uint8Array): string {
   }
   const choice = choices[0] as ChatChoice;
 
-  // §11 caps max_tokens per task, and a reply that hit the cap is a fragment.
+  // max_tokens is capped per task, and a reply that hit the cap is a fragment.
   // Same message as the Anthropic transport's, because it is the same fact and
   // it reaches the user through the same Notice.
   if (choice.finish_reason === "length") {

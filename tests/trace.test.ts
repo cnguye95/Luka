@@ -1,5 +1,5 @@
-// §8.3's retrieval trace. §14's minimum set names "trace write/parse
-// round-trip"; §9's pane replays a trace it did not write, so recovering
+// The retrieval trace. The minimum test set names "trace write/parse
+// round-trip"; the pane replays a trace it did not write, so recovering
 // exactly what was rendered is the property that matters.
 import { describe, expect, it } from "vitest";
 import {
@@ -12,9 +12,9 @@ import {
 } from "../src/core/answer/trace";
 import type { GraphSnapshot } from "../src/core/types";
 
-// §8.3, from the spec rather than from the code under test.
-const SPEC_TOP_LIMIT = 10;
-const SPEC_DECIMALS = 4;
+// Stated here rather than imported from the code under test.
+const FIXED_TOP_LIMIT = 10;
+const FIXED_DECIMALS = 4;
 
 const trace = (over: Partial<Trace> = {}): Trace => ({
   mode: "B",
@@ -28,9 +28,9 @@ const trace = (over: Partial<Trace> = {}): Trace => ({
   ...over,
 });
 
-describe("what §8.3's example shows is what is written", () => {
+describe("what the trace format shows is what is written", () => {
   it("renders the four fields in order, inside the fences", () => {
-    // §8.3 shows the two lists inline and comma-separated; they are written one
+    // The two lists were once inline and comma-separated; they are written one
     // entry to a line instead, which is the recorded deviation that makes the
     // grammar unambiguous.
     expect(writeTrace(trace())).toBe(
@@ -55,7 +55,7 @@ describe("what §8.3's example shows is what is written", () => {
 
     expect(rendered).toContain("[[X]] 0.3333");
     expect(rendered.split("0.3333")[1]?.startsWith("3")).toBe(false);
-    expect(SPEC_DECIMALS).toBe(4);
+    expect(FIXED_DECIMALS).toBe(4);
   });
 
   it("lists at most ten top entries, however many were assembled", () => {
@@ -67,7 +67,7 @@ describe("what §8.3's example shows is what is written", () => {
 
     const rendered = writeTrace(trace({ top: many }));
 
-    expect([...rendered.matchAll(/\[\[P\d+\]\]/g)]).toHaveLength(SPEC_TOP_LIMIT);
+    expect([...rendered.matchAll(/\[\[P\d+\]\]/g)]).toHaveLength(FIXED_TOP_LIMIT);
     expect(rendered).not.toContain("[[P10]]");
   });
 
@@ -79,7 +79,7 @@ describe("what §8.3's example shows is what is written", () => {
   });
 });
 
-describe("round trip (§14)", () => {
+describe("round trip", () => {
   it("recovers exactly what was written", () => {
     const original = trace();
 
@@ -142,7 +142,7 @@ describe("the block behaves like every other sentinel block", () => {
   });
 
   it("leaves a user's own fenced block alone when it has no heading", () => {
-    // A filed answer note lives under `raw/` and is a user's to edit (§8.4), so
+    // A filed answer note lives under `raw/` and is a user's to edit, so
     // `parseTrace` is run over text nobody promised Luka wrote. A complete but
     // heading-less pair is not this module's block; recognizing it would strip
     // the user's prose out of their own file.
@@ -177,7 +177,7 @@ describe("the block behaves like every other sentinel block", () => {
   });
 });
 
-describe("§8.4's filing strips the trace and nothing else", () => {
+describe("filing strips the trace and nothing else", () => {
   it("keeps the sources block", () => {
     const sources = "<!-- sources:start -->\n## Sources consulted\n- [[Alpha]]\n<!-- sources:end -->";
     const note = `The answer.\n\n${sources}\n\n${writeTrace(trace())}\n`;
@@ -191,8 +191,8 @@ describe("§8.4's filing strips the trace and nothing else", () => {
   });
 });
 
-describe("resolving a trace's labels back onto graph nodes (§9's replay)", () => {
-  // `labelFor` writes §4's link form — a wiki page by title, anything else by
+describe("resolving a trace's labels back onto graph nodes (replay)", () => {
+  // `labelFor` writes the link form — a wiki page by title, anything else by
   // path — so replay has to reverse exactly that, against whatever graph exists
   // when the pane runs rather than the one the answer saw.
   const node = (path: string, title: string, kind: "concept" | "raw") => ({
@@ -248,7 +248,7 @@ describe("resolving a trace's labels back onto graph nodes (§9's replay)", () =
   });
 
   it("resolves a title whose case has changed since the answer was written", () => {
-    // `handleOf` is §4's own normalization, so replay agrees with the identity
+    // `handleOf` is the namespace's fold, so replay agrees with the identity
     // rules that decided the page's name in the first place.
     const resolved = resolveTraceNodes(trace({ seeds: ["ALPHA"], top: [] }), graph);
 
@@ -346,7 +346,7 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
   });
 
   it("still reads a note written in the inline grammar, losses and all", () => {
-    // Notes written before the grammar changed exist, and §9 replays them. The
+    // Notes written before the grammar changed exist, and replay reads them. The
     // comma reading is kept for exactly those, with the loss it always had —
     // counted rather than silent, which is what `unparsed` is for.
     const old = [
@@ -367,8 +367,8 @@ describe("the trace list grammar is ambiguous, and the parser picks a side", () 
   });
 
   it("reports the fragments in the replay's unresolved count", () => {
-    // §9's replay: the note visibly lists three seeds. Lighting two and
-    // reporting nothing missing is the failure S5b names.
+    // Replay: the note visibly lists three seeds. Lighting two and
+    // reporting nothing missing is the failure this count exists to prevent.
     const written = writeTrace(trace({ seeds: ["Alpha", "Newton, Isaac", "Beta"], top: [] }));
     const parsed = parseTrace(written).trace as Trace;
     const graph: GraphSnapshot = {

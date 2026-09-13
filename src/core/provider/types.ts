@@ -1,4 +1,4 @@
-// Provider layer types (handoff.md §11).
+// Provider layer types.
 //
 // Two layers, deliberately separated: `RawProvider` is transport — it speaks
 // one vendor's API over the injected HttpAdapter and knows nothing about
@@ -13,7 +13,7 @@ export interface ProviderImage {
   data: Uint8Array;
 }
 
-/** §11's signature, plus `images` — the vision task cannot exist without it. */
+/** A completion request. `images` is what makes the vision task possible. */
 export interface CompletionRequest {
   task: ProviderTask;
   system: string;
@@ -86,7 +86,7 @@ export class ProviderError extends Error {
   }
 }
 
-/** §11's per-task max_tokens caps. Fixed by the spec, not settings. */
+/** The per-task max_tokens caps. Fixed, not settings. */
 export const MAX_TOKENS_BY_TASK: Record<ProviderTask, number> = {
   inventory: 2000,
   "seed-selection": 500,

@@ -1,8 +1,7 @@
 /**
  * Maps `items` through `fn` with at most `limit` in flight, preserving input
- * order in the result. Used by inline-image localization (§6.3, fixed cap 4);
- * compile's model-call fan-out (§11, concurrency 2) becomes its second
- * consumer at M2c.
+ * order in the result. Used by inline-image localization (fixed cap 4);
+ * compile's model-call fan-out (concurrency 2) is its second consumer.
  */
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],

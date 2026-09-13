@@ -2,7 +2,7 @@
 //
 // Runs ONLY when ANTHROPIC_API_KEY is set:
 //   ANTHROPIC_API_KEY=sk-ant-... npx vitest run tests/compile-live.test.ts
-// CI never sets it. This is the functionality test for M2c: it proves that
+// CI never sets it. This is the functionality test for compile: it proves that
 // real model replies — not stub shapes — survive Call A's JSON validation,
 // the merge, Call B, and the post-process into a wiki that parses back.
 import { mkdtemp, rm } from "node:fs/promises";

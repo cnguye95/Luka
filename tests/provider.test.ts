@@ -73,7 +73,7 @@ describe("wrapper — routing and caps", () => {
     ]);
   });
 
-  it("pins §11's cap table to the spec's literal numbers", () => {
+  it("pins the cap table to its literal numbers", () => {
     expect(MAX_TOKENS_BY_TASK).toEqual({
       inventory: 2000,
       "seed-selection": 500,
@@ -136,7 +136,7 @@ describe("wrapper — routing and caps", () => {
   });
 });
 
-describe("wrapper — retries and backoff (§11)", () => {
+describe("wrapper — retries and backoff", () => {
   it("retries a retryable failure and succeeds", async () => {
     const { provider, raw, sleeps } = build([
       { error: retryable(429) },
@@ -262,7 +262,7 @@ describe("wrapper — retries and backoff (§11)", () => {
   });
 });
 
-describe("wrapper — JSON tasks (§11)", () => {
+describe("wrapper — JSON tasks", () => {
   it("returns the parsed object on the first try", async () => {
     const { provider, raw } = build([{ text: ' {"seeds": ["a"], "keywords": []} ' }]);
     const result = await provider.complete({
@@ -400,7 +400,7 @@ describe("wrapper — guards and the call counter (invariants 9, 12)", () => {
     expect(stats.byTask.vision).toBe(0);
   });
 
-  it("reports zero before any call — the shape M2's zero-work assertion needs", () => {
+  it("reports zero before any call — the shape the zero-work assertion needs", () => {
     const { provider } = build([]);
     expect(provider.stats()).toEqual({
       requests: 0,
@@ -448,7 +448,7 @@ describe("wrapper + anthropic end to end over scripted HTTP", () => {
   });
 });
 
-// §12's provider selector, from the wrapper down through the real transport.
+// The provider selector, from the wrapper down through the real transport.
 // The wrapper is the thing that must not care which one it is holding.
 describe("wrapper + openai-compatible end to end over scripted HTTP", () => {
   const CHAT_OK = jsonRoute(200, {
@@ -529,7 +529,7 @@ describe("wrapper + openai-compatible end to end over scripted HTTP", () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it("forces a JSON task to temperature 0 through this transport too (§11)", async () => {
+  it("forces a JSON task to temperature 0 through this transport too", async () => {
     // The wrapper sets it, but nothing asserted it survived the second
     // transport's body builder — and a JSON task is what every compile's
     // inventory and seed calls are, so this is the temperature that travels.

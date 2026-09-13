@@ -1,4 +1,4 @@
-// `ask` end to end (handoff.md §7–§8), over an in-memory vault with a stub
+// `ask` end to end, over an in-memory vault with a stub
 // provider at the wrapper layer.
 //
 // The invariants that only become observable here: 2 (the lock refuses a
@@ -41,7 +41,7 @@ function traceList(note: string, field: "seeds" | "top"): string[] {
 }
 const ASKED = new Date("2026-08-20T10:07:00Z");
 
-/** §8.2's reply shape: prose, then exactly one fenced JSON block. */
+/** The synthesis reply shape: prose, then exactly one fenced JSON block. */
 const answerWith = (body: string, missing: string[] = []) =>
   `${body}\n\n\`\`\`json\n${JSON.stringify({ missing_information: missing })}\n\`\`\``;
 
@@ -82,15 +82,15 @@ async function compiled(): Promise<{ fs: MemFs; provider: StubProvider }> {
   return { fs, provider };
 }
 
-describe("a grounded answer (§8.3)", () => {
-  it("writes the note §8.3 describes", async () => {
+describe("a grounded answer", () => {
+  it("writes the answer note", async () => {
     const { fs, provider } = await compiled();
     const result = await core(fs, provider).ask("How does ranking work?");
 
     expect(result.path).toBe("answers/2026-08-20-1007 how-does-ranking-work.md");
     const note = fs.text(result.path);
 
-    // Code-written frontmatter, in §4's key order (invariant 5).
+    // Code-written frontmatter, in the fixed key order (invariant 5).
     expect(note.startsWith("---\nkind: answer\n")).toBe(true);
     expect(note).toContain("question: How does ranking work?");
     expect(note).toContain("asked: '2026-08-20T10:07:00.000Z'");
@@ -106,11 +106,11 @@ describe("a grounded answer (§8.3)", () => {
     expect(result.grounded).toBe(true);
   });
 
-  it("records the mode it ranked in on the answer (§7.3)", async () => {
+  it("records the mode it ranked in on the answer", async () => {
     const { fs, provider } = await compiled();
     const result = await core(fs, provider).ask("How does ranking work?");
 
-    // A one-source vault is far under §7.3's 20 nodes.
+    // A one-source vault is far under the predicate's 20 nodes.
     expect(result.mode).toBe("A");
     expect(fs.text(result.path)).toContain("- mode: A");
   });
@@ -143,7 +143,7 @@ describe("invariant 12: ask makes at most three model calls", () => {
     expect(result.modelCalls).toBe(2);
   });
 
-  it("still runs the seed call in Mode A (§7.3)", async () => {
+  it("still runs the seed call in Mode A", async () => {
     // "The seed call runs in both modes" — Mode A does not save a call.
     const { fs } = await compiled();
     const provider = new StubProvider(replyFor);
@@ -155,7 +155,7 @@ describe("invariant 12: ask makes at most three model calls", () => {
   });
 });
 
-describe("§7.4 step 5: an ungrounded answer", () => {
+describe("an ungrounded answer", () => {
   it("labels it, warns first, and still answers", async () => {
     const fs = new MemFs({});
     const provider = new StubProvider((request) =>
@@ -273,7 +273,7 @@ describe("invariant 9: the key never reaches the vault", () => {
   });
 });
 
-describe("§8.3's `## Add next` section", () => {
+describe("the `## Add next` section", () => {
   /** A vault whose one page reaches for an article nobody has written. */
   async function gappy(): Promise<MemFs> {
     const fs = new MemFs({ "raw/note.md": "PageRank matters for ranking.\n" });
@@ -353,7 +353,7 @@ describe("determinism", () => {
   });
 });
 
-describe("§8.2's follow-up round", () => {
+describe("the follow-up round", () => {
   /** A vault with a second page the first answer will say it is missing. */
   async function twoPages(): Promise<MemFs> {
     const fs = new MemFs({
@@ -411,7 +411,7 @@ describe("§8.2's follow-up round", () => {
     const result = await core(fs, provider).ask("How does ranking work?");
 
     const stats = provider.stats();
-    // §8.2: "No second seed call, no second PPR."
+    // "No second seed call, no second PPR."
     expect(stats.byTask["seed-selection"]).toBe(1);
     expect(stats.byTask.synthesis).toBe(2);
     expect(result.modelCalls).toBe(3);
@@ -470,7 +470,7 @@ describe("§8.2's follow-up round", () => {
 
   it("cleans what the model wrote before it reaches the note, and the graph", async () => {
     // The unit tests pin `cleanMissing`; this pins that `runAsk` calls it. A
-    // bracketed item survives filing into `raw/answers/`, where §7.1 scans the
+    // bracketed item survives filing into `raw/answers/`, where the graph scans the
     // whole file — frontmatter included — for links, so an uncleaned item is
     // an edge the model chose rather than one the wiki has.
     const fs = await twoPages();
@@ -489,7 +489,7 @@ describe("§8.2's follow-up round", () => {
 
     await instance.fileBack(result.path);
     const filed = fs.text("raw/answers/2026-08-20-1007 how-does-ranking-work.md");
-    // The function §7.1 reads edges with, asked the question the graph asks.
+    // The function the graph reads edges with, asked the question the graph asks.
     expect(linkTargets(filed)).not.toContain("Convergence");
     expect(linkTargets(filed)).toContain("PageRank");
   });
@@ -548,8 +548,8 @@ describe("§8.2's follow-up round", () => {
     expect(provider.stats().byTask.synthesis).toBe(1);
   });
 
-  it("appends nothing when the remaining budget holds no page whole (§7.4, §8.2)", async () => {
-    // §7.4's tail-truncation is for a page over the *whole* budget. The
+  it("appends nothing when the remaining budget holds no page whole", async () => {
+    // Tail-truncation is for a page over the *whole* budget. The
     // follow-up round packs into what the first round left; when that remnant
     // fits no candidate whole, appending a page cut to a few characters would
     // spend the third call on a fragment and list the page as read.
@@ -595,9 +595,9 @@ describe("§8.2's follow-up round", () => {
 describe("invariant 12's number means what the invariant says", () => {
   // "ask = ≤ 3 calls". `stats().requests` and `byTask` both count transport
   // *attempts* — they increment on the same line inside the retry loop — so
-  // neither is the number the invariant bounds. §11 sanctions retries and one
-  // repair, and those are recovery of a single logical call, not extra calls.
-  it("counts logical calls, not the attempts §11 spends making them", async () => {
+  // neither is the number the invariant bounds. Retries and the one repair
+  // are recovery of a single logical call, not extra calls.
+  it("counts logical calls, not the attempts the wrapper spends making them", async () => {
     const { fs } = await compiled();
     // The seed reply is unparseable once, which the wrapper repairs with a
     // second transport attempt for the same logical call.
@@ -623,7 +623,7 @@ describe("invariant 12's number means what the invariant says", () => {
     expect(result.modelCalls).toBe(2);
   });
 
-  it("never reports more than three, even when §11 retries hard", async () => {
+  it("never reports more than three, even when the wrapper retries hard", async () => {
     const { fs } = await compiled();
     let synthAttempts = 0;
     const provider = new StubProvider(
@@ -645,10 +645,10 @@ describe("invariant 12's number means what the invariant says", () => {
   });
 });
 
-describe("§8.3's trace names things one way", () => {
+describe("the trace names things one way", () => {
   it("writes seeds and top entries in the same form", async () => {
-    // §8.3's example shows `- seeds: [[A]], [[B]]` and `- top: [[X]] 0.0812` —
-    // both title-shaped. §5 shares `parseTrace` with the pane's replay, so a
+    // The trace's seeds and top entries are both title-shaped. `parseTrace` is
+    // shared with the pane's replay, so a
     // block whose two lines use different naming schemes makes the pane
     // resolve two vocabularies from one four-line block.
     const { fs, provider } = await compiled();
@@ -681,12 +681,12 @@ describe("§8.3's trace names things one way", () => {
   });
 });
 
-describe("the trace a real answer writes replays onto the real graph (§9)", () => {
+describe("the trace a real answer writes replays onto the real graph", () => {
   it("resolves every label the note recorded back to a node of the graph", async () => {
     // The one place `labelFor` and `resolveTraceNodes` meet. They are written
-    // apart — one renders §4's link form, the other reverses it — so nothing
+    // apart — one renders the link form, the other reverses it — so nothing
     // but running the pipeline proves they still agree. A trace that replays to
-    // nothing would leave §9's overlay silently empty.
+    // nothing would leave the pane's overlay silently empty.
     const { fs, provider } = await compiled();
     const result = await core(fs, provider).ask("What ranks pages?");
 

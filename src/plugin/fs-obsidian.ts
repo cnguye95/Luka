@@ -59,11 +59,11 @@ export class ObsidianFs implements FsAdapter {
       try {
         await this.adapter.mkdir(current);
       } catch (error) {
-        // Check-then-act, and §6.3 fetches four images at once — on the first
+        // Check-then-act, and images are fetched four at once — on the first
         // compile of a document with two kept remote images every in-flight
         // call sees raw/assets absent. Losing that race is success; the throw
         // used to escape to normalizeSource and fail the whole source, where
-        // §6.3 asks only that the link be left and marked.
+        // the rule asks only that the link be left and marked.
         if ((await this.adapter.stat(current))?.type !== "folder") throw error;
       }
     }
@@ -72,12 +72,12 @@ export class ObsidianFs implements FsAdapter {
   async delete(path: string): Promise<void> {
     const target = normalizePath(path);
     // Obsidian's own recovery path, never a permanent unlink. What comes
-    // through here is a cascade-doomed page — §5's modal calls them pages that
+    // through here is a cascade-doomed page — the modal calls them pages that
     // *may* be deleted, so the user approves a superset and cannot know which
     // went — and derivatives under `raw/`, including one a user hand-repaired,
-    // which §6.2 names as the sanctioned repair. `remove()` put all of that
+    // which is the sanctioned repair. `remove()` put all of that
     // beyond recovery while `trashSystem`/`trashLocal` sat on the same adapter
-    // unused. This is not §16's forbidden backup rotation; it is the
+    // unused. This is not the backup rotation the non-goals forbid; it is the
     // platform's own default.
     // `trashSystem` is documented to answer false where the platform has no
     // usable trash, but a sandboxed host can reject instead — and a rejection

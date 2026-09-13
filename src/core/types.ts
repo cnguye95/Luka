@@ -2,10 +2,10 @@
 
 export type PageKind = "source" | "entity" | "concept";
 
-/** handoff.md §4 frontmatter key `source-format`. */
+/** Frontmatter key `source-format`. */
 export type SourceFormat = "md" | "txt" | "html" | "pdf" | "repo" | "dataset" | "image";
 
-/** handoff.md §11 provider tasks. */
+/** Provider tasks: each maps to a model id in settings. */
 export type ProviderTask =
   | "inventory"
   | "page-generation"
@@ -14,9 +14,9 @@ export type ProviderTask =
   | "vision";
 
 /**
- * §11's transports. Anthropic is the default and the one §17's model ids name;
- * "openai-compatible" is §11's "(M5: OpenAI-compatible adapter, base URL
- * configurable)" and covers any server speaking the Chat Completions shape.
+ * The transports. Anthropic is the default and the one the default model ids
+ * name; "openai-compatible" takes a configurable base URL and covers any server
+ * speaking the Chat Completions shape.
  */
 export type ProviderName = "anthropic" | "openai-compatible";
 
@@ -33,10 +33,10 @@ export const PROVIDER_TASKS: readonly ProviderTask[] = [
   "vision",
 ] as const;
 
-/** handoff.md §7.3. */
+/** Retrieval mode: A ranks lexically, B by PageRank. */
 export type RetrievalMode = "A" | "B";
 
-/** A wiki page as reconstructed from its frontmatter (handoff.md §4). */
+/** A wiki page as reconstructed from its frontmatter. */
 export interface PageMeta {
   path: string;
   title: string;
@@ -46,7 +46,7 @@ export interface PageMeta {
   updated: string;
   /**
    * Source pages only: the vault path of the raw file this page describes,
-   * unwrapped from §4's `source: "[[raw/<file>]]"` frontmatter. It is how a
+   * unwrapped from the `source: "[[raw/<file>]]"` frontmatter. It is how a
    * re-ingested source finds its existing page and keeps its title stable.
    */
   source?: string;
@@ -55,11 +55,11 @@ export interface PageMeta {
 export interface GraphNode {
   path: string;
   title: string;
-  /** `raw` marks a manifest source node rather than a wiki page (handoff.md §7.1). */
+  /** `raw` marks a manifest source node rather than a wiki page. */
   kind: PageKind | "raw";
   degree: number;
   /**
-   * §4's one-line summary, carried so §9's hover tooltip (title, kind, summary)
+   * The one-line summary, carried so the hover tooltip (title, kind, summary)
    * needs no second read of the vault. A raw source node has no frontmatter to
    * summarize and carries `""`.
    */
@@ -79,15 +79,16 @@ export interface GraphSnapshot {
 /**
  * What one source's last successful ingest produced.
  *
- * §3 describes the manifest as "path → SHA-256 content hash"; the entry records
+ * The obvious shape is "path → SHA-256 content hash"; the entry records
  * the derivative alongside it, because the hash cannot say which file in `raw/`
  * this source's extraction wrote — and inferring that from the filename every
- * compile is the root of the M2d defect cluster (BUILD-NOTES "M2e").
+ * compile is what made the first rename subsystem unsafe (design_decisions.md,
+ * decision 6).
  *
  * `hash` is deliberately not always a hash: `CASCADE_PENDING` marks a source
- * that left the vault but whose §6.6 cascade could not be completed. Readers
- * that treat an entry as "this file exists and is ingested" — §7.1's graph node
- * set and §10's health check — must skip those; `readablePathOf` does it for
+ * that left the vault but whose cascade could not be completed. Readers that
+ * treat an entry as "this file exists and is ingested" — the graph's node set
+ * and the health check — must skip those; `readablePathOf` does it for
  * them.
  *
  * Entries are immutable: a changed entry is always a fresh object, so the
@@ -99,20 +100,20 @@ export interface ManifestEntry {
   readonly derivative?: string;
 }
 
-/** Vault-relative source path → its ingest record (handoff.md §3, §6.2). */
+/** Vault-relative source path → its ingest record. */
 export type IngestManifest = Record<string, ManifestEntry>;
 
 /** Names of the operations that contend for the single global lock (invariant 2). */
 export type OperationName = "compile" | "ask" | "health check";
 
 export interface LukaSettings {
-  /** §12's provider selector. The transport `createProvider` builds. */
+  /** The provider selector: the transport `createProvider` builds. */
   provider: ProviderName;
   /**
    * The Anthropic key.
    *
-   * It keeps this name rather than becoming `anthropicApiKey`: §16 rules out
-   * settings migration, and a rename would silently empty the key of every
+   * It keeps this name rather than becoming `anthropicApiKey`: settings
+   * migration is a non-goal, and a rename would silently empty the key of every
    * vault that already has one.
    */
   apiKey: string;
@@ -128,9 +129,9 @@ export interface LukaSettings {
   openaiBaseUrl: string;
   models: Record<ProviderTask, string>;
   contextBudgetTokens: number;
-  /** K: assembly cap (handoff.md §7.4 step 4). */
+  /** K: how many whole pages an answer may assemble. */
   assemblyCap: number;
-  /** Mode predicate pair (handoff.md §7.3). */
+  /** Mode predicate pair. */
   modeMinNodes: number;
   modeMinLinkRatio: number;
   followUpEnabled: boolean;
@@ -144,12 +145,12 @@ export interface LukaSettings {
 }
 
 /**
- * §11's model map for each provider: "a current small model for
+ * The model map for each provider: "a current small model for
  * `inventory`/`seed-selection` and a current mid-tier model for
  * `page-generation`/`synthesis`/`vision`".
  *
- * Two sets rather than one, because a model id belongs to a vendor. §17's
- * table names Anthropic's, which are the defaults; the OpenAI set is the same
+ * Two sets rather than one, because a model id belongs to a vendor.
+ * Anthropic's are the defaults; the OpenAI set is the same
  * shape against the endpoint `DEFAULT_OPENAI_BASE_URL` already points at, so
  * the shipped defaults are coherent — base URL and model ids describe one
  * working configuration rather than two halves of different ones.
@@ -162,7 +163,7 @@ export const DEFAULT_ANTHROPIC_MODELS: Record<ProviderTask, string> = {
   vision: "claude-sonnet-5",
 };
 
-/** The mid-tier entry is multimodal, so §6.1's vision pass shares it. */
+/** The mid-tier entry is multimodal, so the vision pass shares it. */
 export const DEFAULT_OPENAI_MODELS: Record<ProviderTask, string> = {
   inventory: "gpt-4.1-mini",
   "seed-selection": "gpt-4.1-mini",
@@ -186,8 +187,8 @@ export function defaultModelsFor(provider: ProviderName): Record<ProviderTask, s
  * it. That does mean a hand-typed id can outlive the provider it was meant
  * for — visible in the tab, and the lesser harm of the two.
  *
- * Pure, and here rather than in the settings tab, so it can be tested: §14
- * puts the tab itself under a manual checklist.
+ * Pure, and here rather than in the settings tab, so it can be tested: the
+ * tab itself is covered by the manual checklist.
  */
 export function modelsForProvider(
   models: Record<ProviderTask, string>,
@@ -204,7 +205,7 @@ export function modelsForProvider(
   return next;
 }
 
-/** handoff.md §17. Values marked "fixed" there are constants in their own modules, not settings. */
+/** The defaults. Fixed values are constants in their own modules, not settings. */
 export const DEFAULT_SETTINGS: LukaSettings = {
   provider: "anthropic",
   apiKey: "",
@@ -228,12 +229,12 @@ export const DEFAULT_SETTINGS: LukaSettings = {
 };
 
 /**
- * §17's numeric settings, made safe to act on.
+ * The numeric settings, made safe to act on.
  *
  * `data.json` is a file a user can edit and `loadSettings` validates nothing,
  * so every number here can arrive as a string, a NaN, a negative, or an
  * Infinity. The rule is one rule: a value the code cannot act on falls back to
- * §17's default, and a value with a range is clamped into it. Applied once, at
+ * its default, and a value with a range is clamped into it. Applied once, at
  * the two places settings enter core, rather than at each consumer — the
  * retry budget was clamped at its consumer and the three settings beside it
  * were not, which is how a budget of 0 came to rewrite pages with no source in
@@ -270,18 +271,18 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
       DEFAULT_SETTINGS.compileConcurrency,
     ),
     maxRetries: clamp(settings.maxRetries, 0, MAX_RETRY_BUDGET, DEFAULT_SETTINGS.maxRetries),
-    // §7.2's damping. Outside (0,1) the iteration stops being a contraction —
+    // PageRank damping. Outside (0,1) the iteration stops being a contraction —
     // at 1 it never teleports and at 0 it never walks — so a hand-edited value
     // falls back rather than being clamped to a boundary that means neither.
     pprAlpha: fraction(settings.pprAlpha, DEFAULT_SETTINGS.pprAlpha),
-    // §8.2's follow-up toggle. A non-boolean in `data.json` is not a decision
-    // either way, so it takes §17's default rather than JavaScript's idea of
+    // The follow-up toggle. A non-boolean in `data.json` is not a decision
+    // either way, so it takes the default rather than JavaScript's idea of
     // whether the value is truthy.
     followUpEnabled:
       typeof settings.followUpEnabled === "boolean"
         ? settings.followUpEnabled
         : DEFAULT_SETTINGS.followUpEnabled,
-    // §7.3's predicate and §7.4's caps. A node count or ratio below zero makes
+    // Mode predicate and retrieval caps. A node count or ratio below zero makes
     // the predicate meaningless rather than merely strict, and a cap below one
     // asks the model for nothing at all.
     modeMinNodes: clamp(settings.modeMinNodes, 0, 1_000_000, DEFAULT_SETTINGS.modeMinNodes),
@@ -301,19 +302,19 @@ export function normalizeSettings(settings: LukaSettings): LukaSettings {
 /** A ceiling on a hand-edited retry count, so one call cannot hold the lock all day. */
 export const MAX_RETRY_BUDGET = 10;
 /**
- * §11 budgets concurrency at 2. A raised value is the user's call; an
+ * Compile concurrency defaults to 2. A raised value is the user's call; an
  * unbounded one is not, because every extra worker is another request holding
  * the operation lock.
  */
 export const MAX_COMPILE_CONCURRENCY = 16;
 /**
- * A ceiling on a hand-edited iteration count. §7.2's own limit is 100; the
+ * A ceiling on a hand-edited iteration count. The default limit is 100; the
  * ceiling only stops a mistyped one from holding the operation lock while it
  * iterates a converged vector.
  */
 export const MAX_PPR_ITERATIONS = 1000;
 /**
- * A ceiling on the hand-editable list caps — seeds, keywords, and §7.4's K.
+ * A ceiling on the hand-editable list caps — seeds, keywords, and K.
  * Each one bounds work that is paid for per item: a seed is a PPR
  * personalization entry, a keyword is a pass over every page's body, and K is a
  * whole file read into the context budget.
@@ -327,28 +328,28 @@ function trimmed(value: string, fallback: string): string {
   return text === "" ? fallback : text;
 }
 
-/** Finite and above zero, or §17's default — there is no useful smaller value. */
+/** Finite and above zero, or the default — there is no useful smaller value. */
 function positive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-/** Finite and not negative, or §17's default. */
+/** Finite and not negative, or the default. */
 function atLeastZero(value: number, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-/** Finite and strictly between 0 and 1, or §17's default. */
+/** Finite and strictly between 0 and 1, or the default. */
 function fraction(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 && value < 1 ? value : fallback;
 }
 
 function clamp(value: number, low: number, high: number, fallback: number): number {
-  // The fallback is §17's default, not the range floor. `"compileConcurrency":
+  // The fallback is the default, not the range floor. `"compileConcurrency":
   // "4"` — a quoted number, the likeliest hand-edit of all — is not finite, and
   // falling back to the floor would silently answer 1 for it.
   if (!Number.isFinite(value)) return fallback;
   return Math.min(Math.max(Math.floor(value), low), high);
 }
 
-/** handoff.md §17, marked fixed: PPR convergence threshold is not user-tunable. */
+/** Fixed: the PPR convergence threshold is not user-tunable. */
 export const PPR_EPSILON = 1e-8;

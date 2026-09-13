@@ -1,14 +1,14 @@
-// §10's link resolution, shared.
+// The health check's link resolution, shared.
 //
 // The health check's "article candidates" and the answer note's `## Add next`
 // section both ask the same question — which of a page's wikilink targets
-// resolve to nothing — and §4 already answers it, in `linkTargets`, `handleOf`
+// resolve to nothing — and core already answers it, in `linkTargets`, `handleOf`
 // and `buildTitleIndex`. None of those is exported past the façade, so this is
-// core's work rather than a caller's: a second copy of a §4 rule outside the
+// core's work rather than a caller's: a second copy of a link rule outside the
 // boundary check is a copy that can disagree with the one compile uses, and
-// then §10's report and the answer's section disagree about the same vault.
+// then the health report and the answer disagree about the same vault.
 //
-// Counting only. §16 forbids an LLM-driven health check and nothing here asks
+// Counting only. An LLM-driven health check is a non-goal; nothing here asks
 // a model anything.
 import type { FsAdapter } from "./adapters";
 import { decodeUtf8 } from "./hash";
@@ -36,11 +36,11 @@ export interface LinkScan {
   targets: readonly string[];
 }
 
-/** One page's file, read once, reduced to the two things §10 needs. */
+/** One page's file, read once, reduced to what the health check needs. */
 export interface PageScan extends LinkScan {
   page: PageMeta;
   targets: string[];
-  /** The citation block's entries — §6.5's persistent citer record. */
+  /** The citation block's entries — the persistent citer record. */
   citations: string[];
 }
 
@@ -58,7 +58,7 @@ export interface ScanResult {
 /**
  * One read per page.
  *
- * Both §10's report and the gap report need the same two facts about every
+ * The health report and the gap report need the same two facts about every
  * page, and before this they were read separately — the health check opened
  * every file twice for the two sections that need it.
  */
@@ -88,7 +88,7 @@ export async function scanPages(
 }
 
 export interface UnresolvedTarget {
-  /** §4's one spelling rule, so `[[Zeppelin]]` and `[[zeppelin]]` are one gap. */
+  /** The one spelling rule, so `[[Zeppelin]]` and `[[zeppelin]]` are one gap. */
   handle: string;
   /**
    * The spelling to show. `comparePaths`-minimum of the raw variants seen,
@@ -100,10 +100,10 @@ export interface UnresolvedTarget {
 }
 
 /**
- * §10's rule, lifted out of the health check so both consumers share it.
+ * The health check's rule, lifted out so both consumers share it.
  *
  * Skips exactly what `articleCandidates` skipped: links into sources are
- * full-path and are not title-resolved (§4), and a heading or block reference
+ * full-path and are not title-resolved, and a heading or block reference
  * addresses a place inside a page rather than a page. What it adds is the
  * grouping key — by handle rather than by raw string, so case variants of one
  * name are one gap rather than two half-wanted ones.

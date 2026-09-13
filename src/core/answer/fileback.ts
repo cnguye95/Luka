@@ -1,14 +1,14 @@
-// Filing an answer back as a source (handoff.md §8.4).
+// Filing an answer back as a source.
 //
 // "Move the note to `raw/answers/<same name>` (on collision, append `-2`,
 // `-3`, …), stripping the trace block (keep sources block). Notice: 'Filed.
 // Run Compile to integrate.' No auto-compile. The next compile treats it as a
 // new source through the normal path — no redundancy gate."
 //
-// Nothing here teaches compile about answers, and nothing needs to: §4's
+// Nothing here teaches compile about answers, and nothing needs to:
 // discovery already walks `raw/` recursively and names `raw/answers/` outright,
 // and a `.md` source is passthrough. The deliberate asymmetry is which block
-// survives. The sources block's links become real graph edges (§7.1), which is
+// survives. The sources block's links become real graph edges, which is
 // how filing densifies the graph rather than just archiving prose. Two blocks
 // go: the trace, which is this run's working, and `## Add next`, which names
 // pages that do not exist — kept, the next compile's inventory would read
@@ -29,7 +29,7 @@ export const FILED_ANSWERS_FOLDER = "raw/answers";
  *
  * Written before the original is removed: a failure part-way leaves the answer
  * where the user can still see it, rather than between two folders. Outside the
- * operation lock — there are no model calls and no compile here, and §8.4 ends
+ * operation lock — there are no model calls and no compile here, and it ends
  * at a notice.
  */
 export async function fileBack(fs: FsAdapter, answerPath: string): Promise<string> {
@@ -44,7 +44,7 @@ export async function fileBack(fs: FsAdapter, answerPath: string): Promise<strin
   }
   // An answer is filed once. A filed answer is a source like any other, and
   // filing it again renames it `-2`, `-2-2`, … churning the manifest through
-  // §6.2's rename path every time for no gain. `activeAnswerPath` offers the
+  // the rename path every time for no gain. `activeAnswerPath` offers the
   // command on any note whose frontmatter says `kind: answer`, which a filed
   // one still does.
   if (isUnder(answerPath, FILED_ANSWERS_FOLDER)) {
@@ -61,7 +61,7 @@ export async function fileBack(fs: FsAdapter, answerPath: string): Promise<strin
   } catch (error) {
     // Write-then-delete leaves the note in *both* places if the delete fails,
     // and the next compile ingests the copy whatever the user was told. Worse,
-    // retrying then lands at `-2`, so §8.4's collision suffix — which exists to
+    // retrying then lands at `-2`, so the collision suffix — which exists to
     // separate two different answers — silently produces two identical sources,
     // each manifested and each costing a compile's calls. Withdrawing the copy
     // leaves the vault exactly as it was, which is the failure the user can act
@@ -75,7 +75,7 @@ export async function fileBack(fs: FsAdapter, answerPath: string): Promise<strin
   return target;
 }
 
-/** §8.4's suffix idiom: `-2`, `-3`, … on the stem, keeping the extension. */
+/** The suffix idiom: `-2`, `-3`, … on the stem, keeping the extension. */
 async function freePath(fs: FsAdapter, wanted: string): Promise<string> {
   if (!(await fs.exists(wanted))) return wanted;
   const dot = wanted.lastIndexOf(".");

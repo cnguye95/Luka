@@ -1,4 +1,4 @@
-// §8.4's filing. §14's minimum set names "fileback move + trace strip +
+// Filing. The minimum test set names "fileback move + trace strip +
 // collision suffix".
 import { describe, expect, it } from "vitest";
 import { fileBack } from "../src/core/answer/fileback";
@@ -59,7 +59,7 @@ function note(over: { kind?: string; addNext?: boolean } = {}): string {
 
 const vault = () => new MemFs({ [NOTE_PATH]: note() });
 
-describe("filing moves the note into raw/answers/ (§8.4)", () => {
+describe("filing moves the note into raw/answers/", () => {
   it("writes it under its same name and removes the original", async () => {
     const fs = vault();
 
@@ -72,7 +72,7 @@ describe("filing moves the note into raw/answers/ (§8.4)", () => {
 
   it("strips the trace block and keeps the sources block", async () => {
     // The trace is this run's working. The sources block's links become graph
-    // edges (§7.1) once the note is compiled, which is how filing densifies
+    // edges once the note is compiled, which is how filing densifies
     // the graph rather than merely archiving prose.
     const fs = vault();
 
@@ -207,7 +207,7 @@ describe("a filing that cannot finish does not leave two copies", () => {
   it("removes the copy it wrote when the original cannot be deleted", async () => {
     // Write-then-delete leaves the note in both places if the delete fails, and
     // the next compile ingests the copy regardless of what the user was told.
-    // Retrying then lands at `-2`, so §8.4's collision suffix — meant to
+    // Retrying then lands at `-2`, so the collision suffix — meant to
     // separate two different answers — silently produces two identical sources,
     // each manifested, each costing an inventory and a page-generation call.
     const fs = vault();
@@ -231,7 +231,7 @@ describe("a filing that cannot finish does not leave two copies", () => {
 describe("an answer is filed once", () => {
   it("refuses a note that is already under raw/answers/", async () => {
     // Everything under `raw/` is a source. Filing a filed answer renames it
-    // `-2`, `-2-2`, … and churns the manifest through §6.2's rename path each
+    // `-2`, `-2-2`, … and churns the manifest through the rename path each
     // time, for no gain.
     const fs = new MemFs({ "raw/answers/already.md": note() });
 

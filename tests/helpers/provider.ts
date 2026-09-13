@@ -28,7 +28,7 @@ export interface RecordedCall {
 export type StubReply = unknown;
 
 /**
- * A stub at the **transport** layer, driven through the real §11 wrapper.
+ * A stub at the **transport** layer, driven through the real wrapper.
  *
  * The layering matters. An earlier version of this helper implemented
  * `LLMProvider` directly, which put it *above* JSON parsing, the repair retry,
@@ -90,7 +90,7 @@ export class StubProvider implements LLMProvider {
         );
 
         // Awaited, so a test can return a promise and observe how many calls
-        // the pipeline keeps in flight (§11's compile concurrency).
+        // the pipeline keeps in flight (compile concurrency).
         const value = await settled;
         if (value instanceof Error) throw value;
         if (typeof value === "string") return value;

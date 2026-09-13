@@ -1,4 +1,4 @@
-// M2c end to end: discover → normalize → Call A → merge → Call B → post-process
+// Full compile: discover → normalize → Call A → merge → Call B → post-process
 // → index, over an in-memory vault with a stub provider at the wrapper layer.
 //
 // The call-count assertions here are invariant 12's: "compile = S inventory
@@ -82,7 +82,7 @@ async function compileOnce(): Promise<{
   return { fs, provider, result };
 }
 
-describe("compile, end to end (§6, invariant 12)", () => {
+describe("compile, end to end (invariant 12)", () => {
   it("makes exactly S inventory + P generation + 1 vision calls", async () => {
     const { provider, result } = await compileOnce();
     const stats = provider.stats();
@@ -121,7 +121,7 @@ describe("compile, end to end (§6, invariant 12)", () => {
     }
   });
 
-  it("lists every page in _index.md (§15's M2 criterion)", async () => {
+  it("lists every page in _index.md", async () => {
     const { fs } = await compileOnce();
     const index = fs.text("wiki/_index.md");
 
@@ -131,7 +131,7 @@ describe("compile, end to end (§6, invariant 12)", () => {
     expect(index.startsWith("# Index\n## Sources\n")).toBe(true);
   });
 
-  it("has each source page carry §4's source key and cite its own raw file", async () => {
+  it("has each source page carry the source key and cite its own raw file", async () => {
     const { fs } = await compileOnce();
     const sources = (await loadPageTable(fs)).filter((page) => page.kind === "source");
 
@@ -171,7 +171,7 @@ describe("compile, end to end (§6, invariant 12)", () => {
     expect(Object.keys(manifest).sort()).toEqual(["raw/board.png", "raw/note.md", "raw/plain.txt"]);
   });
 
-  it("keeps titles unique across wiki/ when a concept is named after a file (§4)", async () => {
+  it("keeps titles unique across wiki/ when a concept is named after a file", async () => {
     // The stem of the source file and a concept the model names are the same
     // word. Source pages and generated pages share one title space, so one of
     // them has to take a suffix — otherwise two pages answer to [[Obsidian]]
@@ -206,7 +206,7 @@ describe("compile, end to end (§6, invariant 12)", () => {
     expect(pages.map((page) => page.source).sort()).toEqual(["raw/a/note.md", "raw/b/note.md"]);
   });
 
-  it("gives a source whose inventory returned no items a source page anyway (§6.5)", async () => {
+  it("gives a source whose inventory returned no items a source page anyway", async () => {
     const { fs } = await compileOnce();
     const plain = (await loadPageTable(fs)).find((page) => page.source === "raw/plain.txt");
     expect(plain).toBeDefined();
@@ -233,7 +233,7 @@ describe("call fan-out is per page and per image, not per pair (invariant 12)", 
     // Two sources, one shared page: 2 inventory calls but exactly 1 generation.
     expect(provider.stats().byTask.inventory).toBe(2);
     expect(provider.stats().byTask["page-generation"]).toBe(1);
-    // And that single call was shown both citing sources (§6.5's "*all*").
+    // And that single call was shown both citing sources ("*all*").
     const prompt = provider.callsFor("page-generation")[0]?.user ?? "";
     expect(prompt).toContain("raw/one.md");
     expect(prompt).toContain("raw/two.md");
@@ -254,7 +254,7 @@ describe("call fan-out is per page and per image, not per pair (invariant 12)", 
   });
 });
 
-describe("§6.5's 'all citing sources' includes unchanged ones", () => {
+describe("'all citing sources' includes unchanged ones", () => {
   it("pulls an unchanged converted source's derivative into a later Call B", async () => {
     // The .html source is not touched by the second compile, so its body has
     // to be recovered from its derivative — the only path that reaches a
@@ -277,7 +277,7 @@ describe("§6.5's 'all citing sources' includes unchanged ones", () => {
     const prompt = second.callsFor("page-generation")[0]?.user ?? "";
     // It must be the DERIVATIVE that reached the model, not the original file.
     // Both contain the same words, so only the converted *form* tells them
-    // apart: §6.1 promises extraction only ever receives markdown.
+    // apart: extraction only ever receives markdown.
     expect(prompt).toContain("# Ranking");
     expect(prompt).toContain("UNIQUE-HTML-BODY");
     expect(prompt).not.toContain("<h1>");
@@ -285,7 +285,7 @@ describe("§6.5's 'all citing sources' includes unchanged ones", () => {
   });
 });
 
-describe("compile concurrency (§11, §17: 2)", () => {
+describe("compile concurrency (default 2)", () => {
   it("keeps more than one model call in flight, and never more than the setting", async () => {
     const fs = new MemFs(
       Object.fromEntries(
@@ -334,7 +334,7 @@ describe("compile concurrency (§11, §17: 2)", () => {
   });
 });
 
-describe("recompile (§15: zero model calls on an unchanged vault)", () => {
+describe("recompile (zero model calls on an unchanged vault)", () => {
   it("makes no model calls and writes nothing", async () => {
     const fs = vault();
     await core(fs, new StubProvider(replyFor)).compile();
@@ -368,7 +368,7 @@ describe("recompile (§15: zero model calls on an unchanged vault)", () => {
   });
 });
 
-describe("the citer record survives awkward paths (§6.5)", () => {
+describe("the citer record survives awkward paths", () => {
   it("keeps a source whose path contains a pipe across a second compile", async () => {
     // `|` is legal in a filename on macOS and Linux, and the citation block is
     // the ONLY record of a page's citers. Losing it here would drop the source
@@ -411,7 +411,7 @@ describe("the citer record survives awkward paths (§6.5)", () => {
   });
 });
 
-describe("the index is regenerated every compile (§6.5)", () => {
+describe("the index is regenerated every compile", () => {
   it("rewrites a hand-edited index even when no page was written", async () => {
     const fs = vault();
     await core(fs, new StubProvider(replyFor)).compile();
@@ -447,10 +447,10 @@ describe("the index is regenerated every compile (§6.5)", () => {
   });
 });
 
-describe("the call counter counts what the provider really does (§11, invariant 12)", () => {
-  it("does not count §11's repair retry against invariant 12's budget", async () => {
+describe("the call counter counts what the provider really does (invariant 12)", () => {
+  it("does not count the repair retry against invariant 12's budget", async () => {
     // Invariant 12 makes compile "S inventory calls + P page-generation calls"
-    // — a function of the worklist. §11's repair is transport, not worklist, so
+    // — a function of the worklist. The repair is transport, not worklist, so
     // a counter reading `stats().requests` reports a number the invariant never
     // promised: this run is one source and one page, and the delta reads 3.
     // `runAsk` was given a logical counter for exactly this; compile has one
@@ -474,10 +474,10 @@ describe("the call counter counts what the provider really does (§11, invariant
     expect(provider.stats().byTask.inventory).toBe(2);
     // S = 1 inventory, P = 2 page generations (the source page and the concept
     // page the inventory names), no orphan images.
-    const SPEC_INVARIANT_12 = 1 + 2;
-    expect(result.modelCalls).toBe(SPEC_INVARIANT_12);
+    const INVARIANT_12 = 1 + 2;
+    expect(result.modelCalls).toBe(INVARIANT_12);
     // Transport made one more than that, and the extra is the repair.
-    expect(provider.stats().requests).toBe(SPEC_INVARIANT_12 + 1);
+    expect(provider.stats().requests).toBe(INVARIANT_12 + 1);
     expect(provider.calls.map((call) => call.task)).toEqual([
       "inventory",
       "inventory",
@@ -513,7 +513,7 @@ describe("the call counter counts what the provider really does (§11, invariant
 
     const result = await core(fs, provider).compile();
 
-    // Three attempts for the one source, then the source is skipped (§11).
+    // Three attempts for the one source, then the source is skipped.
     expect(provider.stats().byTask.inventory).toBe(3);
     expect(result.failed.map((failure) => failure.path)).toEqual(["raw/note.md"]);
     // Nothing succeeded, so there is no manifest at all — invariant 3's
@@ -532,7 +532,7 @@ describe("the call counter counts what the provider really does (§11, invariant
     expect(provider.stats().byTask.inventory).toBe(1);
   });
 
-  it("sends every task under its §11 max_tokens cap", async () => {
+  it("sends every task under its max_tokens cap", async () => {
     const { provider } = await compileOnce();
     for (const call of provider.calls) {
       expect(call.maxTokens, call.task).toBeLessThanOrEqual(MAX_TOKENS_BY_TASK[call.task]);
@@ -545,7 +545,7 @@ describe("paths Luka cannot record faithfully are skipped, not corrupted", () =>
   // A citation entry and a `source:` value are single-line forms. A path
   // carrying a line terminator cannot be read back out of either — a regex `.`
   // matches none of the four — so it would silently vanish from the citer
-  // record. §6.1's idiom is to skip and name it instead.
+  // record. The idiom is to skip and name it instead.
   const terminators = ["\n", "\r", "\u2028", "\u2029"];
 
   it("skips a source whose path contains any line terminator", async () => {
@@ -598,7 +598,7 @@ describe("paths Luka cannot record faithfully are skipped, not corrupted", () =>
   });
 });
 
-describe("an unchanged citer is read from its own file (§6.5)", () => {
+describe("an unchanged citer is read from its own file", () => {
   it("does not mistake a same-stem neighbour for a passthrough source's derivative", async () => {
     // `raw/notes.txt` is a passthrough — it has NO derivative. Guessing
     // `<stem>.md` finds `raw/notes.md`, an unrelated source, and feeds its
@@ -632,7 +632,7 @@ describe("an unchanged citer is read from its own file (§6.5)", () => {
 });
 
 describe("a source that cannot be written does not cost the whole run", () => {
-  it("keeps the manifest for every source that succeeded (§11)", async () => {
+  it("keeps the manifest for every source that succeeded", async () => {
     // A model title can survive sanitizeTitle and still be illegal on the host
     // — too long, or `?`/`*`/a reserved name on Windows. An unguarded write
     // threw out of compile past the manifest step, so the next run re-spent
@@ -665,7 +665,7 @@ describe("a source that cannot be written does not cost the whole run", () => {
 
 describe("a derivative collision never costs a model call twice", () => {
   it("fails a same-stem image before spending the vision call", async () => {
-    // §6.1 names every derivative `<original-stem>.md`, so `chart.csv` and
+    // Every derivative is named `<original-stem>.md`, so `chart.csv` and
     // `chart.png` both want `chart.md`. The loser must fail *before* paying.
     const fs = new MemFs({
       "raw/chart.csv": "a,b\n1,2\n",
@@ -685,7 +685,7 @@ describe("a derivative collision never costs a model call twice", () => {
   });
 });
 
-describe("failure handling (invariant 3, §11)", () => {
+describe("failure handling (invariant 3)", () => {
   it("un-manifests a source whose inventory failed, so it retries", async () => {
     const fs = vault();
     const provider = new StubProvider((request) =>

@@ -102,7 +102,7 @@ describe("frontmatter", () => {
     expect(parseFrontmatter("---\na: 1\n---").body).toBe("");
   });
 
-  it("emits keys in the §4 order regardless of construction order", () => {
+  it("emits keys in the fixed order regardless of construction order", () => {
     const block = serializeFrontmatter({
       "derived-from": "raw/page.html",
       "source-format": "html",
@@ -208,7 +208,7 @@ describe("the frontmatter fence closes only at a line start", () => {
   });
 
   it("keeps a key that follows a --- line inside a block scalar", () => {
-    // §6.2 invites the user to hand-edit a derivative. An edit above the
+    // The user is invited to hand-edit a derivative. An edit above the
     // ownership key must not make Luka lose the file.
     const text = "---\nnote: |\n  ---\nderived-from: raw/src.pdf\n---\nbody\n";
     const parsed = parseFrontmatter(text);
@@ -255,7 +255,7 @@ describe("serializeFrontmatter keeps keys that collide with Object.prototype", (
 describe("a document that opens a fence is never given a second one", () => {
   // Anchoring the closing fence to a line start was right, but it turned three
   // shapes from "left untouched" into "a second block prepended in front of
-  // the first". They are exactly the hand-edits §6.2 invites: a closing fence
+  // the first". They are exactly the sanctioned hand-edits: a closing fence
   // written with four dashes, one indented by a space, and one never written.
   const shapes: Record<string, string> = {
     "four-dash close": "---\nderived-from: raw/a.pdf\n----\nbody\n",

@@ -1,4 +1,4 @@
-// The eval harness (handoff.md §13).
+// The eval harness.
 //
 // "eval/run.ts — headless over core with node adapters: CI mode seeds by exact
 // title/alias match only (no model), runs both modes' ranking, reports
@@ -120,9 +120,9 @@ function validateFloors(raw: unknown): Record<string, Floor> {
 }
 
 /**
- * §13's CI seeding: "seeds by exact title/alias match only (no model)".
+ * CI seeding: "seeds by exact title/alias match only (no model)".
  *
- * That is `forceIncludeSeeds` — the rule §7.4 step 2 already applies to every
+ * That is `forceIncludeSeeds` — the rule retrieval already applies to every
  * query — so CI measures the same seeding the product does, minus the model.
  * Keywords come from the query's own words, which is the most a harness can
  * know without asking one.
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
 
   const settings = normalizeSettings({
     ...DEFAULT_SETTINGS,
-    // §13's `--live` is the only mode that calls a model, and the key comes
+    // `--live` is the only mode that calls a model, and the key comes
     // from the environment — never from a file in the repo (invariant 9).
     apiKey: process.env["ANTHROPIC_API_KEY"] ?? "",
   });
@@ -162,7 +162,7 @@ async function main(): Promise<void> {
       `${live ? " (live)" : ""}`,
   );
 
-  // §13: "runs both modes' ranking". Mode B is what the fixture's density
+  // Both modes' ranking runs. Mode B is what the fixture's density
   // selects; Mode A is run alongside it so a change that only harms the small
   // -vault path cannot hide behind the graph one.
   const measured = modeOf(graph, settings);
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
           : await rankModeA(fs, pages, seeds, chosen.keywords);
 
       // A query whose expected pages are all seeds already had its answer
-      // handed to the ranker by §7.4 step 2; it scores the same however the
+      // handed to the ranker by force-inclusion; it scores the same however the
       // ranker behaves. `metrics.ts` keeps those out of the `ranking*` means.
       const seeded = new Set(seeds);
 
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
     // file whose ranking floors are missing, null, or not numbers, and it
     // names the offending key instead of throwing mid-measurement.
     for (const under of belowFloor(summary, floor)) {
-      // §13 says `--live` "prints the same metrics". It cannot be held to the
+      // `--live` "prints the same metrics". It cannot be held to the
       // ranking floors: those were calibrated from the 8 queries CI seeding
       // leaves unseeded, and a live model seeds the easy ones out of the
       // subset, so what remains is the hardest few averaged against a floor set

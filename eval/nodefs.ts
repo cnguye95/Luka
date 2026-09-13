@@ -5,7 +5,7 @@ import type { DirEntry, FileStat, FsAdapter } from "../src/core/adapters";
 import { normalizePath } from "../src/core/paths";
 
 /**
- * FsAdapter over node:fs, rooted at a vault directory. handoff.md §3 puts it here — "eval and
+ * FsAdapter over node:fs, rooted at a vault directory. It lives here — "eval and
  * tests implement them over node:fs and fetch" — and it also proves src/core
  * runs with no Obsidian at all.
  */

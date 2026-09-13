@@ -1,6 +1,6 @@
-// Randomized instrument for §7.2's PPR.
+// Randomized instrument for PageRank.
 //
-// PPR is the one M3 component where a subtle arithmetic error — a transposed
+// PPR is the one component where a subtle arithmetic error — a transposed
 // normalization, α and 1−α swapped, a degree-0 column mishandled — produces
 // numbers that look entirely plausible and that no hand-written fixture would
 // flag. That is the same risk profile that justified `churn.test.ts`.
@@ -20,11 +20,11 @@ import { describe, expect, it } from "vitest";
 import { computePPR } from "../src/core/graph/ppr";
 import type { GraphEdge, GraphSnapshot } from "../src/core/types";
 
-// From §7.2 and §17, not imported from the code under test.
-const SPEC_EPSILON = 1e-8;
-// §17's shipped defaults, from the spec rather than from `DEFAULT_SETTINGS`.
-const SPEC_ALPHA = 0.85;
-const SPEC_MAX_ITERATIONS = 100;
+// Stated here, not imported from the code under test.
+const FIXED_EPSILON = 1e-8;
+// The shipped defaults, stated rather than read from `DEFAULT_SETTINGS`.
+const FIXED_ALPHA = 0.85;
+const FIXED_MAX_ITERATIONS = 100;
 
 const SEEDS = Number(process.env.PPR_SEEDS ?? 250);
 const FIRST = Number(process.env.PPR_FIRST ?? 0);
@@ -176,7 +176,7 @@ describe("PPR agrees with an independent solution of the same equation", { timeo
 
       for (let seed = FIRST; seed < FIRST + SEEDS; seed++) {
         const generated = generate(seed);
-        // Far past §7.2's 100 so the comparison is against the fixed point
+        // Far past the cap of 100 so the comparison is against the fixed point
         // rather than against a half-mixed vector; the product's own limit is
         // exercised by the unit tests.
         const result = computePPR(generated.graph, generated.seeds, {
@@ -206,7 +206,7 @@ describe("PPR agrees with an independent solution of the same equation", { timeo
           continue;
         }
         // Mass only leaves through a degree-0 column, so with none it is
-        // conserved exactly — the sharpest statement of §7.2's zero-column rule.
+        // conserved exactly — the sharpest statement of the zero-column rule.
         const isolated = generated.graph.nodes.some((node) => node.degree === 0);
         if (!isolated && Math.abs(mass - 1) > 1e-6) {
           failures.push(`seed ${seed}: no isolated node, but mass is ${mass} rather than 1`);
@@ -234,14 +234,14 @@ describe("PPR agrees with an independent solution of the same equation", { timeo
 });
 
 describe("PPR at the configuration it actually ships with", { timeout: 600_000 }, () => {
-  it(`agrees with the dense solution over ${SEEDS} graphs at §17's defaults`, () => {
+  it(`agrees with the dense solution over ${SEEDS} graphs at the shipped defaults`, () => {
     // The sweep above runs `maxIterations: 5000` so it compares against the
     // fixed point. That is the right oracle for the arithmetic and the wrong
-    // one for the product: §17 ships α = 0.85 and a cap of 100, and nothing
+    // one for the product: it ships α = 0.85 and a cap of 100, and nothing
     // else in the suite checks what comes back at those numbers. What differs
     // here is the configuration, not the tolerance — that stays 1e-6, as above,
     // because this compares per-node scores against the dense solution rather
-    // than measuring §7.2's 1e-8 L1 step. `converged` says which of the two
+    // than measuring the 1e-8 L1 step. `converged` says which of the two
     // answers we are holding, and only a settled one is held to the fixed
     // point.
     const failures: string[] = [];
@@ -249,10 +249,10 @@ describe("PPR at the configuration it actually ships with", { timeout: 600_000 }
     for (let seed = FIRST; seed < FIRST + SEEDS; seed++) {
       const generated = generate(seed);
       const shipped = computePPR(generated.graph, generated.seeds, {
-        alpha: SPEC_ALPHA,
-        maxIterations: SPEC_MAX_ITERATIONS,
+        alpha: FIXED_ALPHA,
+        maxIterations: FIXED_MAX_ITERATIONS,
       });
-      const expected = solveDense({ ...generated, alpha: SPEC_ALPHA });
+      const expected = solveDense({ ...generated, alpha: FIXED_ALPHA });
 
       let worst = 0;
       generated.order.forEach((nodePath, at) => {
@@ -265,7 +265,7 @@ describe("PPR at the configuration it actually ships with", { timeout: 600_000 }
         failures.push(`seed ${seed}: converged but ${worst} from the fixed point`);
         continue;
       }
-      if (!shipped.converged && shipped.iterations !== SPEC_MAX_ITERATIONS) {
+      if (!shipped.converged && shipped.iterations !== FIXED_MAX_ITERATIONS) {
         failures.push(`seed ${seed}: not converged but stopped at ${String(shipped.iterations)}`);
       }
     }
@@ -275,10 +275,10 @@ describe("PPR at the configuration it actually ships with", { timeout: 600_000 }
   });
 });
 
-describe("the convergence threshold is the one §7.2 names", () => {
+describe("the convergence threshold is the fixed one", () => {
   it("stops on a vector that has settled to within 1e-8", () => {
     // A loosened threshold returns early with a vector still moving. Seeded on
-    // a chain, the last iteration's step must already be under the spec bound.
+    // a chain, the last iteration's step must already be under the fixed bound.
     const size = 30;
     const edges: GraphEdge[] = [];
     for (let at = 0; at + 1 < size; at++) edges.push({ a: path(at), b: path(at + 1) });
@@ -300,6 +300,6 @@ describe("the convergence threshold is the one §7.2 names", () => {
     for (const [node, value] of settled.scores) {
       moved += Math.abs((oneMore.scores.get(node) as number) - value);
     }
-    expect(moved).toBeLessThan(SPEC_EPSILON);
+    expect(moved).toBeLessThan(FIXED_EPSILON);
   });
 });

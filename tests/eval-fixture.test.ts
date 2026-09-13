@@ -1,6 +1,6 @@
-// The committed eval fixture vault (handoff.md §13), read-only.
+// The committed eval fixture vault, read-only.
 //
-// The vault is evidence, and evidence that drifts is worse than none: §13's
+// The vault is evidence, and evidence that drifts is worse than none: the
 // floors in `queries.yaml` only mean something if the substrate under them is
 // the one they were measured against. These assertions fail loudly when a
 // rebuild changes the shape of the vault, before a floor silently absorbs it.
@@ -13,25 +13,25 @@ import { parseFrontmatter } from "../src/core/yaml";
 import { decodeUtf8 } from "../src/core/hash";
 import { NodeFs } from "../eval/nodefs";
 
-// §13 and §7.3, from the spec rather than from the fixture they describe.
-const SPEC_MIN_SOURCES = 20;
-const SPEC_MIN_PAGES = 40;
-const SPEC_MODE_B_NODES = 20;
-const SPEC_MODE_B_RATIO = 1.5;
+// Stated here rather than read from the fixture they describe.
+const FIXED_MIN_SOURCES = 20;
+const FIXED_MIN_PAGES = 40;
+const FIXED_MODE_B_NODES = 20;
+const FIXED_MODE_B_RATIO = 1.5;
 
 const VAULT = path.resolve(import.meta.dirname, "..", "eval", "fixture-vault");
 const MANIFEST = "ingest-manifest.json";
 
 const fs = () => new NodeFs(VAULT);
 
-describe("the fixture is the vault §13 asks for", () => {
+describe("the fixture is the vault the eval needs", () => {
   it("carries its own manifest, naming sources that exist", async () => {
-    // §13: "including its own `ingest-manifest.json` so graph construction
+    // "Including its own `ingest-manifest.json` so graph construction
     // knows the source set" — without it there are no raw nodes at all.
     const manifest = await loadManifest(fs(), MANIFEST);
     const paths = Object.keys(manifest);
 
-    expect(paths.length).toBeGreaterThanOrEqual(SPEC_MIN_SOURCES - 3);
+    expect(paths.length).toBeGreaterThanOrEqual(FIXED_MIN_SOURCES - 3);
     for (const source of paths) {
       expect(await fs().exists(source), source).toBe(true);
     }
@@ -40,7 +40,7 @@ describe("the fixture is the vault §13 asks for", () => {
   it("holds enough wiki pages to rank meaningfully", async () => {
     const pages = await loadPageTable(fs());
 
-    expect(pages.length).toBeGreaterThanOrEqual(SPEC_MIN_PAGES);
+    expect(pages.length).toBeGreaterThanOrEqual(FIXED_MIN_PAGES);
   });
 
   it("has a page table every entry of which parses", async () => {
@@ -54,15 +54,15 @@ describe("the fixture is the vault §13 asks for", () => {
   });
 });
 
-describe("the fixture reaches Mode B, with margin (§7.3)", () => {
+describe("the fixture reaches Mode B, with margin", () => {
   it("clears both halves of the predicate by enough to survive an edit", async () => {
     const graph = await buildGraph({ fs: fs(), manifestPath: MANIFEST });
     const ratio = graph.edges.length / graph.nodes.length;
 
-    expect(graph.nodes.length).toBeGreaterThanOrEqual(SPEC_MODE_B_NODES);
+    expect(graph.nodes.length).toBeGreaterThanOrEqual(FIXED_MODE_B_NODES);
     // Margin, not just passage. At exactly 1.5 any edit to the corpus flips
     // the harness into Mode A and the Mode B numbers stop measuring anything.
-    expect(ratio).toBeGreaterThan(SPEC_MODE_B_RATIO + 0.1);
+    expect(ratio).toBeGreaterThan(FIXED_MODE_B_RATIO + 0.1);
   });
 
   it("includes raw source nodes, not only wiki pages", async () => {
@@ -89,7 +89,7 @@ describe("the fixture reaches Mode B, with margin (§7.3)", () => {
 
   it("keeps one title collision, so the suffix path is exercised", async () => {
     // `raw/compiler.md` is a source, so its source page holds the title
-    // "compiler" and §4's uniqueness rule gives the *concept* "Compiler-2".
+    // "compiler" and the uniqueness rule gives the *concept* "Compiler-2".
     // That is real behaviour a real vault produces, and a fixture with no
     // instance of it would leave the suffixed-page lookup unmeasured.
     const titles = (await loadPageTable(fs())).map((page) => page.title);

@@ -1,11 +1,11 @@
-// §9's pane, to the extent it can be tested without Obsidian.
+// The graph pane, to the extent it can be tested without Obsidian.
 //
-// §14 puts "UI" under a manual checklist, and the `ItemView` itself genuinely
+// The UI is covered by a manual checklist, and the `ItemView` itself genuinely
 // is manual: lifecycle, canvas painting and CSS-variable sampling need a host.
 // But `sim.ts` and `render.ts` were written with no Obsidian import and no DOM
 // access precisely so the view could be read for lifecycle and they could be
 // read for behaviour — and what is readable in isolation is testable in
-// isolation. The camera transform in particular is load-bearing: every §9
+// isolation. The camera transform in particular is load-bearing: every pane
 // interaction resolves a pointer through it, so a defect there is a defect in
 // hover, drag, double-click and every overlay at once.
 import { describe, expect, it } from "vitest";
@@ -170,9 +170,9 @@ describe("the inverse transform, which drag and zoom-about-cursor need", () => {
   });
 });
 
-describe("§9's visual encoding", () => {
+describe("the visual encoding", () => {
   it("scales radius with log(degree + 1)", () => {
-    // §9: "baseline radius ∝ log(degree+1)". Checked as a ratio so the two
+    // Baseline radius ∝ log(degree+1). Checked as a ratio so the two
     // module-local constants can change without the property changing.
     const growth = (a: number, b: number) =>
       (radiusFor(b) - radiusFor(0)) / (radiusFor(a) - radiusFor(0));
@@ -182,7 +182,7 @@ describe("§9's visual encoding", () => {
   });
 
   it("gives a degree-0 node a visible radius rather than none", () => {
-    // An isolated page is still a node §9 draws; a radius of 0 would erase it.
+    // An isolated page is still a drawn node; a radius of 0 would erase it.
     expect(radiusFor(0)).toBeGreaterThan(0);
   });
 
@@ -192,7 +192,7 @@ describe("§9's visual encoding", () => {
   });
 
   it("gives the three wiki kinds and raw four distinct theme colours", () => {
-    // §9: "three muted theme-derived colors + one for raw source nodes".
+    // "Three muted theme-derived colors + one for raw source nodes".
     const used = [
       colorFor("concept", THEME),
       colorFor("entity", THEME),
@@ -206,7 +206,7 @@ describe("§9's visual encoding", () => {
   });
 });
 
-describe("§9's degradation: drop labels first", () => {
+describe("degradation: drop labels first", () => {
   /** A canvas context that records the calls `draw` makes. */
   function recorder() {
     const texts: string[] = [];
@@ -285,7 +285,7 @@ describe("edges are drawn to be seen, not merely drawn", () => {
   // It cannot cover the other half of that fix. Which CSS variable `edge` is
   // sampled from lives in `sampleTheme`, which needs `getComputedStyle`; this
   // suite runs under vitest's `node` environment. Picking a near-background
-  // variable again stays a manual check (README §6).
+  // variable again stays a manual check (checklist section 6).
   const MIN_CONTRAST = 1.45;
 
   /** Records the alpha and stroke colour in force when the edges are stroked. */
@@ -362,7 +362,7 @@ describe("edges are drawn to be seen, not merely drawn", () => {
   });
 
   it("still paints edges with the theme's edge colour, not a fixed hue", () => {
-    // §9: "colors and fonts from Obsidian CSS variables". Whatever the theme
+    // "Colors and fonts from Obsidian CSS variables". Whatever the theme
     // hands over is what reaches the canvas.
     expect(edgeStroke({ ...THEME, edge: "#123456" }).color).toBe("#123456");
   });
@@ -397,7 +397,7 @@ describe("edges are drawn to be seen, not merely drawn", () => {
   });
 });
 
-describe("positions seeded by hashing the page path (§9)", () => {
+describe("positions seeded by hashing the page path", () => {
   const snapshot = (paths: string[]): GraphSnapshot => ({
     nodes: paths.map((path) => ({
       path,
@@ -418,7 +418,7 @@ describe("positions seeded by hashing the page path (§9)", () => {
   }
 
   it("puts the same vault in the same place every time", () => {
-    // §9 asks for this so a reopened pane starts from the shape the user left.
+    // So a reopened pane starts from the shape the user left.
     expect(seeded(["a.md", "b.md", "c.md"])).toEqual(seeded(["a.md", "b.md", "c.md"]));
   });
 
@@ -464,7 +464,7 @@ describe("positions seeded by hashing the page path (§9)", () => {
   });
 });
 
-describe("a refresh keeps the layout the user is reading (§9)", () => {
+describe("a refresh keeps the layout the user is reading", () => {
   const snapshot = (
     paths: string[],
     edges: [string, string][] = [],
@@ -499,7 +499,7 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
   });
 
   it("keeps a pin a drag left behind", () => {
-    // §9's drag-to-pin: the node stays where it was dropped across a refresh.
+    // Drag-to-pin: the node stays where it was dropped across a refresh.
     const sim = createSim(snapshot(["a.md"]), () => undefined);
     const before = sim.nodes[0] as SimNode;
     before.fx = 77;
@@ -537,7 +537,7 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
   });
 
   it("leaves a settled layout at the temperature it had settled to", () => {
-    // §14's finding: a compile reporting "nothing to do" rearranged a settled
+    // The finding: a compile reporting "nothing to do" rearranged a settled
     // layout. Asserted on `alpha` rather than on the return value, because a
     // `replace` that reheats and reports `false` is the same defect wearing a
     // correct answer — and that is exactly what the boolean cannot see.
@@ -563,7 +563,7 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
     // moves nothing synchronously — it schedules a frame on d3's timer — so no
     // assertion in a synchronous test can see it. Catching it would mean
     // waiting on that timer, which is the flakiness every sim test is written
-    // to keep out. Alpha catches the reheat, which is the defect §14 found.
+    // to keep out. Alpha catches the reheat, which is the defect found by hand.
     expect(sim.nodes.map((node) => ({ x: node.x, y: node.y }))).toEqual(before);
     sim.stop();
   });
@@ -586,7 +586,7 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
   });
 
   it("reheats for a rename: the same counts, a different path", () => {
-    // A §6.5 rename retitles one page: one node leaves and one arrives, so the
+    // A retitled page: one node leaves and one arrives, so the
     // counts match and only the paths differ. It is a new layout and must be
     // treated as one — and it is the only shape that reaches `sameTopology`'s
     // node comparison, since every other case is caught by the length guard.
@@ -667,7 +667,7 @@ describe("a refresh keeps the layout the user is reading (§9)", () => {
   });
 });
 
-describe("what a press on a node turns out to be (§9's click against its drag)", () => {
+describe("what a press on a node turns out to be (a click against its drag)", () => {
   const snapshot = (paths: string[]): GraphSnapshot => ({
     nodes: paths.map((path) => ({
       path,
@@ -689,7 +689,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
 
   it("starts nothing on the press itself", () => {
     // Where the defect lived: `dragStart` ran on `pointerdown`, before anything
-    // knew which of §9's two gestures this was going to be.
+    // knew which of the two gestures this was going to be.
     const { sim, node } = pressed();
 
     expect(node.fx).toBeUndefined();
@@ -710,7 +710,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
   });
 
   it("neither reheats nor pins for a click, and still owes it a PPR", () => {
-    // §9 gives a click one job, an instant PPR overlay. The other two are the
+    // A click has one job, an instant PPR overlay. The other two are the
     // drag's, and the pin is the one that accumulates: ten clicks while
     // exploring froze ten nodes, and the layout could not relax again.
     const { sim, node, press } = pressed();
@@ -740,7 +740,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
     sim.stop();
   });
 
-  it("reheats the walk for a real drag, so checklist §7.3's neighbours resettle", () => {
+  it("reheats the walk for a real drag, so checklist item 7.3's neighbours resettle", () => {
     const { sim, node, press } = pressed();
 
     pressMoved(press, sim, node, 140, 100);
@@ -749,7 +749,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
     sim.stop();
   });
 
-  it("leaves a dragged node where it was dropped and lets the walk cool (checklist §7.3)", () => {
+  it("leaves a dragged node where it was dropped and lets the walk cool (checklist item 7.3)", () => {
     const { sim, node, press } = pressed();
 
     pressMoved(press, sim, node, 140, 100);
@@ -763,7 +763,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
     sim.stop();
   });
 
-  it("runs no click-PPR for a drag released back over its origin (checklist §7.6)", () => {
+  it("runs no click-PPR for a drag released back over its origin (checklist item 7.6)", () => {
     // Distance from the release point cannot tell this from a click: the
     // gesture travelled far enough to pin the node and then came back. Whether
     // the drag began is what decides.
@@ -779,7 +779,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
 
   it("calls no release a click when the travel arrived with it", () => {
     // No `pointermove` reported the distance, so nothing began — but the
-    // pointer did move, and checklist §7.6's click is the one without movement.
+    // pointer did move, and checklist item 7.6's click is the one without movement.
     const { sim, node, press } = pressed();
 
     const clicked = pressEnded(press, sim, 140, 100);
@@ -791,7 +791,7 @@ describe("what a press on a node turns out to be (§9's click against its drag)"
   });
 });
 
-describe("§9's overlay: ring, stroke, ramp, dim", () => {
+describe("the overlay: ring, stroke, ramp, dim", () => {
   // Peak deliberately not 1: with a peak of 1.0 the division is the identity
   // and the normalization assertion reads back its own inputs. Deleting the
   // `/ peak` used to pass this block clean.
@@ -802,7 +802,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
     ["cold.md", 0],
   ]);
 
-  it("names which of §9's three overlays it is", () => {
+  it("names which of the three overlays it is", () => {
     // The pane tells a click-PPR overlay it produced from a gesture apart from
     // one the user asked for, so opening a page does not discard the latter.
     expect(fromClickPPR(scores, "a.md", 2).source).toBe("click");
@@ -828,7 +828,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("survives an isolated seed, whose every score is zero", () => {
-    // §7.2 gives a degree-0 seed the teleport mass and everything else zero, so
+    // A degree-0 seed holds the teleport mass and everything else zero, so
     // the peak is zero and no ratio is defined. The ramp comes back empty —
     // never NaN, which would paint as a colour nobody chose.
     const overlay = fromClickPPR(new Map([["lonely.md", 0]]), "lonely.md", 5);
@@ -850,7 +850,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("dims a node the walk never reached", () => {
-    // §9: "non-neighborhood dimmed".
+    // "Non-neighborhood dimmed".
     const overlay = fromClickPPR(scores, "a.md", 2);
 
     expect(isLit(overlay, "c.md")).toBe(true);
@@ -859,7 +859,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("breaks top-K ties by path, so two runs agree", () => {
-    // §7.2's rule for ranking, applied to the same data the ranking produced.
+    // PageRank's tie rule, applied to the same data the ranking produced.
     const tied = new Map([
       ["z.md", 0.4],
       ["a.md", 0.4],
@@ -870,7 +870,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("carries no ramp for a Mode-A inspection, and one for Mode B", () => {
-    // §9: Mode A overlays "seeds and lexical top-K without a PPR heat ramp".
+    // Mode A overlays "seeds and lexical top-K without a PPR heat ramp".
     // Null rather than an empty map — an empty map paints every node at zero
     // heat, which is a ramp, just a flat one.
     const ranked = [
@@ -907,7 +907,7 @@ describe("§9's overlay: ring, stroke, ramp, dim", () => {
   });
 });
 
-describe("§9's filter, and how it composes with the overlay", () => {
+describe("the filter, and how it composes with the overlay", () => {
   it("matches on title or path, case-insensitively", () => {
     const target = node("wiki/concepts/PageRank.md", { title: "PageRank" });
 
@@ -924,7 +924,7 @@ describe("§9's filter, and how it composes with the overlay", () => {
   });
 
   it("dims for the overlay and the filter independently", () => {
-    // §9 describes them as separate controls. A node outside both is dimmer
+    // They are separate controls. A node outside both is dimmer
     // than one outside either, so both remain readable at once.
     const overlay = fromClickPPR(new Map([["lit.md", 1]]), "lit.md", 1);
     const lit = node("lit.md", { title: "lit" });
@@ -949,7 +949,7 @@ describe("§9's filter, and how it composes with the overlay", () => {
   });
 });
 
-describe("§9's labels follow the current metric", () => {
+describe("labels follow the current metric", () => {
   function recorder() {
     const texts: string[] = [];
     const ctx = {
@@ -995,7 +995,7 @@ describe("§9's labels follow the current metric", () => {
   });
 
   it("labels the hottest nodes when a PPR overlay supplies scores", () => {
-    // §9: "labels on hover plus top-10 by current metric". Under an overlay the
+    // "Labels on hover plus top-10 by current metric". Under an overlay the
     // metric is the score — labelling the degree hubs would name the pages every
     // query shares, at the one moment the names are supposed to be informative.
     const ctx = recorder();
@@ -1022,7 +1022,7 @@ describe("§9's labels follow the current metric", () => {
 });
 
 describe("the label-drop threshold is pinned from both sides", () => {
-  // §9's figure is 500. Tests using only 50 and 500 nodes leave every threshold
+  // The figure is 500. Tests using only 50 and 500 nodes leave every threshold
   // in between green, so a build that dropped labels at 60 would ship.
   const many = (count: number) =>
     Array.from({ length: count }, (_unused, at) =>
@@ -1052,23 +1052,23 @@ describe("the label-drop threshold is pinned from both sides", () => {
     return texts.length;
   }
 
-  const SPEC_DROP_AT = 500;
+  const FIXED_DROP_AT = 500;
 
   it("still labels at one node below the threshold", () => {
-    expect(labelCount(SPEC_DROP_AT - 1)).toBe(10);
+    expect(labelCount(FIXED_DROP_AT - 1)).toBe(10);
   });
 
   it("drops at the threshold exactly", () => {
-    expect(labelCount(SPEC_DROP_AT)).toBe(0);
+    expect(labelCount(FIXED_DROP_AT)).toBe(0);
   });
 });
 
-// §9's iteration scrubber. `view.ts` holds the slider and the wiring; what is
+// The iteration scrubber. `view.ts` holds the slider and the wiring; what is
 // here is the arithmetic under it — which stops exist, what each shows, what
 // the label claims. The wiring itself (slider appears, `input` re-overlays,
-// hides on clear) is covered by README §18's checklist and by nothing else,
+// hides on clear) is covered by checklist section 18 and by nothing else,
 // which is stated rather than left to be discovered.
-describe("§9's iteration scrubber", () => {
+describe("the iteration scrubber", () => {
   // Peaks are deliberately not 1: a frame normalized against itself has to be
   // visible as such, and frames that already peak at 1 hide the difference
   // between normalizing and not.
@@ -1106,7 +1106,7 @@ describe("§9's iteration scrubber", () => {
     });
 
     it("adds one for the final vector when the cap cut the walk short", () => {
-      // §7.2 retains 100 while §17's iteration ceiling can be raised past it.
+      // The walk retains 100 while the iteration ceiling can be raised past it.
       expect(stopsOf({ frames: FRAMES, iterations: 5 })).toBe(4);
     });
   });

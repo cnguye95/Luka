@@ -1,8 +1,8 @@
-// M2d: the §6.6 deletion/modification cascade, §5's scope preview, and §8.1's
+// The deletion/modification cascade, the scope preview, and the
 // confirm step — over an in-memory vault with a stub provider at the wrapper
-// layer, the same rig M2c uses.
+// layer, the same rig the compile pipeline tests use.
 //
-// The claims under test are the ones §6.6 makes: affected pages regenerate
+// The claims under test are the cascade's: affected pages regenerate
 // from surviving citing sources, a page with zero remaining citations is
 // deleted, a visited set stops a page being processed twice, and modification
 // uses the same machinery.
@@ -64,7 +64,7 @@ function citersOf(fs: MemFs, path: string): string[] {
   return parseCitationBlock(fs.text(path)).entries;
 }
 
-describe("deletion cascade (§6.6)", () => {
+describe("deletion cascade", () => {
   it("deletes the source page, the derivative, and every page left with no citer", async () => {
     const fs = new MemFs({ "raw/only.html": "<p>Ranking here.</p>\n" });
     await core(fs, new StubProvider(replyFor)).compile();
@@ -137,7 +137,7 @@ describe("deletion cascade (§6.6)", () => {
     const provider = new StubProvider(replyFor);
     const result = await core(fs, provider).compile();
 
-    // Two deleted sources both queued the same page; §6.6's visited set means
+    // Two deleted sources both queued the same page; the visited set means
     // it regenerates once, not twice.
     expect(provider.callsFor("page-generation")).toHaveLength(1);
     expect(citersOf(fs, "wiki/concepts/Ranking.md")).toEqual(["raw/three.md"]);
@@ -195,7 +195,7 @@ describe("deletion cascade (§6.6)", () => {
       "Sources: raw/one.md raw/two.md",
     );
 
-    // But nothing is orphaned. §6.5's citer record survives on the source still
+    // But nothing is orphaned. The citer record survives on the source still
     // existing, not on it still being mentioned: one.md no longer discusses
     // Graphs, yet it is still a live source citing that page, so the page
     // regenerates rather than being deleted. Only deletion empties a citer set.
@@ -221,7 +221,7 @@ describe("deletion cascade (§6.6)", () => {
   });
 });
 
-describe("scope preview (§5, §6.6)", () => {
+describe("scope preview", () => {
   it("reports the four-rule diff and both cascade lists without doing work", async () => {
     const fs = sharedVault();
     await core(fs, new StubProvider(replyFor)).compile();
@@ -272,7 +272,7 @@ describe("scope preview (§5, §6.6)", () => {
   });
 });
 
-describe("the confirm step (§8.1)", () => {
+describe("the confirm step", () => {
   it("shows the preview and proceeds when confirmed", async () => {
     const fs = sharedVault();
     await core(fs, new StubProvider(replyFor)).compile();
@@ -350,7 +350,7 @@ describe("the confirm step (§8.1)", () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  it("holds the operation lock across the confirm (§8.1, invariant 2)", async () => {
+  it("holds the operation lock across the confirm (invariant 2)", async () => {
     const fs = sharedVault();
     await core(fs, new StubProvider(replyFor)).compile();
     await fs.delete("raw/one.md");
@@ -415,8 +415,8 @@ describe("what the cascade must not do", () => {
     await core(fs, new StubProvider(replyFor)).compile();
     expect(await fs.exists("raw/a.md")).toBe(true);
 
-    // §6.2's missing-derivative rule turns this into modified + deleted, and
-    // the derivative at the old name is what M1 left for the cascade.
+    // The missing-derivative rule turns this into modified + deleted, and
+    // the derivative at the old name is left for the cascade.
     await fs.move("raw/a.html", "raw/b.html");
     await core(fs, new StubProvider(replyFor)).compile();
 
@@ -428,7 +428,7 @@ describe("what the cascade must not do", () => {
     // Both sources cite Ranking; only one.md cites Graphs. Deleting one.md
     // regenerates Ranking and dooms Graphs in the same run — so Ranking's new
     // body is written while Graphs is on its way out. An unresolved link is
-    // §4's future-article signal; a resolved one would point at nothing.
+    // a future-article signal; a resolved one would point at nothing.
     const fs = sharedVault();
     await core(fs, new StubProvider(replyFor)).compile();
 
@@ -459,7 +459,7 @@ describe("an interrupted cascade retries (invariant 3)", () => {
     const second = await core(fs, failing).compile();
 
     // The page that had to regenerate did not, so the deletion is not recorded
-    // and §6.2's rule 3 will fire again next compile.
+    // and the deleted-source rule will fire again next compile.
     expect(Object.keys(manifestOf(fs)).sort()).toEqual(["raw/one.md", "raw/two.md"]);
     expect(second.failed.map((failure) => failure.path)).toContain("raw/one.md");
 
@@ -601,7 +601,7 @@ describe("an interrupted cascade retries (invariant 3)", () => {
 });
 
 describe("a source that cannot be read costs a page one run, not its content", () => {
-  it("does not regenerate a page from an unreadable citer's empty body (§6.5)", async () => {
+  it("does not regenerate a page from an unreadable citer's empty body", async () => {
     // Both sources cite Ranking. `one.html` then fails to normalize, because a
     // file of the user's now occupies its derivative path — but the source
     // still exists, so it keeps its citation. Call B would be handed "" under
@@ -633,7 +633,7 @@ describe("a source that cannot be read costs a page one run, not its content", (
   it("still serves the body of a citer whose own inventory failed", async () => {
     // Normalization is what creates readable markdown, and it succeeded — only
     // this source's own Call A came back an error. The body is sitting on disk,
-    // and §6.5 wants "the full normalized bodies of *all* citing sources", so
+    // and Call B wants "the full normalized bodies of *all* citing sources", so
     // refusing it would cost the page a citer it still claims in its block.
     //
     // The source is a rename that had to re-extract, which is the case with no
@@ -674,7 +674,7 @@ describe("a citer that cannot be read at all", () => {
     // file cannot be stat'd or read, rather than letting the error escape. An
     // escaped error is not classified as an unreadable citer, so it blocks
     // every *other* citer of the page — un-manifesting a healthy source and
-    // re-inventorying it forever, which is what M2d's fifth round fixed.
+    // re-inventorying it forever, which an earlier fix closed.
     for (const failing of ["stat", "read"] as const) {
       const fs = new MemFs({
         "raw/one.md": "Ranking only.\n",
@@ -727,7 +727,7 @@ describe("a carried rename is still a citer", () => {
   it("serves its body to a page regenerating in the same run", async () => {
     // The carry deliberately skips normalization, so this source produces no
     // outcome this run; and its new path is an addition, so the manifest as
-    // found does not name it either. It is still a citer, and §6.5 wants the
+    // found does not name it either. It is still a citer, and Call B wants the
     // bodies of *all* citing sources — the markdown is sitting at the path the
     // carry just moved it to.
     const fs = new MemFs({
@@ -777,7 +777,7 @@ describe("a carried rename is still a citer", () => {
 
 describe("a re-extracted rename still owes its pages", () => {
   it("keeps a carried rename whose page could not be written", async () => {
-    // A carried rename owes no page. §6.2 skips regeneration for it, so it
+    // A carried rename owes no page. Regeneration is skipped for it, so it
     // contributed no inventory this run and re-running it could not regenerate
     // anything — blocking it would only throw away a carry that succeeded and
     // re-extract over the repair next compile. The page comes back through the
@@ -815,7 +815,7 @@ describe("a re-extracted rename still owes its pages", () => {
   it("keeps the repair of a carried rename whose page failed", async () => {
     // The regression this rule replaced: withholding the entry left it naming a
     // path the carry had already vacated, so the retry could not recognise its
-    // own work and re-extracted over §6.2's sanctioned repair.
+    // own work and re-extracted over the sanctioned repair.
     const fs = new MemFs({
       "raw/one.html": "<p>Ranking here.</p>\n",
       "raw/two.md": "Ranking too.\n",

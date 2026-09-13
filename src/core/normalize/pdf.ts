@@ -1,12 +1,12 @@
-// Text-layer PDF extraction (handoff.md §6.1). Hard cases — layout-aware
-// extraction, OCR, vision fallback — are M5 and deliberately absent here.
+// Text-layer PDF extraction. Hard cases — layout-aware
+// extraction, OCR, vision fallback — are deliberately absent here.
 import { extractText, getDocumentProxy } from "unpdf";
 
 export interface PdfExtraction {
   /** Page texts joined by a blank line. */
   text: string;
   pageCount: number;
-  /** Per-page text, kept for M2's smell test. */
+  /** Per-page text, kept for the smell test. */
   pages: string[];
 }
 

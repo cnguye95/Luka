@@ -4,7 +4,7 @@
 // the answer already held, so two answers over one vault write one section
 // (`ask` asserts the byte-identity). And nothing it writes can become a link:
 // `linkTargets` is fence-blind, so a `[[` inside the Mermaid fence would be a
-// §7.1 edge to a page that does not exist — which is the opposite of what a
+// graph edge to a page that does not exist — which is the opposite of what a
 // recommendation to write that page should do.
 import { describe, expect, it } from "vitest";
 import { answerGaps, mermaidLabel, renderGapsBlock, stripGaps } from "../src/core/answer/addnext";
@@ -39,7 +39,7 @@ describe("what the answer ran into", () => {
   });
 
   it("puts what synthesis said it lacked first, in its own order", () => {
-    // §8.2's list is the model reporting on its own answer, which is a
+    // Synthesis's list is the model reporting on its own answer, which is a
     // stronger statement about this question than a link on a page it read.
     // Its order is the frontmatter's, so the note does not say two things.
     const gaps = gapsOf(
@@ -75,14 +75,14 @@ describe("what the answer ran into", () => {
     expect(gaps.map((g) => g.title)).toEqual(["the 1998 paper"]);
   });
 
-  it("resolves a synthesis item through an alias, as §4 does", () => {
+  it("resolves a synthesis item through an alias, as the title table does", () => {
     const gaps = gapsOf(["PPR"], [], [meta("wiki/concepts/PageRank.md", "PageRank", ["PPR"])]);
 
     expect(gaps).toEqual([]);
   });
 
   it("names one gap once when the model repeats itself", () => {
-    // Model lists repeat, and two spellings of one §4 name are one name. Left
+    // Model lists repeat, and two spellings of one name are one name. Left
     // alone they render as two bullets that contradict each other: one says
     // the wiki could not answer it, the other names the pages that wanted it.
     const gaps = gapsOf(
@@ -110,8 +110,8 @@ describe("what the answer ran into", () => {
   });
 
   it("does not read a raw source's links", () => {
-    // A raw source is a file, not a §4 page: its links are its author's, and
-    // §4 does not resolve them against the title table.
+    // A raw source is a file, not a page: its links are its author's, and
+    // they are not resolved against the title table.
     const gaps = gapsOf([], [node("raw/note.md", "note.md", "See [[Zeppelin]].", { kind: "raw" })]);
 
     expect(gaps).toEqual([]);
@@ -143,7 +143,7 @@ describe("what the answer ran into", () => {
   });
 
   it("refuses a name longer than the namespace allows", () => {
-    // §4's namespace has two rules — how names compare and how long a name may
+    // The namespace has two rules — how names compare and how long a name may
     // be — and a name that cannot be stored under the name it was asked for is
     // not a recommendation anyone can act on.
     const within = "x".repeat(200);
@@ -153,7 +153,7 @@ describe("what the answer ran into", () => {
     expect(gapsOf([], [node("wiki/concepts/A.md", "A", `See [[${beyond}]].`)])).toEqual([]);
   });
 
-  it("refuses a name §4 would have to rewrite to store", () => {
+  it("refuses a name that would have to be rewritten to store", () => {
     // Forbidden characters, the reserved `_` prefix, and a name that sanitizes
     // to nothing at all.
     const gaps = gapsOf([], [
@@ -176,7 +176,7 @@ describe("what the answer ran into", () => {
     // The predecessor refused any lowercase letter followed by an uppercase
     // one. That is the shape of `linkTargets` — and of `PageRank`, this
     // project's own canonical page, along with every product and project name
-    // a wiki actually holds. §10 went on listing them, so the two surfaces
+    // a wiki actually holds. The health report went on listing them, so the two
     // disagreed with nothing to explain why.
     const gaps = gapsOf([], [
       node("wiki/concepts/A.md", "A", "See [[PageRank]], [[OpenAI]] and [[JavaScript]]."),
@@ -314,10 +314,10 @@ describe("what the section says", () => {
   });
 
   it("cannot write a wikilink, whatever the gap is called", () => {
-    // Mermaid's subroutine shape is spelled `[[Label]]`, which is a §7.1 edge
+    // Mermaid's subroutine shape is spelled `[[Label]]`, which is a graph edge
     // to `linkTargets`. So the brackets are escaped along with the syntax.
     // Synthesis's own words are the vector that matters: a link target cannot
-    // carry `]` and so cannot reach a label, but §8.2's items are free prose.
+    // carry `]` and so cannot reach a label, but synthesis's items are free prose.
     const gaps = gapsOf(['[X] & <y> "z" #1 `q` {w} |v| 100% \\'], []);
 
     const block = renderGapsBlock(gaps);

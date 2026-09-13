@@ -1,4 +1,4 @@
-// The one idiom for every ingest/answer surface problem (handoff.md §4).
+// The one idiom for every ingest/answer surface problem.
 // Wording for images is always "not fetched", never "removed".
 
 /**
@@ -9,7 +9,7 @@
  * document supplied, and a repo path comes from whatever the user named their
  * files. A `-->` anywhere in one ends the comment early, turning the rest of
  * the marker into live markdown — a working wikilink becomes a graph edge
- * (§7.1) that nothing in the vault actually cites. Line breaks would split the
+ * that nothing in the vault actually cites. Line breaks would split the
  * comment across lines for the same reason.
  */
 function inComment(value: string): string {
@@ -30,11 +30,11 @@ export function repoFileOmitted(path: string, reason: string): string {
 /**
  * A deliberate render bound, not a suspicion about an extraction.
  *
- * §6.5 scopes `normalization suspect` to PDF-derived text, and the smell test
+ * `normalization suspect` is scoped to PDF-derived text, and the smell test
  * is its only other producer — a descriptor that shows 200 of 4,000 columns
  * has not been extracted badly, it has been summarized. Placed at the point of
  * the omission like `repo file omitted`, rather than at the head of the file
- * where §6.5 puts suspect markers.
+ * where suspect markers go.
  */
 export function datasetColumnsOmitted(shown: number, total: number): string {
   return `<!-- dataset columns omitted: showing ${shown} of ${total} -->`;
@@ -47,7 +47,7 @@ export function normalizationSuspect(reasons: readonly string[]): string {
 /**
  * A citing source that reached the model with nothing in it.
  *
- * Its own marker rather than the budget one: §4 fixes that marker's wording to
+ * Its own marker rather than the budget one: that marker's wording is fixed to
  * "truncated for context budget", and an empty file under a 40,000-token
  * budget was neither truncated nor over budget. One marker per problem, and
  * this is a different problem.
@@ -57,7 +57,7 @@ export function sourceWithoutContent(sources: readonly string[]): string {
 }
 
 /**
- * §6.5's budget marker. Naming sources is optional because `tokens.ts` marks
+ * The budget marker. Naming sources is optional because `tokens.ts` marks
  * a cut inside a prompt, where there is nothing to name; a page marks which
  * of its citers the model did not receive in full, so it never claims
  * grounding that code wrote into its citation block and the model never saw.

@@ -51,8 +51,8 @@ describe("deleting goes through Obsidian's recovery path", () => {
   it("trashes rather than unlinking", async () => {
     // What comes through here is a cascade-doomed page — the modal calls them
     // pages that *may* be deleted, so the user approves a superset — and
-    // derivatives under raw/, including one a user hand-repaired, which §6.2
-    // names as the sanctioned repair. `remove()` puts those beyond recovery.
+    // derivatives under raw/, including one a user hand-repaired, which is
+    // the sanctioned repair. `remove()` puts those beyond recovery.
     const adapter = new StubAdapter(new Map([["wiki/concepts/Gone.md", { kind: "file" }]]));
 
     await fsOver(adapter).delete("wiki/concepts/Gone.md");
@@ -71,12 +71,12 @@ describe("deleting goes through Obsidian's recovery path", () => {
   });
 });
 
-describe("mkdir survives what §6.3's concurrency does to it", () => {
+describe("mkdir survives what image-fetch concurrency does to it", () => {
   it("treats a folder another worker just created as success", async () => {
-    // §6.3 fetches four images at once, so on the first compile of a document
+    // Images are fetched four at once, so on the first compile of a document
     // with two kept remote images every in-flight call sees raw/assets absent.
     // The throw escaped to normalizeSource and failed the whole source, where
-    // §6.3 says a failure should leave the link and mark it.
+    // a failure should leave the link and mark it.
     const adapter = new StubAdapter();
     const racing = new ObsidianFs(adapter as never);
 

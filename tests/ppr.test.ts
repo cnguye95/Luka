@@ -1,14 +1,14 @@
-// §7.2's personalized PageRank, and §14's required fixture:
+// Personalized PageRank, and the required fixture:
 // "PPR against a hand-computed 5-node fixture, determinism across runs,
 // degree-0 handling."
 import { describe, expect, it } from "vitest";
 import { computePPR } from "../src/core/graph/ppr";
 import type { GraphEdge, GraphSnapshot } from "../src/core/types";
 
-// §17's default, redeclared here rather than imported. A spec number has to
-// come from the spec: expectations derived from the code they check cannot
+// The default, redeclared here rather than imported. A fixed number has to
+// be stated independently: expectations derived from the code they check cannot
 // notice the code being wrong.
-const SPEC_ALPHA = 0.85;
+const FIXED_ALPHA = 0.85;
 
 const N = (name: string) => `wiki/concepts/${name}.md`;
 
@@ -78,12 +78,12 @@ function cycle(size: number): GraphSnapshot {
 
 const run = (seeds: string[], overrides: { alpha?: number; maxIterations?: number; snapshots?: boolean } = {}) =>
   computePPR(fixture(), seeds, {
-    alpha: overrides.alpha ?? SPEC_ALPHA,
+    alpha: overrides.alpha ?? FIXED_ALPHA,
     maxIterations: overrides.maxIterations ?? 100,
     ...(overrides.snapshots === true ? { snapshots: true } : {}),
   });
 
-describe("PPR against a hand-computed fixture (§7.2)", () => {
+describe("PPR against a hand-computed fixture", () => {
   it("reproduces the fixed point solved by hand", () => {
     // Solving v = αAv + (1−α)p by hand with α = 17/20, seeded on `a`.
     // By symmetry v_b = v_c (each touches a and the other), so with
@@ -115,14 +115,14 @@ describe("PPR against a hand-computed fixture (§7.2)", () => {
   });
 });
 
-describe("degree-0 handling (§7.2)", () => {
+describe("degree-0 handling", () => {
   it("gives an isolated seed exactly the teleport mass and nothing else", () => {
     // "Degree-0 nodes propagate nothing (zero column) and hold teleport mass
     // only." Seeded on `e`, the walk has nowhere to go: `e` keeps (1−α) and
     // the rest of the mass leaves the graph rather than being redistributed.
     const scores = run([N("e")]).scores;
 
-    expect(scores.get(N("e"))).toBeCloseTo(1 - SPEC_ALPHA, 12);
+    expect(scores.get(N("e"))).toBeCloseTo(1 - FIXED_ALPHA, 12);
     for (const name of ["a", "b", "c", "d"]) expect(scores.get(N(name))).toBe(0);
   });
 
@@ -131,7 +131,7 @@ describe("degree-0 handling (§7.2)", () => {
   });
 });
 
-describe("seeds that name nothing (§7.4 step 2 drops them before this)", () => {
+describe("seeds that name nothing (the seed call drops them before this)", () => {
   it("answers every score zero when no seed is in the graph", () => {
     const result = run([N("nobody")]);
 
@@ -151,9 +151,9 @@ describe("seeds that name nothing (§7.4 step 2 drops them before this)", () => 
   });
 });
 
-describe("determinism (§7.2)", () => {
+describe("determinism", () => {
   it("orders nodes by code point, not by the host's collation", () => {
-    // §7.2: "node order lexicographic by path". `comparePaths` is code-point
+    // "Node order lexicographic by path". `comparePaths` is code-point
     // order deliberately, because `localeCompare` is locale- and ICU-dependent:
     // under it `_x` sorts before `A-B` and `alpha` before `Zeta`, which changes
     // the index assignment, hence the floating-point summation order, hence the
@@ -172,7 +172,7 @@ describe("determinism (§7.2)", () => {
       edges: names.slice(1).map((name) => ({ a: N(names[0] as string), b: N(name) })),
     };
 
-    const scores = computePPR(graph, [N("Zeta")], { alpha: SPEC_ALPHA, maxIterations: 100 }).scores;
+    const scores = computePPR(graph, [N("Zeta")], { alpha: FIXED_ALPHA, maxIterations: 100 }).scores;
 
     // Code-point order puts capitals first and `_` after them; a collation
     // order would interleave differently.
@@ -197,7 +197,7 @@ describe("determinism (§7.2)", () => {
       nodes: [...forward.nodes].reverse(),
       edges: [...forward.edges].reverse().map((edge) => ({ a: edge.b, b: edge.a })),
     };
-    const options = { alpha: SPEC_ALPHA, maxIterations: 100 };
+    const options = { alpha: FIXED_ALPHA, maxIterations: 100 };
 
     expect([...computePPR(reversed, [N("a")], options).scores]).toEqual([
       ...computePPR(forward, [N("a")], options).scores,
@@ -205,7 +205,7 @@ describe("determinism (§7.2)", () => {
   });
 });
 
-describe("snapshots (§7.2)", () => {
+describe("snapshots", () => {
   it("retains one vector per iteration when asked", () => {
     const result = run([N("a")], { snapshots: true });
 
@@ -219,7 +219,7 @@ describe("snapshots (§7.2)", () => {
 
   it("never retains more than the fixed cap of 100", () => {
     // A hand-edited `pprMaxIterations` above 100 must not grow the pane's
-    // memory: §7.2 bounds retained vectors independently of the loop. A long
+    // memory: retained vectors are bounded independently of the loop. A long
     // chain mixes slowly enough to run past 100 iterations — α alone does not,
     // because a small dense graph converges in tens of steps whatever the
     // damping.
@@ -234,7 +234,7 @@ describe("snapshots (§7.2)", () => {
   });
 });
 
-describe("the caller can tell a settled vector from a truncated one (§7.2)", () => {
+describe("the caller can tell a settled vector from a truncated one", () => {
   it("reports convergence on a graph that settles inside the limit", () => {
     const result = run([N("a")]);
 
@@ -242,8 +242,8 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     expect(result.iterations).toBeLessThan(100);
   });
 
-  it("reports truncation at §17's own defaults, which a chain reaches", () => {
-    // §17 ships α = 0.85 and a 100-iteration cap, and a chain needs 118
+  it("reports truncation at the shipped defaults, which a chain reaches", () => {
+    // The defaults are α = 0.85 and a 100-iteration cap, and a chain needs 118
     // iterations to reach L1 < 1e-8. No claim about why: "sparse graphs need
     // 118" was one of four wrong explanations, and `cycle(5)` — the same one
     // edge per node — needs 53.
@@ -267,12 +267,12 @@ describe("the caller can tell a settled vector from a truncated one (§7.2)", ()
     expect(short.converged).toBe(false);
     expect(short.iterations).toBe(100);
     // And both settle at the same count once the cap is lifted.
-    const SPEC_SETTLES_AT = 118;
+    const FIXED_SETTLES_AT = 118;
     expect(computePPR(chain(2), [N("n00")], { alpha: 0.85, maxIterations: 5000 }).iterations).toBe(
-      SPEC_SETTLES_AT,
+      FIXED_SETTLES_AT,
     );
     expect(computePPR(chain(16), [N("n00")], { alpha: 0.85, maxIterations: 5000 }).iterations).toBe(
-      SPEC_SETTLES_AT,
+      FIXED_SETTLES_AT,
     );
   });
 

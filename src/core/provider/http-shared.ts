@@ -1,4 +1,4 @@
-// What §11's two transports have in common: how a vendor's failure becomes a
+// What the two transports have in common: how a vendor's failure becomes a
 // `ProviderError`, and how bytes become base64 for a vision call.
 //
 // Extracted from `anthropic.ts` when the OpenAI-compatible transport arrived.
@@ -8,7 +8,7 @@
 //
 // The `message`/`vendorMessage` split in particular is shared because the
 // *reason* for it is: `message` is clipped because it reaches a Notice, and
-// `vendorMessage` is unclipped because §11's temperature re-run reads it. A
+// `vendorMessage` is unclipped because the temperature re-run reads it. A
 // transport that carried only the clipped copy would silently disable that
 // re-run, which is exactly how it was broken once already.
 import type { HttpResponse } from "../adapters";
@@ -23,7 +23,7 @@ import { ProviderError } from "./types";
  */
 export const MAX_VENDOR_MESSAGE = 500;
 
-/** §11's per-task cap was reached and the reply is a fragment, not an answer. */
+/** The per-task cap was reached and the reply is a fragment, not an answer. */
 export const INCOMPLETE_REPLY_MESSAGE = "provider reply hit max_tokens and is incomplete";
 
 /** The endpoint answered, and the answer is unusable. Never worth retrying. */
@@ -31,7 +31,7 @@ export const NOT_JSON_MESSAGE = "provider returned a 2xx response that is not JS
 
 /**
  * The clipped message a Notice may show, and the vendor's own text beside it.
- * They are separate because §11's temperature re-run decides on the vendor's
+ * They are separate because the temperature re-run decides on the vendor's
  * wording: a vendor that enumerates unsupported parameters at length would
  * otherwise push the word past the clip and fail every compile.
  */
@@ -66,15 +66,15 @@ export function clip(message: string): string {
 /**
  * A non-2xx response, as the wrapper needs to see it.
  *
- * §11 retries "429/5xx/network" and nothing else: every other 4xx is the
+ * The wrapper retries 429/5xx/network and nothing else: every other 4xx is the
  * request's own fault and the same request will fail the same way.
  *
  * One caller deliberately does not reach this. `openai-compat.ts`'s
  * `tokenFieldRefusal` raises a *retryable* 400, because the request it is
  * asking for is not the same request — the token field has changed. That is a
- * recorded deviation from the sentence above (BUILD-NOTES S73), not a
- * disagreement about what this function does: everything routed here follows
- * §11's enumeration exactly.
+ * recorded deviation from the sentence above (design_decisions.md, decision
+ * 12), not a disagreement about what this function does: everything routed
+ * here follows that enumeration exactly.
  */
 export function failureFrom(response: HttpResponse): ProviderError {
   const detail = errorDetail(response.status, response.bytes);

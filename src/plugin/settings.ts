@@ -30,7 +30,7 @@ export class LukaSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // §12's provider selector. Read through `normalizeSettings` so a
+    // The provider selector. Read through `normalizeSettings` so a
     // hand-edited `data.json` naming something else shows the provider that
     // will actually be used, rather than a blank dropdown.
     const provider = normalizeSettings(this.plugin.settings).provider;
@@ -112,7 +112,7 @@ export class LukaSettingTab extends PluginSettingTab {
 
     this.number(containerEl, "contextBudgetTokens", {
       name: "Context budget",
-      desc: "Tokens of source text one answer may be built from (§7.4). Roughly characters ÷ 4.",
+      desc: "Tokens of source text one answer may be built from. Roughly characters ÷ 4.",
     });
     this.number(containerEl, "assemblyCap", {
       name: "Pages per answer (K)",
@@ -120,7 +120,7 @@ export class LukaSettingTab extends PluginSettingTab {
     });
     this.number(containerEl, "modeMinNodes", {
       name: "Graph mode: minimum nodes",
-      desc: "Below this the wiki is ranked by keyword rather than by the graph (§7.3).",
+      desc: "Below this the wiki is ranked by keyword rather than by the graph.",
     });
     this.number(containerEl, "modeMinLinkRatio", {
       name: "Graph mode: minimum links per node",
@@ -129,7 +129,7 @@ export class LukaSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Follow-up round")
-      .setDesc("Let one answer ask for more pages when the first pass says something is missing (§8.2).")
+      .setDesc("Let one answer ask for more pages when the first pass says something is missing.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.followUpEnabled).onChange(async (value) => {
           this.plugin.settings.followUpEnabled = value;
@@ -137,8 +137,8 @@ export class LukaSettingTab extends PluginSettingTab {
         }),
       );
 
-    // §12 asks for the PPR parameters "collapsed"; `details` is the platform's
-    // own disclosure and needs no stylesheet, which §3 leaves us without.
+    // The PPR parameters are collapsed; `details` is the platform's
+    // own disclosure and needs no stylesheet of its own.
     const advanced = containerEl.createEl("details");
     advanced.createEl("summary", { text: "Advanced (PageRank)" });
 
@@ -152,7 +152,7 @@ export class LukaSettingTab extends PluginSettingTab {
     });
     new Setting(advanced)
       .setName("Convergence threshold (ε)")
-      .setDesc("Fixed by §17 — shown because the walk's stopping rule is worth knowing, not because it is tunable.")
+      .setDesc("Fixed — shown because the walk's stopping rule is worth knowing, not because it is tunable.")
       .addText((text) => {
         text.setValue(String(PPR_EPSILON)).setDisabled(true);
       });

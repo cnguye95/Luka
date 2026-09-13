@@ -132,15 +132,15 @@ function derivativesOf(fs: MemFs): string[] {
 const REPAIR_MARK = "HAND REPAIRED.";
 
 /**
- * §6.2, checkable: "a derivative persists until the original changes", and
- * M2e's failure policy adds "or until a run says it could not keep it".
+ * Checkable: "a derivative persists until the original changes", and
+ * the failure policy adds "or until a run says it could not keep it".
  *
  * Convergence alone cannot see a violation — a destroyed repair settles as
  * happily as a preserved one — and destroying a user's work silently is the
  * shape of the worst defect either review round found. So each repaired
  * derivative is pinned to the source that owns it, together with whether that
  * source was unchanged going into the compile. Only the unchanged ones are the
- * spec's business: an edited original is entitled to a fresh extraction.
+ * rule's business: an edited original is entitled to a fresh extraction.
  */
 async function repairsBefore(fs: MemFs): Promise<Map<string, string>> {
   const pinned = new Map<string, string>();
@@ -236,7 +236,7 @@ function repairsStolen(
  * Sources that have settled into permanent failure while their own markdown
  * stands intact — a deadlock rather than a collision.
  *
- * §6.1 names derivatives after their original, so two live sources on one stem
+ * Derivatives are named after their original, so two live sources on one stem
  * genuinely contend and one of them must lose; that is by design and permanent
  * by design. What is not by design is a source barred from ingesting when
  * nothing is actually competing for anything it needs — which is what happened
@@ -544,7 +544,7 @@ async function sweep(everywhere: boolean): Promise<string[]> {
           continue;
         }
         // Nothing may settle into permanent failure while holding intact
-        // markdown of its own: that is a deadlock, not a §6.1 collision.
+        // markdown of its own: that is a deadlock, not a stem collision.
         const stuck = await deadlocked(fs, results[2] as CompileResult);
         if (stuck.length > 0) {
           failures.push(`seed ${seed}: deadlocked ${JSON.stringify(stuck)}`);

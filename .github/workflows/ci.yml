@@ -18,6 +18,6 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
-      # §13's four CI steps: build, unit tests, boundary check, eval CI mode.
+      # The four CI steps: build, unit tests, boundary check, eval CI mode.
       # CI mode calls no model — it measures ranking only.
       - run: npm run eval

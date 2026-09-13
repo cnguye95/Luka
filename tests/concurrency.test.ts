@@ -41,7 +41,7 @@ describe("mapWithConcurrency", () => {
   });
 
   it("passes each item its own input position, not its completion order", async () => {
-    // Compile's progress notices are numbered from this index (§6 phases), so
+    // Compile's progress notices are numbered from this index, so
     // a per-worker counter — or anything derived from finishing order — would
     // make the count jump around. The delays are staggered so completion order
     // deliberately disagrees with input order.

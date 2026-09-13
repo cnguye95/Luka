@@ -15,14 +15,14 @@ export function progressNotice(message: string): Notice {
 /**
  * Invariant 4: ingest problems surface as inline markers in the affected file.
  * There is no ingest report and no aggregate count, so nothing here counts or
- * rolls up problems. The two notices that do exist are the ones the spec asks
- * for by name: §6.1's single notice naming unsupported files, and §11's
+ * rolls up problems. The two notices that do exist are the two required
+ * by design: the single notice naming unsupported files, and the
  * per-source notice when a source is skipped after failing.
  */
 export function reportCompile(result: CompileResult): void {
   // A declined scope preview did nothing, so there is nothing to report about
   // the work — but which files are unsupported is a discovery fact, true
-  // whether or not the user confirmed, so §6.1's notice still stands.
+  // whether or not the user confirmed, so the notice still stands.
   notify(result.cancelled ? "compile cancelled — nothing was changed." : completionMessage(result), NOTICE_MS);
 
   if (result.skipped.length > 0) {
@@ -32,7 +32,7 @@ export function reportCompile(result: CompileResult): void {
 
   if (result.cancelled) return;
 
-  // §11: "A failed source is skipped with a notice." Not always an ingest —
+  // "A failed source is skipped with a notice." Not always an ingest —
   // a source can also fail because a page it cites could not be regenerated or
   // a page it left behind could not be deleted — so the wording names the
   // outcome the two share.
@@ -50,7 +50,7 @@ export function reportCompile(result: CompileResult): void {
 }
 
 /**
- * §8.3's answer, once written. The mode and the grounding are the two things a
+ * The answer, once written. The mode and the grounding are the two things a
  * reader cannot see at a glance but will want to know before trusting it.
  */
 export function reportAnswer(result: AnswerResult): void {
@@ -71,7 +71,7 @@ function completionMessage(result: CompileResult): string {
   const removed: string[] = [];
   if (result.pagesDeleted > 0) removed.push(`${plural(result.pagesDeleted, "page")}`);
   // `raw/` is the user's own folder. A compile that took a file out of it says
-  // so, even though §6.6's preview lists only pages.
+  // so, even though the scope preview lists only pages.
   if (result.derivativesDeleted > 0) {
     removed.push(`${plural(result.derivativesDeleted, "file")} from raw/`);
   }

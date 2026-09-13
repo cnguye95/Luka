@@ -1,4 +1,4 @@
-// §5's scope preview over the §6.6 deletion / modification cascade.
+// The scope preview over the deletion / modification cascade.
 //
 // Only the advisory half lives here. Locating and removing an orphaned
 // derivative used to as well, by deriving `<stem>.md` from a departed path;
@@ -12,20 +12,20 @@
 // run; the cascade runs to completion. Modification uses the same machinery."
 //
 // The cascade cannot chain. Pages cite *sources*, never other pages — a
-// wikilink to a page is §4's "future-article signal", not a citation — so
+// wikilink to a page is a "future-article signal", not a citation — so
 // "runs to completion" is one pass over the page table, and the visited set is
 // that pass keyed by page path.
 //
 // What this module computes is **advisory**: it answers "what would this diff
 // touch" without normalizing, calling the model, or writing. The authoritative
 // decision stays where it already lives, in `citerUnion` against the manifest
-// this run will write — which is why §6.6's second list is pages that *may* be
+// this run will write — which is why the second list is pages that *may* be
 // deleted: a modified or new source's inventory can still re-cite one.
 import { comparePaths } from "../paths";
 import type { PageMeta } from "../types";
 import type { DiscoveryResult } from "./discover";
 
-/** §5: "the four-rule diff plus cascade scope … without doing work". */
+/** The four-rule diff plus cascade scope, without doing work. */
 export interface ScopePreview {
   added: number;
   modified: number;
@@ -34,7 +34,7 @@ export interface ScopePreview {
   renamed: number;
   /** Pages citing a touched source that keep at least one surviving citer. */
   regenerate: string[];
-  /** Pages whose every citer is being deleted — §6.6's "may be deleted". */
+  /** Pages whose every citer is being deleted — "may be deleted". */
   mayDelete: string[];
 }
 

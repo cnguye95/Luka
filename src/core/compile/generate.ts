@@ -1,5 +1,5 @@
 // Call B — page generation, plus the code-written half of every page
-// (handoff.md §6.5, invariant 5).
+// (invariant 5).
 //
 // "input is title, kind, aliases, and the full normalized bodies of *all*
 // citing sources (token-budgeted using the same context-budget default as
@@ -69,8 +69,8 @@ export async function generatePageBody(
   // The prompt already tells the model which sources the budget dropped. The
   // page has to say so too: code writes the citation block from the full citer
   // set, so without this the page claims a source it was never grounded in —
-  // and §6.5 makes that block the persistent citer record, so the false claim
-  // outlives the run and feeds §7.1's graph.
+  // and that block is the persistent citer record, so the false claim
+  // outlives the run and feeds the graph.
   const { overBudget, empty } = shortfall(input);
   const notes = [
     ...(overBudget.length === 0 ? [] : [truncatedForContextBudget(overBudget)]),
@@ -83,14 +83,14 @@ export async function generatePageBody(
  * The citing sources the model did not receive in full, split by cause.
  *
  * Two classes are over budget. A source the budget could not fit at all is
- * obvious; a source that was *truncated* is not, because §7.4 truncates the
+ * obvious; a source that was *truncated* is not, because packing truncates the
  * first item rather than dropping it, so it stays in `items` while the model
  * saw only part of it — and at a small enough budget, none of it. Naming only
  * what was dropped implies the rest arrived whole.
  *
  * A source that fitted but has no body is a different problem with the same
- * consequence, and it gets its own marker: §4 fixes the budget marker's
- * wording, and an empty file under a 40,000-token budget was neither
+ * consequence, and it gets its own marker: the budget marker's wording is
+ * fixed, and an empty file under a 40,000-token budget was neither
  * truncated nor over budget.
  */
 function shortfall(input: GeneratePageInput): { overBudget: string[]; empty: string[] } {
@@ -126,7 +126,7 @@ export function renderCallBPrompt(input: GeneratePageInput): string {
   );
 
   const parts: string[] = [head, ...packed.texts];
-  // §6.5 says the input is "the full normalized bodies of *all* citing sources
+  // The input is "the full normalized bodies of *all* citing sources
   // … truncation marker if the budget forces it". A source the budget dropped
   // whole is the budget forcing it just as much as a tail cut is: without the
   // marker the model writes a page grounded in a subset of its sources while
@@ -159,7 +159,7 @@ function estimateHead(head: string): number {
 }
 
 /**
- * §6.5's persistent citer record: surviving entries of the existing block,
+ * The persistent citer record: surviving entries of the existing block,
  * then this run's matches. Order is the citation order Call B assembles in,
  * so a page's oldest sources stay first and the prompt is stable between runs.
  *
@@ -204,7 +204,7 @@ export interface PageToWrite {
   body: string;
   /** Citation targets, already unioned and ordered. */
   citers: string[];
-  /** Source pages only: §4's `source: "[[raw/<file>]]"` frontmatter key. */
+  /** Source pages only: the `source: "[[raw/<file>]]"` frontmatter key. */
   sourcePath?: string;
 }
 
@@ -229,12 +229,12 @@ export function renderPage(page: PageToWrite, index: TitleIndex, updated: string
 }
 
 /**
- * §6.5's post-process gains a fifth pass: a leading heading that only repeats
+ * The post-process has a fifth pass: a leading heading that only repeats
  * the page's own title comes off.
  *
  * The prompt already forbids one, and told the model "yours would be
  * discarded", which was not true of anything — no pass stripped it, so the
- * sentence was a promise the code did not keep. The §14 manual pass found the
+ * sentence was a promise the code did not keep. The manual checklist found the
  * page where the model did not comply, one in twenty-nine. Invariant 5 is that
  * code writes the structure and the model writes prose; a heading is
  * structure, and leaving the only defense in a prompt makes the invariant hold
@@ -243,7 +243,7 @@ export function renderPage(page: PageToWrite, index: TitleIndex, updated: string
  * Only the *leading* heading, and only when it matches. `## How the update
  * works` further down is prose the page needs, and a first heading that says
  * something else is the model organizing its own text — which it is meant to
- * do. Matching uses `handleOf`, so the same fold §4 compares names by catches
+ * do. Matching uses `handleOf`, so the same fold names are compared by catches
  * a heading differing only in case or Unicode form.
  */
 export function withoutTitleHeading(body: string, title: string): string {
@@ -254,7 +254,7 @@ export function withoutTitleHeading(body: string, title: string): string {
 }
 
 /**
- * §7.1's rule, reached from a normalize outcome rather than from a manifest
+ * The readable-markdown rule, from a normalize outcome rather than a manifest
  * entry: `readable.ts` owns what the rule says, and this owns the translation.
  *
  * Non-null where `readableMarkdown` can be null, and the difference is the
@@ -274,5 +274,5 @@ export function readablePathFor(
   return readableMarkdown(sourcePath, derivativePath ?? undefined, false) ?? sourcePath;
 }
 
-/** The vault path a page of this kind and title occupies (§4). */
+/** The vault path a page of this kind and title occupies. */
 export { pagePathForKind };

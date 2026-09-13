@@ -1,4 +1,4 @@
-// The retrieval trace (handoff.md §8.3), code-written into every answer note:
+// The retrieval trace, code-written into every answer note:
 //
 //     <!-- trace:start -->
 //     ## Retrieval trace
@@ -12,16 +12,16 @@
 //       - [[Y]] 0.0631
 //     <!-- trace:end -->
 //
-// §8.3 shows those two lists inline and comma-separated. They are written one
+// Those two lists were once inline and comma-separated. They are written one
 // entry per line instead, which is a recorded deviation and the point of it:
 // a comma is legal inside a title and inside a raw path, so `[[a]], [[b]]` is
 // genuinely two readings and no parser over that grammar is correct. A
 // newline is not legal in either — `sanitizeTitle` collapses whitespace — so
 // one entry per line is a delimiter the content cannot contain. The parser
 // still reads the old form, because notes written before this change exist
-// and §9 replays them.
+// and the pane replays them.
 //
-// §5 names `writeTrace` and `parseTrace` together, and §9's pane replays a
+// `writeTrace` and `parseTrace` belong together, and the pane replays a
 // trace it did not write — so parsing must recover exactly what rendering put
 // down. That is `citations.ts`'s contract, and the discipline here is the same
 // one: fences anchored to a line start, a required heading so a stray fence in
@@ -36,23 +36,23 @@ const END = "<!-- trace:end -->";
 const BLOCK =
   /^<!-- trace:start -->[ \t]*\r?\n## Retrieval trace[ \t]*\r?\n(?:(?!<!-- trace:(?:start|end) -->)[^\n]*\r?\n)*<!-- trace:end -->[ \t]*$/gm;
 
-/** §8.3: "The `top:` trace line lists at most 10 entries, scores to 4 decimals." */
+/** The `top:` trace line lists at most 10 entries, scores to 4 decimals. */
 const TOP_LIMIT = 10;
 const SCORE_DECIMALS = 4;
 
-/** What §8.3's four lines say, in the order it writes them. */
+/** What the trace's four lines say, in the order they are written. */
 export interface Trace {
   mode: RetrievalMode;
   /** Node paths or page titles, as they were linked. */
   seeds: string[];
-  /** Whether §8.2's follow-up round ran. */
+  /** Whether the follow-up round ran. */
   round2: boolean;
   top: { label: string; score: number }[];
   /**
    * List entries neither list parser could read, verbatim.
    *
    * The grammar below is ambiguous, so some inputs cannot be recovered — but
-   * losing them *quietly* is a different failure from losing them. §9's replay
+   * losing them *quietly* is a different failure from losing them. Replay
    * would light fewer nodes than the note visibly lists and report nothing
    * missing, which is exactly what `resolveTraceNodes`'s `unresolved` exists to
    * prevent and could not, because these never reached it.
@@ -166,7 +166,7 @@ export function withTrace(text: string, trace: Trace): string {
   return rest === "" ? `${block}\n` : `${rest}\n\n${block}\n`;
 }
 
-/** §8.4's filing: the trace goes, the sources block stays. */
+/** Filing: the trace goes, the sources block stays. */
 export function stripTrace(text: string): string {
   return parseTrace(text).rest;
 }
@@ -188,11 +188,11 @@ export interface ResolvedTrace {
 }
 
 /**
- * Maps a parsed trace's labels back onto nodes of a graph (§9's replay).
+ * Maps a parsed trace's labels back onto nodes of a graph (replay).
  *
- * `labelFor` writes §4's link form — a wiki page by title, anything else by
+ * `labelFor` writes the link form — a wiki page by title, anything else by
  * path — so resolution reverses exactly that: an exact node path first, then a
- * title compared through `handleOf`, which is the same normalization §4's
+ * title compared through `handleOf`, which is the same normalization the
  * identity rules use, so a trace written before a title's case changed still
  * lands.
  *
@@ -260,7 +260,7 @@ export function resolveTraceNodes(trace: Trace, graph: GraphSnapshot): ResolvedT
  * unresolved count, and it did not — the split destroyed it before
  * `resolveTraceNodes` could see it. `unparsed` carries those fragments through
  * so the count is honest. Recovering the label needs `writeTrace` to emit an
- * unambiguous grammar, which is a §8.3 format decision, not a parser one.
+ * unambiguous grammar, which is a format decision, not a parser one.
  */
 const LINK = /\[\[(.+)\]\]/;
 

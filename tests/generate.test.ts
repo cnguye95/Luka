@@ -22,7 +22,7 @@ function page(title: string, aliases: string[] = [], kind: PageMeta["kind"] = "c
   return { path: `wiki/${title}.md`, title, kind, aliases, summary: "", updated: "2026-08-20" };
 }
 
-describe("Call B — the prompt (§6.5)", () => {
+describe("Call B — the prompt", () => {
   const base = {
     title: "Personalized PageRank",
     kind: "concept" as const,
@@ -30,7 +30,7 @@ describe("Call B — the prompt (§6.5)", () => {
     contextBudgetTokens: 40_000,
   };
 
-  it("carries the instructions §6.5 requires", async () => {
+  it("carries the instructions the prompt is required to give", async () => {
     const provider = new StubProvider(() => "Body.");
     await generatePageBody(provider, { ...base, sources: [{ path: "raw/a.md", body: "A." }] });
 
@@ -69,8 +69,8 @@ describe("Call B — the prompt (§6.5)", () => {
     expect(prompt.indexOf("SECOND")).toBeLessThan(prompt.indexOf("FIRST"));
   });
 
-  it("shows the model the identity and the sources, and nothing else (§6.5)", () => {
-    // §6.5: the input is title, kind, aliases and the citing bodies — "never
+  it("shows the model the identity and the sources, and nothing else", () => {
+    // The input is title, kind, aliases and the citing bodies — "never
     // the old page text". `GeneratePageInput` carries no old-page field, so
     // the way to hold that guarantee is to pin the prompt exactly: anything
     // a future change smuggled in would land outside this string.
@@ -96,7 +96,7 @@ describe("Call B — the prompt (§6.5)", () => {
     expect(prompt).toContain("Aliases: (none)");
   });
 
-  it("truncates with the marker when one source exceeds the whole budget (§6.5)", () => {
+  it("truncates with the marker when one source exceeds the whole budget", () => {
     const prompt = renderCallBPrompt({
       ...base,
       sources: [{ path: "raw/huge.md", body: "x".repeat(20_000) }],
@@ -123,8 +123,8 @@ describe("Call B — the prompt (§6.5)", () => {
     expect(prompt).not.toContain("TINY");
   });
 
-  it("marks the truncation when the budget drops a whole source (§6.5)", () => {
-    // §6.5 promises the model "the full normalized bodies of *all* citing
+  it("marks the truncation when the budget drops a whole source", () => {
+    // The model is promised "the full normalized bodies of *all* citing
     // sources … truncation marker if the budget forces it". Dropping a source
     // whole is the budget forcing it, and without the marker the model grounds
     // the page in a subset while code writes a block claiming every source.
@@ -165,7 +165,7 @@ describe("Call B — the prompt (§6.5)", () => {
   });
 });
 
-describe("citerUnion (§6.5's persistent citer record)", () => {
+describe("citerUnion (the persistent citer record)", () => {
   const live = () => true;
 
   it("is surviving entries followed by this run's matches", () => {
@@ -186,7 +186,7 @@ describe("citerUnion (§6.5's persistent citer record)", () => {
     expect(citerUnion(existing, ["raw/a.md"], live)).toEqual(existing);
   });
 
-  it("yields nothing when every citer is gone — the §6.6 delete signal", () => {
+  it("yields nothing when every citer is gone — the cascade's delete signal", () => {
     expect(citerUnion(["raw/gone.md"], [], () => false)).toEqual([]);
   });
 });
@@ -254,7 +254,7 @@ describe("renderPage (invariant 5: code writes the structure)", () => {
     );
   });
 
-  it("adds §4's source key on a source page and nowhere else", () => {
+  it("adds the source key on a source page and nowhere else", () => {
     const sourcePage: PageToWrite = {
       ...concept,
       kind: "source",
@@ -267,7 +267,7 @@ describe("renderPage (invariant 5: code writes the structure)", () => {
     expect(renderPage(concept, EMPTY_INDEX, "2026-08-20")).not.toContain("source:");
   });
 
-  it("has a source page cite its own raw file (§4)", () => {
+  it("has a source page cite its own raw file", () => {
     const sourcePage: PageToWrite = {
       ...concept,
       kind: "source",
@@ -300,7 +300,7 @@ describe("renderPage (invariant 5: code writes the structure)", () => {
 
   it("round-trips citer paths containing characters that are legal in filenames", () => {
     // `[`, `]`, `|`, `#` and spaces are all legal on macOS and Linux, and the
-    // citation block is the only record of a page's citers (§6.5). A path that
+    // citation block is the only record of a page's citers. A path that
     // does not survive render→parse is a source silently lost on the next run.
     const awkward = [
       "raw/[draft] notes.md",
@@ -336,7 +336,7 @@ describe("renderPage (invariant 5: code writes the structure)", () => {
   });
 });
 
-describe("readablePathFor (§7.1)", () => {
+describe("readablePathFor", () => {
   it("is the source itself for passthrough formats", () => {
     expect(readablePathFor("raw/note.md", "md", null)).toBe("raw/note.md");
     expect(readablePathFor("raw/notes.txt", "txt", null)).toBe("raw/notes.txt");
@@ -349,8 +349,8 @@ describe("readablePathFor (§7.1)", () => {
   });
 });
 
-describe("a heading repeating the title comes off (§6.5, invariant 5)", () => {
-  // The §14 pass found one page in twenty-nine opening with a heading that
+describe("a heading repeating the title comes off (invariant 5)", () => {
+  // The manual pass found one page in twenty-nine opening with a heading that
   // only said its own title again. The prompt forbids it and claimed such a
   // heading "would be discarded", which nothing did — this is the pass that
   // makes the sentence true.
@@ -364,7 +364,7 @@ describe("a heading repeating the title comes off (§6.5, invariant 5)", () => {
     expect(strip("## Wikilink graph\nProse.\n", "Wikilink graph")).toBe("Prose.\n");
   });
 
-  it("matches by §4's fold, so case and Unicode form do not let one through", () => {
+  it("matches by the namespace's fold, so case and Unicode form do not let one through", () => {
     // Red if the comparison is `===` on the raw strings rather than `handleOf`.
     expect(strip("# wikilink GRAPH\nProse.\n", "Wikilink graph")).toBe("Prose.\n");
     expect(strip("# Cafe\u0301 culture\nProse.\n", "Caf\u00e9 culture")).toBe("Prose.\n");

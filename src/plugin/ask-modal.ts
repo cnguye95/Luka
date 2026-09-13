@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 
 /**
- * §8.1's "Luka: Ask the wiki (modal)".
+ * "Luka: Ask the wiki", the modal.
  *
  * Resolves the question, or `null` when the user backs out. The promise has to
  * settle either way — the caller only takes the operation lock once it has a

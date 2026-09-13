@@ -1,4 +1,4 @@
-// §9's drawing: Canvas 2D, "colors and fonts from Obsidian CSS variables",
+// Drawing: Canvas 2D, "colors and fonts from Obsidian CSS variables",
 // "node color by kind (three muted theme-derived colors + one for raw source
 // nodes), baseline radius ∝ log(degree+1), labels on hover plus top-10 by
 // current metric", and "degradation: drop labels first".
@@ -10,18 +10,18 @@ import { heatOf, isLit, matchesFilter, type Overlay } from "./overlay";
 import type { SimNode } from "./sim";
 
 /**
- * Render constants. §17 names none of these; §9 fixes only the label count and
- * the 500-node figure, so the rest are §0's smallest option: module-local.
+ * Render constants. Only the label count and the 500-node figure are fixed,
+ * so the rest take the smallest option: module-local.
  */
 const RADIUS_BASE = 3;
 const RADIUS_SCALE = 2.6;
-/** §9: "labels on hover plus top-10 by current metric". */
+/** Labels on hover plus top-10 by current metric. */
 const LABEL_LIMIT = 10;
-/** §9: "target smooth pan/zoom at 500+ nodes", and "drop labels first". */
+/** Target smooth pan/zoom at 500+ nodes, and drop labels first. */
 const LABEL_DROP_THRESHOLD = 500;
 const LABEL_OFFSET = 4;
 /**
- * Edges carry §9's structure — PPR runs on them — so they have to be readable,
+ * Edges carry the structure — PPR runs on them — so they have to be readable,
  * not merely present. `--background-modifier-border` is Obsidian's subtle
  * divider, ~28/255 off `--background-primary`; at any alpha below 1 it paints a
  * line the eye cannot find, and a connected node reads as isolated. The colour
@@ -30,7 +30,7 @@ const LABEL_OFFSET = 4;
  * that is visible without competing with the nodes it connects.
  */
 const EDGE_ALPHA = 0.45;
-/** §9's "non-neighborhood dimmed", and the filter's "dims non-matches". */
+/** The overlay's "non-neighborhood dimmed", and the filter's "dims non-matches". */
 const DIM_OPACITY = 0.15;
 const TOP_K_STROKE = 2;
 const SEED_RING_WIDTH = 2;
@@ -38,14 +38,14 @@ const SEED_RING_GAP = 3;
 
 export interface Theme {
   background: string;
-  /** Three muted kind colors plus one for raw sources (§9). */
+  /** Three muted kind colors plus one for raw sources. */
   concept: string;
   entity: string;
   source: string;
   raw: string;
   label: string;
   edge: string;
-  /** The hot end of §9's heat ramp, and the seed ring / top-K stroke. */
+  /** The hot end of the heat ramp, and the seed ring / top-K stroke. */
   accent: string;
   heat: string;
   font: string;
@@ -68,17 +68,17 @@ export interface Frame {
   width: number;
   height: number;
   hovered: string | null;
-  /** §9's overlay, or `null` for the baseline view. */
+  /** The overlay, or `null` for the baseline view. */
   overlay: Overlay | null;
-  /** §9's filter box text. Empty matches everything. */
+  /** The filter box text. Empty matches everything. */
   filter: string;
 }
 
 /**
- * Reads §9's colors out of the theme in force.
+ * Reads the pane's colors out of the theme in force.
  *
  * Sampled per redraw rather than cached at open, so switching dark↔light is
- * picked up without reopening the pane — which is what §15's AC asks for.
+ * picked up without reopening the pane, as the acceptance criterion asks.
  * `getComputedStyle` resolves the variable to a concrete color, so canvas gets
  * something it can paint rather than a `var(...)` string it would ignore.
  */
@@ -115,7 +115,7 @@ export function colorFor(kind: string, theme: Theme): string {
   }
 }
 
-/** §9: "baseline radius ∝ log(degree+1)". */
+/** Baseline radius ∝ log(degree+1). */
 export function radiusFor(degree: number): number {
   return RADIUS_BASE + RADIUS_SCALE * Math.log(degree + 1);
 }
@@ -123,7 +123,7 @@ export function radiusFor(degree: number): number {
 /**
  * How visible a node is: the overlay and the filter dim independently.
  *
- * §9 describes them as separate controls — the filter "dims non-matches" with
+ * They are separate controls — the filter "dims non-matches" with
  * no mention of the overlay, and the overlay dims "non-neighborhood" with no
  * mention of the filter — so a node outside both is dimmer than one outside
  * either. Multiplying is what makes the two readable at once; taking a minimum
@@ -175,7 +175,7 @@ export function toGraph(camera: Camera, x: number, y: number): { x: number; y: n
 /**
  * The nodes that get a standing label: the top ten by the current metric.
  *
- * §9's "current metric" is degree until an overlay supplies scores; the overlay
+ * The "current metric" is degree until an overlay supplies scores; the overlay
  * steps replace this selection rather than adding a second one.
  */
 function labelled(nodes: readonly SimNode[], overlay: Overlay | null): Set<string> {
@@ -188,7 +188,7 @@ function labelled(nodes: readonly SimNode[], overlay: Overlay | null): Set<strin
   const metric = (node: SimNode): number =>
     overlay === null || overlay.scores === null ? node.degree : heatOf(overlay, node.path);
   const ranked = [...nodes]
-    // A score-less overlay — §9's Mode-A inspection — still narrows *which*
+    // A score-less overlay — Mode-A inspection — still narrows *which*
     // nodes can be labelled, even though it cannot reorder them.
     .filter((node) => overlay === null || isLit(overlay, node.path))
     .sort((a, b) => metric(b) - metric(a) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
@@ -226,7 +226,7 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
     const radius = radiusFor(node.degree) * camera.scale;
 
     ctx.globalAlpha = opacityOf(node, frame);
-    // §9's heat ramp replaces the kind colour where a score reaches the node;
+    // The heat ramp replaces the kind colour where a score reaches the node;
     // without an overlay, or where it does not reach, the kind colour stands.
     ctx.fillStyle =
       frame.overlay === null || frame.overlay.scores === null
@@ -237,7 +237,7 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
     ctx.fill();
 
     if (frame.overlay !== null) {
-      // §9: "ring = seeds, stroke = top-K". A node can be both, and then it
+      // Ring = seeds, stroke = top-K. A node can be both, and then it
       // carries both marks — the ring sits outside the stroke.
       if (frame.overlay.topK.has(node.path)) {
         ctx.strokeStyle = theme.accent;
@@ -257,7 +257,7 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
   }
   ctx.globalAlpha = 1;
 
-  // §9's degradation: "drop labels first". The hovered node keeps its label —
+  // Degradation: "drop labels first". The hovered node keeps its label —
   // it is the answer to a gesture the user just made, and it is one string.
   const standing =
     nodes.length >= LABEL_DROP_THRESHOLD ? new Set<string>() : labelled(nodes, frame.overlay);
@@ -286,7 +286,7 @@ export function hitTest(frame: Frame, x: number, y: number): SimNode | null {
     const radius = radiusFor(node.degree) * frame.camera.scale;
     const dx = x - screen.x;
     const dy = y - screen.y;
-    // A generous target: nodes are small, and §9 asks for hover, drag and
+    // A generous target: nodes are small, and there is hover, drag and
     // double-click on all of them.
     const reach = Math.max(radius, 6);
     if (dx * dx + dy * dy <= reach * reach) return node;

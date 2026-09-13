@@ -1,4 +1,4 @@
-// HTML sources become markdown via turndown (handoff.md §6.1).
+// HTML sources become markdown via turndown.
 import TurndownService from "turndown";
 
 export function htmlToMarkdown(html: string): string {

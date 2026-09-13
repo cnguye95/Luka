@@ -1,11 +1,11 @@
-// §9's layout: `d3-force` only, "initial positions seeded by hashing page
+// The layout: `d3-force` only, "initial positions seeded by hashing page
 // path", "simulation cools to a stop, drag reheats locally".
 //
 // No DOM and no Obsidian import: this owns positions and nothing else, so the
 // view can be read for lifecycle and this can be read for physics.
 //
 // Invariant 1 forbids timers and background work. d3's simulation is the one
-// thing §9 sanctions, and the sanction is narrow: it runs from a reheat until
+// thing sanctioned, and the sanction is narrow: it runs from a reheat until
 // alpha decays past `alphaMin`, then `d3` stops its own internal timer and the
 // view stops scheduling frames. Nothing restarts it but a user gesture.
 import {
@@ -21,8 +21,8 @@ import {
 import type { GraphSnapshot } from "../../core/index";
 
 /**
- * Layout constants. §17 names none of these and §9 fixes none of them, so §0
- * takes the smallest option: module-local, not settings fields.
+ * Layout constants. Nothing fixes these, so the
+ * smallest option applies: module-local, not settings fields.
  */
 const LINK_DISTANCE = 60;
 const CHARGE_STRENGTH = -160;
@@ -75,7 +75,7 @@ export interface Sim {
    */
   tick(): void;
   /**
-   * Positions for a fresh snapshot, keeping what survived (§9's refresh).
+   * Positions for a fresh snapshot, keeping what survived (a refresh).
    *
    * Returns whether the walk was reheated. A snapshot whose nodes and edges
    * match the current ones changes no layout, so it carries the new titles,
@@ -98,7 +98,7 @@ export interface Sim {
 /**
  * FNV-1a, 32-bit.
  *
- * §9 wants positions "seeded by hashing page path" so a pane reopened on the
+ * Positions are "seeded by hashing page path" so a pane reopened on the
  * same vault starts from the same shape. `core/hash.ts` is SHA-256 and async;
  * a layout seed needs neither cryptographic strength nor a promise, and pulling
  * an async hash into a synchronous layout would make the first frame wait on
@@ -164,7 +164,7 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     if (current !== null && sameTopology(current, next)) {
       // A compile that changed nothing, or changed only prose. There is no new
       // layout to find, and reheating would drift a settled one the user has
-      // been reading — the §14 finding this guard closes. What can still have
+      // been reading — the finding this guard closes. What can still have
       // moved is a page's own metadata, which the tooltip reads, so it is
       // carried onto the nodes already held. Degree cannot differ: `buildGraph`
       // derives it from the edges just compared.
@@ -184,7 +184,7 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     byPath.clear();
 
     nodes = next.nodes.map((node) => {
-      // §9's refresh keeps what is still there where the user last saw it —
+      // A refresh keeps what is still there where the user last saw it —
       // re-hashing every position on each compile would throw the layout the
       // user has been reading, and any pinning they did with it.
       const existing = survivors.get(node.path);
@@ -208,7 +208,7 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
     for (const edge of next.edges) {
       const a = byPath.get(edge.a);
       const b = byPath.get(edge.b);
-      // §7.1 guarantees both ends are nodes; a snapshot that says otherwise is
+      // The graph guarantees both ends are nodes; a snapshot saying otherwise is
       // one d3 would throw on, so the link is dropped instead.
       if (a !== undefined && b !== undefined) links.push({ source: a, target: b });
     }
@@ -256,8 +256,8 @@ export function createSim(graph: GraphSnapshot, onTick: () => void): Sim {
       node.fy = y;
     },
     dragEnd: () => {
-      // Back to zero so the walk cools to a stop again (§9). `fx`/`fy` stay
-      // set: §9's drag *pins*, so the node keeps where it was dropped.
+      // Back to zero so the walk cools to a stop again. `fx`/`fy` stay
+      // set: a drag *pins*, so the node keeps where it was dropped.
       simulation.alphaTarget(0);
     },
   };

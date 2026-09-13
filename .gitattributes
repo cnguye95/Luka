@@ -1,5 +1,5 @@
 # Text is normalized to LF in the working tree so that content hashes
-# (SHA-256 over file bytes, handoff.md 6.2) are stable across machines.
+# (SHA-256 over file bytes) are stable across machines.
 * text=auto eol=lf
 
 *.pdf binary

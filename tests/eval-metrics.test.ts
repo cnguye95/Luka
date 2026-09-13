@@ -1,4 +1,4 @@
-// The eval harness's arithmetic (handoff.md §13), against hand-computed
+// The eval harness's arithmetic, against hand-computed
 // numbers. Kept out of `run.ts` so it can be checked without running a process.
 import { describe, expect, it } from "vitest";
 import { belowFloor, recallAt, reciprocalRank, summarize, type Floor } from "../eval/metrics";
@@ -85,7 +85,7 @@ describe("the summary means", () => {
 });
 
 describe("the ranking-only means", () => {
-  // §7.4 step 2 force-includes every page the question names, so a query whose
+  // Retrieval force-includes every page the question names, so a query whose
   // expected pages are all seeds scores the same however the ranker behaves.
   // Half of queries.yaml is that shape; averaging it in halves the amplitude
   // of any ranking change in the floored means.

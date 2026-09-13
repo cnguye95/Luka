@@ -1,6 +1,6 @@
-// The press half of §9's node gestures: what a press on a node turns out to be.
+// The press half of the node gestures: what a press on a node turns out to be.
 //
-// §9 gives a click and a drag different jobs on the same button — "click a node
+// A click and a drag have different jobs on the same button — "click a node
 // → instant PPR from that node" against "drag-to-pin" beside "drag reheats
 // locally" — so something has to decide which of the two a press became, and
 // the decision is travel against a threshold. That is pure, so it is here and
@@ -77,14 +77,14 @@ export function pressMoved(
  *
  * Whether the drag began decides that, rather than where the release landed: a
  * drag that wandered back over its own origin is still a drag, and the
- * checklist's §7.6 asks that releasing one does not run click-PPR. The distance
+ * checklist item 7.6 asks that releasing one does not run click-PPR. The distance
  * is checked too, for the release that carries travel no `pointermove`
  * reported — that is a press that moved, so it is not a click either, and
  * nothing began so nothing ends.
  */
 export function pressEnded(press: Press, sim: PressSim, x: number, y: number): string | null {
   if (press.begun) {
-    // §9's drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
+    // A drag *pins*: `dragEnd` lets the walk cool but leaves `fx`/`fy` set,
     // so the node stays where it was dropped.
     sim.dragEnd();
     return null;

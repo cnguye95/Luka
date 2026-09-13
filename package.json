@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Obsidian plugin that compiles dropped source documents into a linked markdown wiki with graph-based retrieval.",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=20"
   },

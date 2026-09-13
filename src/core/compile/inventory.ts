@@ -1,4 +1,4 @@
-// Call A — inventory (handoff.md §6.5).
+// Call A — inventory.
 //
 // "per changed source: input is the normalized markdown (frontmatter stripped;
 // body only); output is strict JSON `{ "source_summary": str, "items":
@@ -7,7 +7,7 @@
 // ("Mercury (element)"); aliases include obvious variants; temperature 0."
 //
 // Temperature 0 is not set here: the wrapper fixes it for every `json: true`
-// task (§11), so this module cannot get it wrong.
+// task, so this module cannot get it wrong.
 import type { LLMProvider } from "../provider/types";
 import { parseFrontmatter } from "../yaml";
 
@@ -47,7 +47,7 @@ const SYSTEM = [
  * Runs Call A over one source body.
  *
  * Throws when the reply is not the documented shape. The caller treats that as
- * a failed source: §11 skips it with a notice and invariant 3's success-only
+ * a failed source: it is skipped with a notice and invariant 3's success-only
  * manifest retries it next compile.
  */
 export async function takeInventory(
@@ -128,14 +128,14 @@ function toStringArray(value: unknown): string[] {
 
 /**
  * Invariant 5 gives the model prose, never structure. A newline in a summary
- * would reach `wiki/_index.md` (and from there §7.4's seed call), so it is
+ * would reach `wiki/_index.md` (and from there the seed call), so it is
  * flattened at the point the model's words enter the system.
  */
 function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** §6.5: Call A sees the body only. */
+/** Call A sees the body only. */
 export function bodyOf(markdown: string): string {
   return parseFrontmatter(markdown).body;
 }

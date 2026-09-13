@@ -3,22 +3,22 @@ import { bodyOf, takeInventory } from "../src/core/compile/inventory";
 import { MAX_TOKENS_BY_TASK } from "../src/core/provider/types";
 import { StubProvider, inventoryReply } from "./helpers/provider";
 
-describe("Call A — inventory (§6.5)", () => {
-  it("carries the instructions §6.5 requires of the prompt", async () => {
+describe("Call A — inventory", () => {
+  it("carries the instructions the prompt is required to give", async () => {
     const provider = new StubProvider(() => inventoryReply("A summary."));
     await takeInventory(provider, "Body text.");
 
     const call = provider.callsFor("inventory")[0];
-    // §6.5 and §11: a JSON task reaches transport at temperature 0, under the
+    // A JSON task reaches transport at temperature 0, under the
     // task's own max_tokens cap. Both are the wrapper's doing, observed here
     // at the layer that would actually send them.
     expect(call?.temperature).toBe(0);
     expect(call?.maxTokens).toBe(MAX_TOKENS_BY_TASK.inventory);
-    // §6.5: "qualified titles for ambiguous names ('Mercury (element)')".
+    // "Qualified titles for ambiguous names ('Mercury (element)')".
     expect(call?.system).toContain("Mercury (element)");
-    // §6.5: "aliases include obvious variants".
+    // "Aliases include obvious variants".
     expect(call?.system.toLowerCase()).toContain("variants");
-    // §6.5 fixes the output shape exactly; every key has to be asked for by
+    // The output shape is fixed exactly; every key has to be asked for by
     // name or the model has no way to know the schema.
     const system = call?.system ?? "";
     for (const key of ["source_summary", "items", "title", "kind", "aliases", "summary"]) {
@@ -30,7 +30,7 @@ describe("Call A — inventory (§6.5)", () => {
     expect(system.toLowerCase()).toContain("empty items list");
   });
 
-  it("sends the body only, never the frontmatter (§6.5)", async () => {
+  it("sends the body only, never the frontmatter", async () => {
     const provider = new StubProvider(() => inventoryReply("s"));
     const document = "---\ningested: '2026-08-20'\nsource-format: md\n---\nThe real body.\n";
 
@@ -67,7 +67,7 @@ describe("Call A — inventory (§6.5)", () => {
     });
   });
 
-  it("parses a fenced reply directly, without spending the repair retry (§11)", async () => {
+  it("parses a fenced reply directly, without spending the repair retry", async () => {
     // The single most common real failure: a model that fences its JSON. The
     // repair retry was the original answer to it and is not one on its own,
     // because it re-asks the same model — `claude-haiku-4-5-20251001` fences
@@ -89,9 +89,9 @@ describe("Call A — inventory (§6.5)", () => {
     expect(provider.stats().byTask.inventory).toBe(1);
   });
 
-  it("still repairs a reply that is neither JSON nor a fence (§11)", async () => {
+  it("still repairs a reply that is neither JSON nor a fence", async () => {
     // Stripping must not cost the repair its remaining job: a reply that is
-    // prose has nothing to strip and still gets the one re-ask §11 asks for.
+    // prose has nothing to strip and still gets the one re-ask it is owed.
     const provider = new StubProvider((_request, index) =>
       index === 0 ? "Here is the inventory you asked for:" : inventoryReply("recovered"),
     );
@@ -102,7 +102,7 @@ describe("Call A — inventory (§6.5)", () => {
     expect(provider.stats().byTask.inventory).toBe(2);
   });
 
-  it("strips a fence from the repair reply too (§11)", async () => {
+  it("strips a fence from the repair reply too", async () => {
     // Both parses go through the same unwrapping, or a model that answers with
     // prose first and a fence second fails for the reason the fence was meant
     // to stop mattering.
@@ -118,7 +118,7 @@ describe("Call A — inventory (§6.5)", () => {
     expect(provider.stats().byTask.inventory).toBe(2);
   });
 
-  it("gives up after one repair retry rather than looping (§11)", async () => {
+  it("gives up after one repair retry rather than looping", async () => {
     const provider = new StubProvider(() => "not json at all");
 
     await expect(takeInventory(provider, "Body.")).rejects.toThrow(/not valid JSON/);

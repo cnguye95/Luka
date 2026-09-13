@@ -1,4 +1,4 @@
-// §10's health check: one vault scan, no model calls.
+// The health check: one vault scan, no model calls.
 import { describe, expect, it } from "vitest";
 import { HEALTH_PATH, healthCheck } from "../src/core/health";
 import { createCore } from "../src/core/index";
@@ -23,7 +23,7 @@ const run = async (fs: MemFs) => {
   return fs.text(HEALTH_PATH);
 };
 
-describe("article candidates (§10)", () => {
+describe("article candidates", () => {
   it("groups unresolved links by target, most wanted first", async () => {
     // The two orders disagree on purpose: alphabetically "Aardvark" leads, by
     // demand "Zeppelin" does. Names on which the two agree cannot tell the
@@ -44,7 +44,7 @@ describe("article candidates (§10)", () => {
   });
 
   it("groups case variants as one candidate, spelled the way a page would be", async () => {
-    // §4's namespace folds case, so the vault cannot hold both spellings —
+    // The namespace folds case, so the vault cannot hold both spellings —
     // listing them apart would report two half-wanted articles where there is
     // one wanted twice. The pane shares this grouping, so the two agree.
     const fs = new MemFs({
@@ -81,7 +81,7 @@ describe("article candidates (§10)", () => {
   });
 });
 
-describe("orphan pages (§10)", () => {
+describe("orphan pages", () => {
   it("names a page nothing links to and which links to nothing", async () => {
     const fs = new MemFs({
       "wiki/concepts/Linked.md": page("concept", "See [[Other]]."),
@@ -107,7 +107,7 @@ describe("orphan pages (§10)", () => {
   });
 });
 
-describe("citations without a source (§10)", () => {
+describe("citations without a source", () => {
   it("names a page citing a raw file the manifest does not know", async () => {
     const fs = new MemFs({
       "wiki/sources/note.md": page("source", `Prose.\n${cited(["raw/note.md", "raw/gone.md"])}`),
@@ -123,7 +123,7 @@ describe("citations without a source (§10)", () => {
 
   it("ignores a citation entry that does not name a raw file at all", async () => {
     // Citation entries are free text read off disk, so a hand-edited block can
-    // hold anything — `constructor` included. §10 asks only about entries
+    // hold anything — `constructor` included. The report asks only about entries
     // "pointing at raw files", and that prefix test runs before the manifest is
     // consulted, so a bare prototype key never reaches the lookup. The
     // `Object.hasOwn` there is therefore belt-and-braces and cannot currently
@@ -137,7 +137,7 @@ describe("citations without a source (§10)", () => {
   });
 });
 
-describe("filed answers (§10)", () => {
+describe("filed answers", () => {
   it("lists them with an age taken from their own frontmatter", async () => {
     const fs = new MemFs({
       "raw/answers/2026-08-18-0900 a question.md":
@@ -152,7 +152,7 @@ describe("filed answers (§10)", () => {
   });
 
   it("says the age is unknown rather than guessing from the filesystem", async () => {
-    // §4 records when the *question* was asked; a sync or a copy would make an
+    // `asked` is when the *question* was asked; a sync or a copy would make an
     // mtime answer a different question entirely.
     const fs = new MemFs({
       "raw/answers/undated.md": "---\nkind: answer\n---\nAn answer.\n",
@@ -217,7 +217,7 @@ describe("the report itself", () => {
   });
 });
 
-describe("the lock and the model (§10, invariant 2)", () => {
+describe("the lock and the model (invariant 2)", () => {
   it("asks the model nothing", async () => {
     const fs = new MemFs({ "raw/note.md": "PageRank matters.\n" });
     const provider = new StubProvider((request) =>

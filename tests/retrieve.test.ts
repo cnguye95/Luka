@@ -1,4 +1,4 @@
-// §7.4's pipeline and §7.3's mode predicate. §14 names two of these in the
+// The retrieval pipeline and the mode predicate. Two of these are in the
 // minimum unit set: "mode predicate boundaries" and "assembly budget and
 // truncation".
 import { describe, expect, it } from "vitest";
@@ -15,10 +15,10 @@ import { DEFAULT_SETTINGS, type GraphSnapshot, type PageMeta } from "../src/core
 import { MemFs } from "./helpers/memfs";
 import { StubProvider } from "./helpers/provider";
 
-// §7.3 and §17, from the spec rather than from the code they check.
-const SPEC_MIN_NODES = 20;
-const SPEC_MIN_RATIO = 1.5;
-const SPEC_K = 12;
+// Stated here rather than read from the code they check.
+const FIXED_MIN_NODES = 20;
+const FIXED_MIN_RATIO = 1.5;
+const FIXED_K = 12;
 
 const meta = (title: string, over: Partial<PageMeta> = {}): PageMeta => ({
   path: `wiki/concepts/${title}.md`,
@@ -51,24 +51,24 @@ function graphOf(nodes: number, edges: number): GraphSnapshot {
   };
 }
 
-describe("§7.3's mode predicate, at its boundaries", () => {
+describe("the mode predicate, at its boundaries", () => {
   const mode = (nodes: number, edges: number) => modeOf(graphOf(nodes, edges), DEFAULT_SETTINGS);
 
   it("needs both halves, not either", () => {
     // Enough nodes but too sparse.
-    expect(mode(SPEC_MIN_NODES, Math.ceil(SPEC_MIN_NODES * SPEC_MIN_RATIO) - 1)).toBe("A");
+    expect(mode(FIXED_MIN_NODES, Math.ceil(FIXED_MIN_NODES * FIXED_MIN_RATIO) - 1)).toBe("A");
     // Dense enough but too few nodes.
-    expect(mode(SPEC_MIN_NODES - 1, (SPEC_MIN_NODES - 1) * 3)).toBe("A");
+    expect(mode(FIXED_MIN_NODES - 1, (FIXED_MIN_NODES - 1) * 3)).toBe("A");
   });
 
   it("is inclusive on both thresholds", () => {
     // "node count ≥ 20 AND … ≥ 1.5" — exactly at both is Mode B.
-    expect(mode(SPEC_MIN_NODES, SPEC_MIN_NODES * SPEC_MIN_RATIO)).toBe("B");
-    expect(mode(SPEC_MIN_NODES - 1, (SPEC_MIN_NODES - 1) * SPEC_MIN_RATIO)).toBe("A");
+    expect(mode(FIXED_MIN_NODES, FIXED_MIN_NODES * FIXED_MIN_RATIO)).toBe("B");
+    expect(mode(FIXED_MIN_NODES - 1, (FIXED_MIN_NODES - 1) * FIXED_MIN_RATIO)).toBe("A");
   });
 
   it("reads one edge below the ratio as Mode A", () => {
-    expect(mode(SPEC_MIN_NODES, SPEC_MIN_NODES * SPEC_MIN_RATIO - 1)).toBe("A");
+    expect(mode(FIXED_MIN_NODES, FIXED_MIN_NODES * FIXED_MIN_RATIO - 1)).toBe("A");
   });
 
   it("calls an empty vault Mode A rather than dividing by zero", () => {
@@ -76,7 +76,7 @@ describe("§7.3's mode predicate, at its boundaries", () => {
   });
 });
 
-describe("§7.4 step 2: the seed call", () => {
+describe("the seed call", () => {
   const pages = [meta("PageRank"), meta("Retrieval")];
   const index = "# Index\n- [[PageRank]]\n- [[Retrieval]]\n";
   const caps = { seeds: 8, keywords: 12 };
@@ -136,12 +136,12 @@ describe("§7.4 step 2: the seed call", () => {
     const call = provider.callsFor("seed-selection")[0];
     expect(call?.user).toContain("How does ranking work?");
     expect(call?.user).toContain("[[PageRank]]");
-    // §11: JSON tasks run at temperature 0.
+    // JSON tasks run at temperature 0.
     expect(call?.temperature).toBe(0);
   });
 });
 
-describe("§7.4 step 2: force-inclusion", () => {
+describe("force-inclusion", () => {
   const pages = [
     meta("PageRank", { aliases: ["PPR"] }),
     meta("Graph Retrieval"),
@@ -170,7 +170,7 @@ describe("§7.4 step 2: force-inclusion", () => {
   });
 });
 
-describe("§7.4 step 3: ranking", () => {
+describe("ranking", () => {
   // Fed a hand-written score map rather than a walk: the point of the split is
   // that ranking is a pure function of scores, and deriving the input from
   // `computePPR` would make this agree with whatever the walk does.
@@ -201,7 +201,7 @@ describe("§7.4 step 3: ranking", () => {
     ]);
   });
 
-  it("breaks a tie lexicographically by path (§7.2)", () => {
+  it("breaks a tie lexicographically by path", () => {
     const graph: GraphSnapshot = {
       nodes: [
         { path: "wiki/concepts/B.md", title: "B", kind: "concept", degree: 0, summary: "" },
@@ -268,7 +268,7 @@ describe("§7.4 step 3: ranking", () => {
     expect(ranked[1]?.score).toBe(0);
   });
 
-  it("breaks ties lexicographically (§7.2)", async () => {
+  it("breaks ties lexicographically", async () => {
     const fs = new MemFs({
       "wiki/concepts/Beta.md": "---\nkind: concept\n---\nranking\n",
       "wiki/concepts/Alpha.md": "---\nkind: concept\n---\nranking\n",
@@ -283,7 +283,7 @@ describe("§7.4 step 3: ranking", () => {
   });
 });
 
-describe("§7.4 step 4: assembly under the budget", () => {
+describe("assembly under the budget", () => {
   const ranked = (paths: string[]) =>
     paths.map((path, at) => ({ path, title: path, kind: "concept" as const, score: 100 - at }));
 
@@ -293,7 +293,7 @@ describe("§7.4 step 4: assembly under the budget", () => {
       "b.md": "---\nkind: concept\n---\nBeta body.\n",
     });
 
-    const assembly = await assemble(fs, ranked(["a.md", "b.md"]), 40_000, SPEC_K);
+    const assembly = await assemble(fs, ranked(["a.md", "b.md"]), 40_000, FIXED_K);
 
     expect(assembly.nodes.map((node) => node.path)).toEqual(["a.md", "b.md"]);
     expect(assembly.nodes[0]?.text.trim()).toBe("Alpha body.");
@@ -305,20 +305,20 @@ describe("§7.4 step 4: assembly under the budget", () => {
   it("stops at K however many nodes rank", async () => {
     const seed: Record<string, string> = {};
     const paths: string[] = [];
-    for (let at = 0; at < SPEC_K + 5; at++) {
+    for (let at = 0; at < FIXED_K + 5; at++) {
       const path = `n${String(at).padStart(2, "0")}.md`;
       seed[path] = `---\nkind: concept\n---\nBody ${at}.\n`;
       paths.push(path);
     }
 
     const fs = new MemFs(seed);
-    const assembly = await assemble(fs, ranked(paths), 40_000, SPEC_K);
+    const assembly = await assemble(fs, ranked(paths), 40_000, FIXED_K);
 
-    expect(assembly.nodes).toHaveLength(SPEC_K);
+    expect(assembly.nodes).toHaveLength(FIXED_K);
     // And stops *reading* there too. `packUnderBudget` would cap the output
     // either way, so without this the pipeline would quietly read every page
     // in the vault to assemble twelve of them.
-    expect(fs.reads).toBe(SPEC_K);
+    expect(fs.reads).toBe(FIXED_K);
   });
 
   it("never splits a page: it stops at the first that does not fit", async () => {
@@ -328,7 +328,7 @@ describe("§7.4 step 4: assembly under the budget", () => {
     });
 
     // Room for the first and not the second (each ~300 chars ≈ 75 tokens).
-    const assembly = await assemble(fs, ranked(["a.md", "b.md"]), 100, SPEC_K);
+    const assembly = await assemble(fs, ranked(["a.md", "b.md"]), 100, FIXED_K);
 
     expect(assembly.nodes.map((node) => node.path)).toEqual(["a.md"]);
     expect(assembly.nodes[0]?.truncated).toBe(false);
@@ -337,7 +337,7 @@ describe("§7.4 step 4: assembly under the budget", () => {
   it("tail-truncates a single page over the whole budget, with the marker", async () => {
     const fs = new MemFs({ "a.md": `---\nkind: concept\n---\n${"alpha ".repeat(500)}\n` });
 
-    const assembly = await assemble(fs, ranked(["a.md"]), 50, SPEC_K);
+    const assembly = await assemble(fs, ranked(["a.md"]), 50, FIXED_K);
 
     expect(assembly.nodes).toHaveLength(1);
     expect(assembly.nodes[0]?.truncated).toBe(true);
@@ -347,7 +347,7 @@ describe("§7.4 step 4: assembly under the budget", () => {
   it("skips a node whose file has gone missing since it was ranked", async () => {
     const fs = new MemFs({ "b.md": "---\nkind: concept\n---\nBeta body.\n" });
 
-    const assembly = await assemble(fs, ranked(["gone.md", "b.md"]), 40_000, SPEC_K);
+    const assembly = await assemble(fs, ranked(["gone.md", "b.md"]), 40_000, FIXED_K);
 
     expect(assembly.nodes.map((node) => node.path)).toEqual(["b.md"]);
   });
@@ -358,7 +358,7 @@ describe("§7.4 step 4: assembly under the budget", () => {
       "b.md": "---\nkind: concept\n---\nBeta body.\n",
     });
 
-    const assembly = await assemble(fs, ranked(["empty.md", "b.md"]), 40_000, SPEC_K);
+    const assembly = await assemble(fs, ranked(["empty.md", "b.md"]), 40_000, FIXED_K);
 
     expect(assembly.nodes.map((node) => node.path)).toEqual(["b.md"]);
   });
