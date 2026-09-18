@@ -7,7 +7,7 @@ database, no embeddings, no chunking.
 
 Why it is built this way — the decisions taken, the alternatives weighed, and
 what pins each one — is in [design_decisions.md](design_decisions.md). The
-Obsidian surface is checked by hand against
+Obsidian interface may be checked by hand against
 [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md).
 
 ## Table of Contents

@@ -15,8 +15,6 @@ template:
 - **Result** — what the choice produced in the product, including the cost accepted.
 - **Validation** — how the decision is known to hold today.
 
-Code comments cite the invariants below as `invariant N`.
-
 ## Contents
 
 - [Principles](#principles)
@@ -28,6 +26,8 @@ Code comments cite the invariants below as `invariant N`.
 
 The twelve invariants the code is built to. Each is checkable, and most are
 pinned by a test or a CI step named in the decisions below.
+
+**** Code comments cite the invariants below as `invariant N`.
 
 1. Nothing runs without explicit user invocation: no file watchers, no timers,
    no auto-compile, no background processes, no HTTP servers.

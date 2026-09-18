@@ -1,26 +1,14 @@
 # Manual checklist
 
-Automated tests cover `src/core` and the graph pane's pure modules; the Obsidian
-surface itself — the view, the modals, the settings tab, the trash — is checked
-by hand against this list. Invariants are numbered as in
-[design_decisions.md](design_decisions.md). **126 items.** A tick means that
-item has been walked since the code it covers last changed; re-walking a
-section after touching the code it covers is the point of keeping them.
+Automated tests cover `src/core` and the graph pane's pure modules. The Obsidian
+view is checked by hand against this list. 
 
 They are ordered so that stopping anywhere leaves the most valuable ground
 covered: setup first, then the graph pane — the only part with no automated
 coverage whatsoever — then the older flows, then the destructive and paid
 checks, then edge cases. Work top to bottom.
 
-Section 17 is an exception to that order and sits late on purpose. It is newer
-than the pane and just as uncovered, but it needs an ask to reach, so it is
-grouped with the paid checks rather than the free ones.
-
-Section 18 is the other exception and sits last because it is newer still,
-added after the rest of this list had been walked. Its two halves are
-independent:
-the scrubber costs nothing, and the provider items need a second provider set
-up before any of them mean anything. A local Ollama covers all but the last.
+Last assessed on September 13, 2026.
 
 ### 1. Start here — does it load at all
 
