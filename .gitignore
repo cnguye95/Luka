@@ -6,3 +6,4 @@ data.json
 *.log
 .DS_Store
 .eval-cache/
+.vscode/
