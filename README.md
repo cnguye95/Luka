@@ -12,7 +12,6 @@ Obsidian surface is checked by hand against
 
 ## Table of Contents
 
-- [Status](#status)
 - [Compile](#compile)
 - [Page Types and Graph Colours](#page-types-and-graph-colours)
 - [Development](#development)
@@ -20,26 +19,6 @@ Obsidian surface is checked by hand against
 - [Commands](#commands)
 - [Eval](#eval)
 - [Testing](#testing)
-
-## Status
-
-Everything specified is built: Luka ingests what you put in `raw/`, compiles it
-into a linked three-kind wiki, answers questions from that wiki with citations,
-files the answers back, draws the retrieval mechanism in its own graph pane with
-an iteration scrubber, and talks to either Anthropic or any OpenAI-compatible
-server. The one planned piece dropped rather than deferred is hard-PDF
-extraction (layout-aware, OCR, vision fallback);
-[design_decisions.md](design_decisions.md) records why under *Deliberately not
-built*.
-
-To prove the pipeline against the real API (optional, a few cents):
-
-```
-ANTHROPIC_API_KEY=sk-ant-... npm test                              # provider smoke tests
-ANTHROPIC_API_KEY=sk-ant-... npx vitest run tests/compile-live.test.ts   # a real end-to-end compile
-```
-
-Both are skipped without the key, and neither ever runs in CI.
 
 ## Compile
 
@@ -135,6 +114,9 @@ npm run lint
   floors, and the headless runner with its Node adapters.
 - `scripts/` — the boundary check and the vault installer. `demo/raw/` is the
   demo corpus.
+- `.nvmrc` — the Node version, read by `actions/setup-node` in CI and by `nvm`
+  and friends locally, so the two run the same toolchain. `package.json`'s
+  `engines` states the floor; this is the version actually used.
 
 ## Running it in Obsidian
 
