@@ -132,8 +132,8 @@ function derivativesOf(fs: MemFs): string[] {
 const REPAIR_MARK = "HAND REPAIRED.";
 
 /**
- * Checkable: "a derivative persists until the original changes", and
- * the failure policy adds "or until a run says it could not keep it".
+ * A derivative persists until the original changes, and the failure policy
+ * adds one more exit: a run that says it could not keep it.
  *
  * Convergence alone cannot see a violation — a destroyed repair settles as
  * happily as a preserved one — and destroying a user's work silently is the

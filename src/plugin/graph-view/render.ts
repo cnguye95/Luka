@@ -123,9 +123,9 @@ export function radiusFor(degree: number): number {
 /**
  * How visible a node is: the overlay and the filter dim independently.
  *
- * They are separate controls — the filter "dims non-matches" with
- * no mention of the overlay, and the overlay dims "non-neighborhood" with no
- * mention of the filter — so a node outside both is dimmer than one outside
+ * They are separate controls — the filter dims non-matches whatever the
+ * overlay shows, and the overlay dims everything outside its neighborhood
+ * whatever the filter holds — so a node outside both is dimmer than one outside
  * either. Multiplying is what makes the two readable at once; taking a minimum
  * would make the second one applied invisible.
  */
@@ -257,7 +257,7 @@ export function draw(ctx: CanvasRenderingContext2D, frame: Frame): void {
   }
   ctx.globalAlpha = 1;
 
-  // Degradation: "drop labels first". The hovered node keeps its label —
+  // Degradation drops labels first. The hovered node keeps its label —
   // it is the answer to a gesture the user just made, and it is one string.
   const standing =
     nodes.length >= LABEL_DROP_THRESHOLD ? new Set<string>() : labelled(nodes, frame.overlay);

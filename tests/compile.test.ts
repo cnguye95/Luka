@@ -161,7 +161,7 @@ describe("the four rules", () => {
   });
 
   it("treats a move that also changes the content as two events, not a rename", async () => {
-    // "Delete-then-add at a different path is two events". The hash differs,
+    // Delete-then-add at a different path is two events. The hash differs,
     // so rename pairing must NOT fire — otherwise the new content would inherit
     // the old file's identity and never be re-extracted.
     const fs = new MemFs({ "raw/a.md": "one\n" });
@@ -201,7 +201,7 @@ describe("the four rules", () => {
     await instance.compile();
     expect(await fs.exists("raw/a.md")).toBe(true);
 
-    // A derivative "persists until the original changes", and a rename
+    // A derivative persists until the original changes, and a rename
     // does not change the original — identical bytes are how it was detected.
     // So the file moves with its source and only its origin key is rewritten.
     await fs.write("raw/a.md", `${fs.text("raw/a.md")}\nHAND REPAIRED.\n`);
@@ -682,8 +682,8 @@ describe("the four rules", () => {
   });
 
   it("does not cascade on a source that discovery skipped", async () => {
-    // A skipped path is still sitting in the vault — it must "surface again
-    // each compile". Treating it as vanished would delete the pages of a source
+    // A skipped path is still sitting in the vault — it must surface again
+    // each compile. Treating it as vanished would delete the pages of a source
     // that never went away, which is what happens when the skip rules change
     // under a vault that already compiled.
     const fs = new MemFs({ "raw/note.md": "content\n" });
@@ -1047,10 +1047,10 @@ describe("source discovery", () => {
   });
 
   it("never overwrites a user's file that merely carries a derived-from key", async () => {
-    // Invariant 7's first clause — "Nothing else in a user-placed file is
-    // ever modified" — cannot rest on the assumption that only Luka writes that
-    // key. A copied or hand-edited file carries it too, and its origin may name
-    // nothing at all.
+    // Invariant 7 allows a user-placed file exactly three writes, so no other
+    // change to it is sanctioned. That rule cannot rest on the assumption that
+    // only Luka writes that key. A copied or hand-edited file carries it too,
+    // and its origin may name nothing at all.
     const fs = new MemFs({
       "raw/a.md": "---\nderived-from: raw/gone.html\n---\nMY OWN NOTES.\n",
       "raw/a.csv": "x,y\n1,2\n",
@@ -1062,7 +1062,7 @@ describe("source discovery", () => {
   });
 
   it("still refuses a derivative whose source is merely unreadable this run", async () => {
-    // The owner is skipped, not gone — it will "surface again each compile",
+    // The owner is skipped, not gone — it will surface again each compile,
     // so its markdown is still spoken for.
     const fs = new MemFs({ "raw/a.html": "<h1>Hi</h1>\n" });
     await core(fs).instance.compile();

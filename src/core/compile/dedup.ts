@@ -50,12 +50,12 @@ export interface WorkSet {
  * @param pages       the existing wiki page table
  * @param inventories one entry per successfully inventoried source
  * @param requeued    paths of pages that must regenerate for a reason other
- *                    than a match — "every page citing a
- *                    modified/deleted source"
+ *                    than a match — every page citing a
+ *                    modified/deleted source
  * @param reserved    titles this run has already handed out but
  *                    which are not in `pages` yet — the source pages, named
- *                    before the merge so "unique across `wiki/`" holds
- *                    across both halves of the run. Defaults to the titles in
+ *                    before the merge so titles stay unique across `wiki/`
+ *                    in both halves of the run. Defaults to the titles in
  *                    `pages`.
  */
 export function mergeInventories(
@@ -64,7 +64,7 @@ export function mergeInventories(
   requeued: readonly string[] = [],
   reserved?: ReadonlySet<string>,
 ): WorkSet {
-  // "Kind ignored" distinguishes entity from concept — an item may match
+  // Matching ignores kind, entity or concept — an item may match
   // a page of either. Source pages are not candidates: they are assembled by
   // code from their own file's summary and have no Call B, so matching one
   // would strand the citer on a page that never regenerates. They still hold
@@ -204,8 +204,8 @@ export function mergeInventories(
 }
 
 /**
- * Matching is "each item's title and aliases against the existing title+alias
- * table". Title first, then aliases in the order the model gave them, so the
+ * Matches each item's title and aliases against the existing title+alias
+ * table. Title first, then aliases in the order the model gave them, so the
  * result does not depend on Map iteration.
  *
  * The title is tried both as written and sanitized: `sanitizeTitle` is what

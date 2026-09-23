@@ -218,7 +218,7 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
 /**
  * Unwraps a JSON reply the model returned inside a markdown fence.
  *
- * The rule is "parse, one repair retry", and the repair was written for
+ * A failed parse gets one repair retry, and the repair was written for
  * exactly this shape — but it re-asks the same model, so it is a fix only when
  * the model complies the second time. `claude-haiku-4-5-20251001` fences the
  * repair reply too: every source of a real compile failed at `inventory` and

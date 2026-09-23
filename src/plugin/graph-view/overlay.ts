@@ -55,9 +55,9 @@ export interface Overlay {
    * Heat-ramp intensity per node, already normalized to 0..1, or `null` when
    * there is no ramp to draw.
    *
-   * Mode-A inspection overlays "seeds and lexical top-K without a PPR heat
-   * ramp", so the absence is a state the model has to be able to express — not
-   * an empty map, which would render as every node at zero heat.
+   * Mode-A inspection overlays seeds and lexical top-K with no PPR heat ramp,
+   * so the absence is a state the model has to be able to express — not an
+   * empty map, which would render as every node at zero heat.
    */
   scores: ReadonlyMap<string, number> | null;
   /** What the status line says this overlay is. */
@@ -185,13 +185,12 @@ export function heatOf(overlay: Overlay, path: string): number {
 }
 
 /**
- * The filter box: "dims non-matches (no model call)".
+ * The filter box dims non-matches and makes no model call.
  *
  * A plain case-insensitive substring test over the two names a user can see —
  * the title in a label, the path in a tooltip or a link. Nothing is scored and
- * nothing is asked; this is the one interaction named twice as costing no
- * call, and keeping it to `includes` is what makes that obvious rather than
- * argued.
+ * nothing is asked; the filter never costs a model call, and keeping
+ * it to `includes` is what makes that obvious rather than argued.
  */
 export function matchesFilter(node: SimNode, query: string): boolean {
   const trimmed = query.trim().toLowerCase();

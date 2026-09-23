@@ -1,10 +1,10 @@
 // The press half of the node gestures: what a press on a node turns out to be.
 //
-// A click and a drag have different jobs on the same button — "click a node
-// → instant PPR from that node" against "drag-to-pin" beside "drag reheats
-// locally" — so something has to decide which of the two a press became, and
-// the decision is travel against a threshold. That is pure, so it is here and
-// not in `view.ts` among the DOM.
+// A click and a drag have different jobs on the same button — a click on a
+// node runs PPR from that node at once, while a drag pins the node and reheats
+// the layout locally — so something has to decide which of the two a press
+// became, and the decision is travel against a threshold. That is pure, so it
+// is here and not in `view.ts` among the DOM.
 //
 // It is a module rather than a few lines inline because *when* the drag starts
 // is the whole point. Starting it on `pointerdown`, before any travel is known,

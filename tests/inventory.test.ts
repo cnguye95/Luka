@@ -20,7 +20,7 @@ describe("Call A — inventory", () => {
     expect(call?.maxTokens).toBe(MAX_TOKENS_BY_TASK.inventory);
     // "Qualified titles for ambiguous names ('Mercury (element)')".
     expect(call?.system).toContain("Mercury (element)");
-    // "Aliases include obvious variants".
+    // The prompt requires aliases to include the obvious variants.
     expect(call?.system.toLowerCase()).toContain("variants");
     // The output shape is fixed exactly; every key has to be asked for by
     // name or the model has no way to know the schema.

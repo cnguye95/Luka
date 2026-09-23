@@ -97,8 +97,8 @@ describe("the ask and filing acceptance criteria, on the demo corpus", { timeout
     expect(answer.path).toMatch(/^answers\/2026-08-19-1000 how-does-graph-retrieval-work\.md$/);
     expect(answer.grounded).toBe(true);
 
-    // The AC: "an answer note whose inline links all validate". Every link
-    // left in the note names something in the retrieved set.
+    // The answer note's inline links all validate: every link left in the note
+    // names something in the retrieved set.
     const { body } = parseFrontmatter(note);
     const prose = body.slice(0, body.indexOf("<!-- sources:start -->"));
     // "Validate" means each link resolves to a page that was retrieved — not
@@ -147,7 +147,7 @@ describe("the ask and filing acceptance criteria, on the demo corpus", { timeout
     const manifest = await loadManifest(fs, MANIFEST);
     expect(Object.keys(manifest)).toContain(filed);
 
-    // The AC: "test asserts its source page exists".
+    // The filed answer's source page exists.
     const pages = await loadPageTable(fs);
     const sourcePage = pages.find((page) => page.source === filed);
     expect(sourcePage, "the filed answer has no source page").toBeDefined();

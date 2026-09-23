@@ -3,8 +3,8 @@ import type { ScopePreview } from "../core/index";
 import { stem } from "../core/paths";
 
 /**
- * The confirm modal: "show the scope preview (counts + lists of pages to
- * regenerate and pages that may be deleted)".
+ * The confirm modal shows the scope preview: counts, plus lists of the pages
+ * to regenerate and the pages that may be deleted.
  *
  * The core holds the operation lock across this, so the vault cannot change
  * under the preview while it is on screen.

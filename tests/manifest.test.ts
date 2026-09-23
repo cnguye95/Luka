@@ -99,7 +99,8 @@ describe("readablePathOf", () => {
   });
 
   it("is nothing for a converting source whose derivative was never recorded", () => {
-    // The rule is "the source itself if `.md`/`.txt`, else its derivative", and a
+    // A source's readable markdown is the source itself if `.md`/`.txt`, else
+    // its derivative (`readableMarkdown` in `src/core/readable.ts`), and a
     // PDF is not its own readable markdown. This is the case three functions
     // used to answer differently: two handed back the source path, which makes
     // a PDF a graph node and puts its raw bytes into a Call B prompt under the

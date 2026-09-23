@@ -14,8 +14,8 @@
 //   - what synthesis said it was missing, which is the model reporting
 //     on its own answer rather than being asked a second question about it;
 //   - wikilink targets on the pages retrieved for this question that resolve
-//     to nothing — an unresolved link is "a future-article signal, not
-//     an error", and here the pages that wanted it are the ones the answer was
+//     to nothing — an unresolved link is a future-article signal, not
+//     an error, and here the pages that wanted it are the ones the answer was
 //     built from.
 //
 // Both are resolved by one rule — the links through `unresolvedTargets`, as

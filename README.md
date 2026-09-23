@@ -318,6 +318,10 @@ in `eval/fixture-vault/raw/`. It calls no model either — the replies are
 scripted — and the rebuild is byte-identical, so regenerating the vault does not
 move the floors.
 
+For the full eval method, see the comment at the top of
+[eval/queries.yaml](eval/queries.yaml) and decision 21 in
+[design_decisions.md](design_decisions.md#21-the-eval-fixture-is-compiled-by-the-real-pipeline-and-the-floors-measure-ranking).
+
 ## Testing
 
 ```

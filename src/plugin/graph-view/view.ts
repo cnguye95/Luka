@@ -2,7 +2,7 @@
 //
 // Read-only by construction. It holds a `Core` and no `FsAdapter`, so the only
 // vault access it has is what the façade offers — and none of what the pane does
-// here writes anything. It is "never blocked by the lock" for the same reason:
+// here writes anything. The lock never blocks it, for the same reason:
 // every entry point it uses (`getGraph`, `computePPR`, `inspect`) is lock-free.
 //
 // Invariant 1 has no watchers and no timers, and this file has neither: no
@@ -59,7 +59,7 @@ const clamp = (value: number, low: number, high: number): number =>
  * itself — `main.ts` imports this module, so importing it back would be a cycle.
  */
 export interface GraphHost {
-  /** The replay button is gated on "an answer note is active". */
+  /** The replay button shows only while an answer note is active. */
   activeAnswerPath(): string | null;
   readNote(path: string): Promise<string>;
 }
@@ -116,9 +116,9 @@ export class LukaGraphView extends ItemView {
    * page can put it back.
    *
    * Esc has the job of clearing an overlay. A double-click's own first
-   * press produces a click-PPR overlay on the way past, and discarding an
-   * Inspect or replay overlay the user deliberately asked for is not something
-   * "double-click opens the page" licenses.
+   * press produces a click-PPR overlay on the way past, and a double-click's
+   * job is to open the page, not to discard an Inspect or replay overlay the
+   * user deliberately asked for.
    */
   private beforeClick: Overlay | null = null;
   /**
@@ -189,7 +189,7 @@ export class LukaGraphView extends ItemView {
       if (path !== null) void this.showRetrieval(path);
     });
     // A workspace event, not a vault one: it changes which button is visible
-    // and runs no operation, so invariant 1's "no watchers" is untouched.
+    // and runs no operation, so invariant 1's "no file watchers" is untouched.
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncReplayButton()));
     this.syncReplayButton();
 
@@ -553,7 +553,7 @@ export class LukaGraphView extends ItemView {
       const result = await this.core.inspect(asked, { snapshots: true });
       if (this.closed) return;
       // Mode A ranks lexically and returns no vectors, so it gets no slider —
-      // the same absence as "without a PPR heat ramp".
+      // the same absence as its missing PPR heat ramp.
       this.setOverlay(
         withScrub(fromInspect(result, this.topK(), asked), {
           scores: new Map(result.ranked.map((node) => [node.path, node.score])),
@@ -661,8 +661,8 @@ export class LukaGraphView extends ItemView {
   }
 
   /**
-   * Trace replay: "parses the trace and overlays, zero calls, graceful
-   * notice if the note has no trace".
+   * Trace replay parses the trace and overlays it, with zero model calls, and
+   * shows a notice instead if the note has no trace.
    *
    * Recorded data only. The graph on screen may not be the graph the answer was
    * written against, so re-ranking would show what retrieval *would* reach now

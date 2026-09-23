@@ -116,8 +116,8 @@ describe("PPR against a hand-computed fixture", () => {
 
 describe("degree-0 handling", () => {
   it("gives an isolated seed exactly the teleport mass and nothing else", () => {
-    // "Degree-0 nodes propagate nothing (zero column) and hold teleport mass
-    // only." Seeded on `e`, the walk has nowhere to go: `e` keeps (1−α) and
+    // Degree-0 nodes propagate nothing (zero column) and hold teleport mass
+    // only. Seeded on `e`, the walk has nowhere to go: `e` keeps (1−α) and
     // the rest of the mass leaves the graph rather than being redistributed.
     const scores = run([N("e")]).scores;
 
@@ -152,7 +152,7 @@ describe("seeds that name nothing (the seed call drops them before this)", () =>
 
 describe("determinism", () => {
   it("orders nodes by code point, not by the host's collation", () => {
-    // "Node order lexicographic by path". `comparePaths` is code-point
+    // Node order is lexicographic by path. `comparePaths` is code-point
     // order deliberately, because `localeCompare` is locale- and ICU-dependent:
     // under it `_x` sorts before `A-B` and `alpha` before `Zeta`, which changes
     // the index assignment, hence the floating-point summation order, hence the

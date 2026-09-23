@@ -633,7 +633,7 @@ describe("a source that cannot be read costs a page one run, not its content", (
   it("still serves the body of a citer whose own inventory failed", async () => {
     // Normalization is what creates readable markdown, and it succeeded — only
     // this source's own Call A came back an error. The body is sitting on disk,
-    // and Call B wants "the full normalized bodies of *all* citing sources", so
+    // and Call B wants the full normalized bodies of *all* citing sources, so
     // refusing it would cost the page a citer it still claims in its block.
     //
     // The source is a rename that had to re-extract, which is the case with no

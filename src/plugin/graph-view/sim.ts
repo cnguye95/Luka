@@ -98,7 +98,7 @@ export interface Sim {
 /**
  * FNV-1a, 32-bit.
  *
- * Positions are "seeded by hashing page path" so a pane reopened on the
+ * Positions are seeded by hashing the page path, so a pane reopened on the
  * same vault starts from the same shape. `core/hash.ts` is SHA-256 and async;
  * a layout seed needs neither cryptographic strength nor a promise, and pulling
  * an async hash into a synchronous layout would make the first frame wait on

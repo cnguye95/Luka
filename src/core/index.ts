@@ -310,8 +310,8 @@ export interface Core {
 
 export function createCore(deps: CoreDeps): Core {
   const lock = new OperationLock();
-  // The graph lives here and nowhere on disk: "built in memory at plugin
-  // load and after compile; no cache file". `building` collapses concurrent
+  // The graph lives here and nowhere on disk: it is built in memory at plugin
+  // load and after compile, with no cache file. `building` collapses concurrent
   // callers onto one build rather than letting two walk the vault at once —
   // unforced callers here, forced ones on `forcing` below, and between them
   // no gesture starts a second walk of the same vault.
@@ -455,8 +455,8 @@ export function createCore(deps: CoreDeps): Core {
       } finally {
         writes.end();
       }
-      // "and after compile". A declined preview changed nothing, so
-      // there is nothing to rebuild from.
+      // The graph is rebuilt after compile. A declined preview changed
+      // nothing, so there is nothing to rebuild from.
       if (!result.cancelled) {
         // Retire first: a build begun before these writes cannot describe them,
         // and joining it would cache a graph that is already wrong.
@@ -674,12 +674,12 @@ export interface AnswerResult {
 async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> {
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const provider = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
-  // Invariant 12 bounds *logical* calls: "ask = ≤ 3 calls". `stats().requests`
-  // and `byTask` both count transport attempts — they increment together
-  // inside the retry loop — so neither is this number. The retries and the
-  // one repair are recovery of a single logical call, not extra calls, and
-  // reporting them as calls would make the invariant look violated whenever
-  // the network hiccuped. Counted here, where the calls are made.
+  // Invariant 12 bounds *logical* calls: ask makes at most three.
+  // `stats().requests` and `byTask` both count transport attempts — they
+  // increment together inside the retry loop — so neither is this number. The
+  // retries and the one repair are recovery of a single logical call, not extra
+  // calls, and reporting them as calls would make the invariant look violated
+  // whenever the network hiccuped. Counted here, where the calls are made.
   let modelCalls = 0;
   const called = <T,>(work: Promise<T>): Promise<T> => {
     modelCalls += 1;
@@ -718,16 +718,17 @@ async function runAsk(input: CoreDeps, question: string): Promise<AnswerResult> 
     deps.settings.assemblyCap,
   );
 
-  // Step 5: "Zero seeds and zero lexical candidates → skip retrieval;
-  // synthesis runs from model knowledge and the answer is labeled ungrounded."
+  // Step 4 of the list in `retrieve/pipeline.ts`: zero seeds and zero lexical
+  // candidates skip retrieval; synthesis runs from model knowledge and the
+  // answer is labeled ungrounded.
   const grounded = assembly.nodes.length > 0;
   let reply = await called(synthesize(provider, question, assembly.nodes));
 
-  // The follow-up round: "identical in both modes: lexical-score the
-  // missing-information strings (as keywords) over wiki pages, take the
-  // highest scorers not already assembled, append them under the remaining
-  // context budget, and synthesize again with the union. No second seed call,
-  // no second PPR. Hard cap: one follow-up round."
+  // The follow-up round is identical in both modes: it lexical-scores the
+  // missing-information strings (as keywords) over wiki pages, takes the
+  // highest scorers not already assembled, appends them under the remaining
+  // context budget, and synthesizes again with the union. There is no second
+  // seed call and no second PPR, and there is at most one follow-up round.
   let round2 = false;
   if (reply.missing.length > 0 && deps.settings.followUpEnabled) {
     const already = new Set(assembly.nodes.map((node) => node.path));
@@ -898,15 +899,16 @@ async function runCompile(
   const deps: CoreDeps = { ...input, settings: normalizeSettings(input.settings) };
   const emit = options.onProgress ?? (() => {});
   const wrapped = deps.provider ?? createProvider({ http: deps.http, settings: deps.settings });
-  // Invariant 12 bounds compile by "S inventory calls + P page-generation calls
-  // (+1 vision call per orphan image)" — a function of the worklist. The
-  // retries and the one repair are transport, not worklist, so a `requests`
-  // delta reports a number the invariant never promised: one source whose
-  // inventory needs repairing reads 2, and a 503 storm reads more still. This
-  // is the counter `runAsk` was given for the same reason; compile kept the
-  // delta. Counting one call per `complete()` — above the wrapper, so retries
-  // stay underneath it — is the same logical count at every site, including the
-  // vision call `normalize` makes, which index.ts cannot otherwise see.
+  // Invariant 12 bounds compile at one inventory call per changed source plus
+  // one generation call per queued page (plus one vision call per orphan image)
+  // — a function of the worklist. The retries and the one repair are transport,
+  // not worklist, so a `requests` delta reports a number the invariant never
+  // promised: one source whose inventory needs repairing reads 2, and a 503
+  // storm reads more still. This is the counter `runAsk` was given for the same
+  // reason; compile kept the delta. Counting one call per `complete()` — above
+  // the wrapper, so retries stay underneath it — is the same logical count at
+  // every site, including the vision call `normalize` makes, which index.ts
+  // cannot otherwise see.
   let modelCalls = 0;
   const provider = countingProvider(wrapped, () => {
     modelCalls += 1;
@@ -1206,7 +1208,7 @@ async function runCompile(
     return text;
   };
 
-  // "Surviving citing sources": the file is still in the vault. Being
+  // A citing source survives when its file is still in the vault. Being
   // present is enough — a source that failed to normalize or inventory this run
   // has not gone anywhere, and deleting the page it cites because one run went
   // badly is not recoverable the way retrying an ingest is.
@@ -1679,8 +1681,8 @@ function toMeta(page: PageToWrite): PageMeta {
 
 /**
  * The readable markdown of a source this run did not touch — needed when an
- * unchanged source still cites a page being regenerated ("*all* citing
- * sources").
+ * unchanged source still cites a page being regenerated, because Call B gets
+ * the bodies of *all* citing sources.
  *
  * The entry names the file, so nothing is guessed. The old version derived a
  * `<stem>.md` candidate from the path, which in a vault holding both
@@ -1718,9 +1720,9 @@ async function readableFromManifest(
     }
   }
 
-  // Invariant II: `derived-from` is read as a guard before serving a file as a
-  // source's content, never to locate one. Whatever sits at that path, it is
-  // not this source's normalized body unless it still says so.
+  // Rename invariant II: `derived-from` is read as a guard before serving a
+  // file as a source's content, never to locate one. Whatever sits at that
+  // path, it is not this source's normalized body unless it still says so.
   //
   // A read that fails is answered the same way as one that says "not ours": as
   // "no readable markdown", which costs this page one run. Letting it escape

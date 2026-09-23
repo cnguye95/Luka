@@ -61,7 +61,8 @@ describe("the mode predicate, at its boundaries", () => {
   });
 
   it("is inclusive on both thresholds", () => {
-    // "node count ≥ 20 AND … ≥ 1.5" — exactly at both is Mode B.
+    // Both thresholds are inclusive: exactly 20 nodes and a ratio of exactly
+    // 1.5 is Mode B.
     expect(mode(FIXED_MIN_NODES, FIXED_MIN_NODES * FIXED_MIN_RATIO)).toBe("B");
     expect(mode(FIXED_MIN_NODES - 1, (FIXED_MIN_NODES - 1) * FIXED_MIN_RATIO)).toBe("A");
   });

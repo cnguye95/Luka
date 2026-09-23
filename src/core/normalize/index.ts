@@ -289,10 +289,10 @@ async function chooseTarget(
  * derivative at all — not a file, no readable frontmatter, or no `derived-from`
  * key. The single reader of that key in the codebase.
  *
- * Invariant II: this answers "whose is the file at this path", never "where is
- * this source's file". It is read as a guard, immediately before a destructive
- * write or before serving a file as a source's content, and its answer is never
- * used to locate anything.
+ * Rename invariant II: this answers "whose is the file at this path", never
+ * "where is this source's file". It is read as a guard, immediately before a
+ * destructive write or before serving a file as a source's content, and its
+ * answer is never used to locate anything.
  */
 export async function derivativeOrigin(fs: FsAdapter, path: string): Promise<string | null> {
   const stat = await fs.stat(path);

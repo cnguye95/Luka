@@ -38,8 +38,9 @@ describe("the node set", () => {
 
     const graph = await build(fs);
 
-    // The PDF is not a node; the markdown extracted from it is (the rule:
-    // "the source itself if `.md`/`.txt`, else its derivative").
+    // The PDF is not a node; the markdown extracted from it is. A source's
+    // readable markdown is the source itself if `.md`/`.txt`, else its
+    // derivative (`readableMarkdown` in `src/core/readable.ts`).
     expect(nodePaths(graph)).toEqual([
       "raw/note.md",
       "raw/paper.md",
@@ -83,16 +84,16 @@ describe("the node set", () => {
     const graph = await build(fs);
 
     expect(nodePaths(graph)).toEqual(["wiki/concepts/PageRank.md"]);
-    // "never graph nodes, never edge sources" — the index links to PageRank,
-    // and that link contributes nothing.
+    // Invariant 8's "never graph nodes, never edge sources" — the index links
+    // to PageRank, and that link contributes nothing.
     expect(graph.edges).toEqual([]);
   });
 });
 
 describe("a node carries its summary (the pane's tooltip)", () => {
-  // The hover tooltip is "title, kind, summary". Carrying the summary on the
-  // node is what lets the pane draw it without a second read of the vault —
-  // the pane has no `FsAdapter` and hovering must cost no IO.
+  // The hover tooltip shows title, kind and summary. Carrying the summary on
+  // the node is what lets the pane draw it without a second read of the
+  // vault — the pane has no `FsAdapter` and hovering must cost no IO.
   const summarized = (kind: string, summary: string) =>
     `---\nkind: ${kind}\nsummary: ${summary}\nupdated: '2026-08-20'\n---\nBody.\n`;
 
@@ -263,8 +264,8 @@ describe("the graph does not depend on the order the vault is read in", () => {
     // with every sort in `build.ts` deleted.
     //
     // What is observable, and what a caller depends on, is that the output is
-    // ordered. PageRank ranks over `graph.nodes` and expects "node order
-    // lexicographic by path".
+    // ordered. PageRank ranks over `graph.nodes` and expects the nodes in
+    // lexicographic order by path.
     const graph = await build(new MemFs(seed));
 
     expect(graph.nodes.map((node) => node.path)).toEqual(
@@ -300,8 +301,8 @@ describe("the graph is rebuilt after compile", () => {
     const seen: GraphSnapshot[] = [];
     const unsubscribe = core.onGraphRebuilt((graph) => seen.push(graph));
 
-    // The callback fires "after compile and after load". The first build
-    // is the load-time one, and the vault has nothing in it yet.
+    // The callback fires after compile and after load. The first build is
+    // the load-time one, and the vault has nothing in it yet.
     expect((await core.getGraph()).nodes).toEqual([]);
     expect(seen).toHaveLength(1);
 

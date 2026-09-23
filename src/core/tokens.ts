@@ -56,8 +56,8 @@ export interface Packed<T> {
  * yields context.
  *
  * That exception is for the *whole* budget. A caller packing into what is
- * left of one — the follow-up round, which appends "under the remaining
- * context budget" — passes `truncateFirst: false`, and a first item that does
+ * left of one — the follow-up round, which appends under the remaining
+ * context budget — passes `truncateFirst: false`, and a first item that does
  * not fit is dropped like any other: a remnant that holds no page whole yields
  * nothing, rather than a fragment a model call would then be spent on.
  */

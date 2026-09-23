@@ -253,7 +253,7 @@ async function main(): Promise<void> {
     // file whose ranking floors are missing, null, or not numbers, and it
     // names the offending key instead of throwing mid-measurement.
     for (const under of belowFloor(summary, floor)) {
-      // `--live` "prints the same metrics". It cannot be held to the
+      // `--live` prints the same metrics as CI mode. It cannot be held to the
       // ranking floors: those were calibrated from the 8 queries CI seeding
       // leaves unseeded, and a live model seeds the easy ones out of the
       // subset, so what remains is the hardest few averaged against a floor set

@@ -94,7 +94,7 @@ describe("packUnderBudget", () => {
   });
 
   it("drops rather than truncates a first item when asked for whole items only", () => {
-    // The follow-up round appends "under the remaining context budget";
+    // The follow-up round appends under the remaining context budget;
     // the truncation exception is for a page over the *whole* budget, so a
     // remnant that fits no page whole yields nothing — not a fragment that a
     // third model call would then be spent on.
@@ -121,7 +121,7 @@ describe("packUnderBudget", () => {
   });
 
   it("reports the real cost of a truncated first item, not zero", () => {
-    // The follow-up round appends "under the remaining context budget",
+    // The follow-up round appends under the remaining context budget,
     // computed from this number.
     const result = packUnderBudget([size(500)], (t) => t, 50);
     expect(result.usedTokens).toBeGreaterThan(40);

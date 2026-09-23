@@ -76,9 +76,10 @@ function harness(script: readonly Outcome[], overrides: Partial<LukaSettings> = 
 }
 
 /**
- * The rules, quoted rather than derived: "2 retries with exponential backoff
- * + jitter", "120s timeout", "per-task max_tokens caps (inventory 2000, seeds
- * 500, generation 3000, synthesis 4000, vision 1500)".
+ * The rules are stated here rather than derived from the code, so a change to
+ * the code cannot move them: two retries with exponential backoff and jitter,
+ * a 120 s timeout, and per-task max_tokens caps (inventory 2000, seeds 500,
+ * generation 3000, synthesis 4000, vision 1500).
  *
  * These were `DEFAULT_SETTINGS.maxRetries` and `MAX_TOKENS_BY_TASK` before,
  * which made the matrix agree with the code by construction: with
@@ -173,7 +174,7 @@ describe("what the rules say reaches the transport", () => {
   });
 
   it("fixes a json task at temperature 0 even when the caller asks otherwise", async () => {
-    // "JSON tasks: temperature 0" — unconditionally.
+    // JSON tasks run at temperature 0, unconditionally.
     const { provider, seen } = harness([ok()]);
     await provider.complete({
       task: "inventory",

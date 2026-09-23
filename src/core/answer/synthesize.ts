@@ -148,8 +148,7 @@ export function cleanMissing(list: readonly string[]): string[] {
 }
 
 /**
- * "Any link outside the retrieved set is unlinked to plain text plus
- * marker".
+ * Unlinks every link outside the retrieved set to plain text plus a marker.
  *
  * The link becomes the text it displayed, so the sentence still reads, and the
  * marker names what was dropped. A page that was retrieved keeps its link.
@@ -179,7 +178,7 @@ export function validateAnswerLinks(
     const pipe = inner.indexOf("|");
     const target = (pipe === -1 ? inner : inner.slice(0, pipe)).trim();
     // A piped link with nothing after the pipe still has to leave a readable
-    // sentence: unlinking is "to plain text", and an empty display would put a
+    // sentence: unlinking yields plain text, and an empty display would put a
     // bare marker where a word used to be.
     const piped = pipe === -1 ? "" : inner.slice(pipe + 1).trim();
     const display = piped === "" ? target : piped;

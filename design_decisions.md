@@ -895,9 +895,13 @@ oversight.
 
 **Evaluation**
 
-- Half the eval queries are answered by seeding alone; the ranking-only subset
-  buys headroom against the floors, not demonstrated detection of a regression
-  the overall means would miss.
-- The churn sweep's deadlock classifier has produced no signal in either
-  direction on the current generator; the swap cases it was written for are
-  pinned by direct tests instead.
+- The first 8 of the 16 eval questions name every page they expect, so those
+  pages are starting points before ranking begins and score well whatever the
+  ranker does. The other 8 exercise the ranker and have their own pass-or-fail
+  floors, but nobody has yet shown those floors catching a regression that the
+  average over all sixteen would miss.
+- The churn sweep includes a check for one failure: two sources that swap
+  names and are locked out for good. It has never fired. Decision 7's floating
+  derivatives prevent that failure, and even with them removed, the
+  recorded-path fallback resolves the swap on its own. So the check has never
+  been seen to work, and hand-written tests cover the swap directly instead.

@@ -192,7 +192,7 @@ describe("the visual encoding", () => {
   });
 
   it("gives the three wiki kinds and raw four distinct theme colours", () => {
-    // "Three muted theme-derived colors + one for raw source nodes".
+    // Three muted theme-derived colours, plus one for raw source nodes.
     const used = [
       colorFor("concept", THEME),
       colorFor("entity", THEME),
@@ -362,8 +362,8 @@ describe("edges are drawn to be seen, not merely drawn", () => {
   });
 
   it("still paints edges with the theme's edge colour, not a fixed hue", () => {
-    // "Colors and fonts from Obsidian CSS variables". Whatever the theme
-    // hands over is what reaches the canvas.
+    // Colours and fonts come from Obsidian's CSS variables. Whatever the
+    // theme hands over is what reaches the canvas.
     expect(edgeStroke({ ...THEME, edge: "#123456" }).color).toBe("#123456");
   });
 
@@ -850,7 +850,7 @@ describe("the overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("dims a node the walk never reached", () => {
-    // "Non-neighborhood dimmed".
+    // Nodes outside the neighborhood are dimmed.
     const overlay = fromClickPPR(scores, "a.md", 2);
 
     expect(isLit(overlay, "c.md")).toBe(true);
@@ -870,7 +870,7 @@ describe("the overlay: ring, stroke, ramp, dim", () => {
   });
 
   it("carries no ramp for a Mode-A inspection, and one for Mode B", () => {
-    // Mode A overlays "seeds and lexical top-K without a PPR heat ramp".
+    // Mode A overlays seeds and lexical top-K without a PPR heat ramp.
     // Null rather than an empty map — an empty map paints every node at zero
     // heat, which is a ramp, just a flat one.
     const ranked = [
@@ -995,9 +995,10 @@ describe("labels follow the current metric", () => {
   });
 
   it("labels the hottest nodes when a PPR overlay supplies scores", () => {
-    // "Labels on hover plus top-10 by current metric". Under an overlay the
-    // metric is the score — labelling the degree hubs would name the pages every
-    // query shares, at the one moment the names are supposed to be informative.
+    // Labels show on hover, plus on the top 10 by the current metric. Under an
+    // overlay the metric is the score — labelling the degree hubs would name
+    // the pages every query shares, at the one moment the names are supposed
+    // to be informative.
     const ctx = recorder();
 
     draw(ctx, frameOf(nodes, { overlay: fromClickPPR(hot, "n00.md", 5) }));

@@ -3,11 +3,11 @@
 // Two hard constraints shape this module.
 //
 // Invariant 7: a user-placed file receives exactly three sanctioned in-place
-// writes, one of which is "frontmatter written where absent". Keys the user
-// wrote are theirs — this module never re-serializes them, because a
-// load/dump round trip silently drops YAML comments, restyles flow sequences,
-// reorders keys, and retypes scalars (`010` becomes `10`). New keys are
-// spliced in as text and every existing byte is left exactly as written.
+// writes, one of which is frontmatter where absent. Keys the user wrote are
+// theirs — this module never re-serializes them, because a load/dump round trip
+// silently drops YAML comments, restyles flow sequences, reorders keys, and
+// retypes scalars (`010` becomes `10`). New keys are spliced in as text and
+// every existing byte is left exactly as written.
 //
 // A passthrough source is hashed *after* annotation, so serialization
 // must be byte-stable or every compile would see the file as modified again.

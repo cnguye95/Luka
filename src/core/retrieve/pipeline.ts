@@ -165,7 +165,7 @@ export function rankModeB(
 }
 
 /**
- * Ranking, Mode A: "wiki pages only". Seeds count as candidates even when
+ * Mode A ranks wiki pages only. Seeds count as candidates even when
  * no keyword touches them — the model chose them from the index, which is a
  * judgement the lexical score cannot express.
  */

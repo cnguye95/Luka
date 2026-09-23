@@ -126,8 +126,8 @@ export function renderCallBPrompt(input: GeneratePageInput): string {
   );
 
   const parts: string[] = [head, ...packed.texts];
-  // The input is "the full normalized bodies of *all* citing sources
-  // … truncation marker if the budget forces it". A source the budget dropped
+  // The input is the full normalized bodies of *all* citing sources, with a
+  // truncation marker if the budget forces a cut. A source the budget dropped
   // whole is the budget forcing it just as much as a tail cut is: without the
   // marker the model writes a page grounded in a subset of its sources while
   // code afterwards writes a citation block claiming all of them.

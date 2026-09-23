@@ -26,8 +26,9 @@ const fs = () => new NodeFs(VAULT);
 
 describe("the fixture is the vault the eval needs", () => {
   it("carries its own manifest, naming sources that exist", async () => {
-    // "Including its own `ingest-manifest.json` so graph construction
-    // knows the source set" — without it there are no raw nodes at all.
+    // The fixture includes its own `ingest-manifest.json` so graph
+    // construction knows the source set — without it there are no raw nodes
+    // at all.
     const manifest = await loadManifest(fs(), MANIFEST);
     const paths = Object.keys(manifest);
 

@@ -509,8 +509,8 @@ describe("unlinking is not applied to things that are not page links", () => {
   });
 
   it("keeps a sentence readable when a piped link has no display text", () => {
-    // Unlinking is "to plain text", and an empty display leaves a bare marker
-    // where a word used to be.
+    // Unlinking turns a link into plain text, and an empty display leaves a
+    // bare marker where a word used to be.
     const validated = validateAnswerLinks("See [[Photosynthesis|]].", retrieved);
 
     expect(validated).toContain("Photosynthesis");

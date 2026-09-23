@@ -144,7 +144,7 @@ describe("invariant 12: ask makes at most three model calls", () => {
   });
 
   it("still runs the seed call in Mode A", async () => {
-    // "The seed call runs in both modes" — Mode A does not save a call.
+    // The seed call runs in both modes — Mode A does not save a call.
     const { fs } = await compiled();
     const provider = new StubProvider(replyFor);
 
@@ -411,7 +411,7 @@ describe("the follow-up round", () => {
     const result = await core(fs, provider).ask("How does ranking work?");
 
     const stats = provider.stats();
-    // "No second seed call, no second PPR."
+    // No second seed call, no second PPR.
     expect(stats.byTask["seed-selection"]).toBe(1);
     expect(stats.byTask.synthesis).toBe(2);
     expect(result.modelCalls).toBe(3);
@@ -593,10 +593,11 @@ describe("the follow-up round", () => {
 });
 
 describe("invariant 12's number means what the invariant says", () => {
-  // "ask = ≤ 3 calls". `stats().requests` and `byTask` both count transport
-  // *attempts* — they increment on the same line inside the retry loop — so
-  // neither is the number the invariant bounds. Retries and the one repair
-  // are recovery of a single logical call, not extra calls.
+  // Invariant 12 allows ask at most three calls. `stats().requests` and
+  // `byTask` both count transport *attempts* — they increment on the same
+  // line inside the retry loop — so neither is the number the invariant
+  // bounds. Retries and the one repair are recovery of a single logical call,
+  // not extra calls.
   it("counts logical calls, not the attempts the wrapper spends making them", async () => {
     const { fs } = await compiled();
     // The seed reply is unparseable once, which the wrapper repairs with a

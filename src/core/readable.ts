@@ -6,8 +6,9 @@
 // derivative recorded. Two returned the source path, which for a PDF means
 // handing raw bytes to a model under the label of its extracted text, or
 // making the PDF a graph node when it is not one. The third refused it, with a
-// comment explaining why the other answer was wrong. That is the shape
-// CLAUDE.md's readable/live seam names: local fixes drift the siblings, so the
+// comment explaining why the other answer was wrong. That is the drift
+// design_decisions.md records for this seam in its known limitations, under
+// "Compile and the namespace": a local fix to one drifts the siblings, so the
 // rule has to live somewhere the siblings all read from.
 //
 // Three inputs remain, because the callers genuinely differ — one holds a

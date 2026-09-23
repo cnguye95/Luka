@@ -74,10 +74,10 @@ describe("Call B — the prompt", () => {
   });
 
   it("shows the model the identity and the sources, and nothing else", () => {
-    // The input is title, kind, aliases and the citing bodies — "never
-    // the old page text". `GeneratePageInput` carries no old-page field, so
-    // the way to hold that guarantee is to pin the prompt exactly: anything
-    // a future change smuggled in would land outside this string.
+    // The input is title, kind, aliases and the citing bodies, never the old
+    // page text. `GeneratePageInput` carries no old-page field, so the way to
+    // hold that guarantee is to pin the prompt exactly: anything a future
+    // change smuggled in would land outside this string.
     const prompt = renderCallBPrompt({
       ...base,
       sources: [{ path: "raw/a.md", body: "Only the source." }],
@@ -128,8 +128,8 @@ describe("Call B — the prompt", () => {
   });
 
   it("marks the truncation when the budget drops a whole source", () => {
-    // The model is promised "the full normalized bodies of *all* citing
-    // sources … truncation marker if the budget forces it". Dropping a source
+    // The model is given the full normalized bodies of *all* citing sources,
+    // with a truncation marker if the budget forces a cut. Dropping a source
     // whole is the budget forcing it, and without the marker the model grounds
     // the page in a subset while code writes a block claiming every source.
     const prompt = renderCallBPrompt({

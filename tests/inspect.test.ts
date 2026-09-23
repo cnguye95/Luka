@@ -135,8 +135,8 @@ describe("the retrieval steps, as retrieval runs them", () => {
   });
 
   it("ranks wiki pages only in Mode A", async () => {
-    // "Mode A: wiki pages only". A raw node appearing here would
-    // mean the graph ranker ran under the lexical mode's banner.
+    // Mode A ranks wiki pages only. A raw node appearing here would mean the
+    // graph ranker ran under the lexical mode's banner.
     const { fs, provider } = await compiled();
     const instance = core(fs, provider);
     expect(await instance.getGraph().then((g) => modeOf(g, normalizeSettings(DEFAULT_SETTINGS)))).toBe(
@@ -203,7 +203,8 @@ describe("the overlay is over the snapshot the pane is drawing", () => {
   it("reports Mode A for a vault below the predicate", async () => {
     // Read as a literal rather than from `modeOf`: an expectation derived from
     // the function under test agrees with it however wrong it becomes. The
-    // fixture is a two-page vault, which is far below "≥ 20 nodes".
+    // fixture is a two-page vault, far below the 20-node threshold of the
+    // mode predicate.
     const { fs, provider } = await compiled();
 
     const result = await core(fs, provider).inspect("What ranks pages?");
@@ -271,8 +272,8 @@ describe("a rebuild racing a compile does not hand back a stale graph", () => {
   });
 });
 
-// The scrubber: "when an overlay was computed with snapshots, a slider scrubs
-// per-iteration PPR vectors". The vectors have to come from the walk that
+// When an overlay was computed with snapshots, the scrubber's slider scrubs
+// per-iteration PPR vectors. The vectors have to come from the walk that
 // produced the ranking — a second walk would agree here and would be free to
 // stop agreeing later.
 describe("the scrubber frames are the walk that ranked", () => {

@@ -1,8 +1,9 @@
 // Full compile: discover → normalize → Call A → merge → Call B → post-process
 // → index, over an in-memory vault with a stub provider at the wrapper layer.
 //
-// The call-count assertions here are invariant 12's: "compile = S inventory
-// calls + P page-generation calls (+1 vision call per orphan image)".
+// The call-count assertions here are invariant 12's: compile makes one
+// inventory call per changed source plus one generation call per queued page,
+// plus one vision call per orphan image.
 import { describe, expect, it } from "vitest";
 import { parseCitationBlock } from "../src/core/compile/citations";
 import { loadPageTable } from "../src/core/compile/pagetable";
@@ -449,14 +450,15 @@ describe("the index is regenerated every compile", () => {
 
 describe("the call counter counts what the provider really does (invariant 12)", () => {
   it("does not count the repair retry against invariant 12's budget", async () => {
-    // Invariant 12 makes compile "S inventory calls + P page-generation calls"
-    // — a function of the worklist. The repair is transport, not worklist, so
-    // a counter reading `stats().requests` reports a number the invariant never
-    // promised: this run is one source and one page, and the delta reads 3.
-    // `runAsk` was given a logical counter for exactly this; compile has one
-    // now too. The transport count is still available on the provider, and the
-    // two must genuinely disagree here — otherwise the repair never happened
-    // and the test is measuring nothing.
+    // Under invariant 12, compile makes one inventory call per changed source
+    // plus one generation call per queued page — a function of the worklist.
+    // The repair is transport, not worklist, so a counter reading
+    // `stats().requests` reports a number the invariant never promised: this
+    // run is one source and one page, and the delta reads 3. `runAsk` was
+    // given a logical counter for exactly this; compile has one now too. The
+    // transport count is still available on the provider, and the two must
+    // genuinely disagree here — otherwise the repair never happened and the
+    // test is measuring nothing.
     const fs = new MemFs({ "raw/note.md": "PageRank ranks pages.\n" });
     let firstInventory = true;
     const provider = new StubProvider((request) => {

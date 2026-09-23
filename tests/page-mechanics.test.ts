@@ -251,7 +251,7 @@ describe("a handle has one canonical form", () => {
 
 describe("the length bound is a filename rule, not a matching rule", () => {
   it("does not merge two distinct titles that share a long prefix", () => {
-    // Dedup matches on "each item's title and aliases". A prefix is not a title,
+    // Dedup matches on each item's title and aliases. A prefix is not a title,
     // so bounding the matching key merges concepts that share an opening.
     const prefix = "A".repeat(130);
     const work = mergeInventories(
