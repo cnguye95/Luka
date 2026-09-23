@@ -1,3 +1,5 @@
+// The ingest manifest's load, save and structural comparison, and
+// `readablePathOf` — the one rule for where a source's readable markdown is.
 import { describe, expect, it } from "vitest";
 import {
   CASCADE_PENDING,

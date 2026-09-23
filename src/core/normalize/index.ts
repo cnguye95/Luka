@@ -243,11 +243,12 @@ async function describeImage(
  * before any extraction runs, so a doomed source never spends a model call.
  *
  * When that path is refused and the entry records this source's own markdown
- * somewhere else — a float (VII) — the write goes there instead. That file is
- * this source's, confirmed by the same guard that refuses everyone else's, and
- * rewriting it is invariant 7's plain sentence: derivative files Luka wrote are
- * Luka's to rewrite. Nothing is widened; the only address ever reached this way
- * is one the manifest already recorded for this very source.
+ * somewhere else — a float (rename invariant VII) — the write goes there
+ * instead. That file is this source's, confirmed by the same guard that refuses
+ * everyone else's, and rewriting it is invariant 7's plain sentence: derivative
+ * files Luka wrote are Luka's to rewrite. Nothing is widened; the only address
+ * ever reached this way is one the manifest already recorded for this very
+ * source.
  *
  * Canonical-first is also what makes floats temporary. A floated source that is
  * edited lands back at `<stem>.md` the moment the obstruction clears, and the

@@ -116,7 +116,8 @@ unverified surface in the project, so it comes before the older flows.
 - [ ] Concepts, entities, sources and raw files are four distinguishable muted
       colours, and they are theme colours — not fixed hues.
 - [ ] Switch Obsidian between dark and light with the pane open. The graph
-      recolours itself without needing to be reopened. (An acceptance criterion.)
+      recolours itself without needing to be reopened. (A theme change
+      repaints; it does not rebuild the graph.)
 - [ ] Well-connected nodes are visibly larger than leaf nodes.
 - [ ] At rest, about ten labels are shown — the highest-degree nodes — not one
       per node.

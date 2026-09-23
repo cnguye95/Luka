@@ -1,7 +1,7 @@
 // Ranking metrics for the eval harness.
 //
-// "reports recall@5, recall@10, MRR per query and mean; exits nonzero below a
-// floor recorded in the YAML."
+// Reports recall@5, recall@10, MRR per query and mean; exits nonzero below a
+// floor recorded in the YAML.
 //
 // Separate from `run.ts` so the arithmetic can be checked against hand-computed
 // numbers without running a process. It has a file of its own because it

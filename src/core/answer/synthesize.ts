@@ -1,10 +1,11 @@
 // Synthesis and the answer note.
 //
-// "Input: question + assembled pages, each delimited and labeled with
-// their title/path/kind. Prompt requirements: answer in markdown; attribute
-// claims with inline `[[links]]` drawn only from the provided set; end with
-// exactly one fenced JSON block `{"missing_information": [...]}` (empty list
-// when done). Code strips the block."
+// The input is a question plus the assembled pages, each delimited and
+// labeled with their title/path/kind. The prompt requires: answer in
+// markdown; attribute claims with inline `[[links]]` drawn only from the
+// provided set; end with exactly one fenced JSON block
+// `{"missing_information": [...]}` (empty list when done). Code strips the
+// block.
 //
 // Invariant 5 governs the note this module renders: "Citation blocks,
 // frontmatter, footers, and the index are written by code, never by the model.

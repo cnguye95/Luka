@@ -2,14 +2,15 @@
 //
 // Only the advisory half lives here. Locating and removing an orphaned
 // derivative used to as well, by deriving `<stem>.md` from a departed path;
-// ownership is recorded in the manifest now (invariant II), so the sweep reads
-// the entry instead and lives with the rest of the rename work in renames.ts.
+// ownership is recorded in the manifest now (rename invariant II), so the sweep
+// reads the entry instead and lives with the rest of the rename work in
+// renames.ts.
 //
-// "Before work: show the scope preview (counts + lists of pages to regenerate
-// and pages that may be deleted) in a confirm modal. Then: affected pages
+// Before work, the scope preview (counts + lists of pages to regenerate and
+// pages that may be deleted) is shown in a confirm modal. Then: affected pages
 // regenerate from surviving citing sources; a page with zero remaining source
 // citations is deleted; a visited set prevents reprocessing a page twice per
-// run; the cascade runs to completion. Modification uses the same machinery."
+// run; the cascade runs to completion. Modification uses the same machinery.
 //
 // The cascade cannot chain. Pages cite *sources*, never other pages — a
 // wikilink to a page is a "future-article signal", not a citation — so

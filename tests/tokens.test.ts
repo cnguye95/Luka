@@ -1,3 +1,5 @@
+// Token estimation, truncation and the budget packer every prompt is
+// assembled through, including what it reports as used and what it drops.
 import { describe, expect, it } from "vitest";
 import { truncatedForContextBudget } from "../src/core/markers";
 import { estimateTokens, packUnderBudget, truncateToTokens } from "../src/core/tokens";

@@ -29,8 +29,8 @@ export interface SkippedSource {
 /**
  * Same bytes, gone from one path and present at another. Identity only: what
  * this run owes the derivative is decided later, in one pass, by `carryRenames`
- * (invariant V) — discovery answers "is this the same source", not "where is
- * its markdown".
+ * (rename invariant V) — discovery answers "is this the same source", not
+ * "where is its markdown".
  *
  * `source` is the file at its new path, carried whole so a rename that has to
  * re-extract can join the normalize worklist without anything being inferred
@@ -129,9 +129,9 @@ export async function discover(fs: FsAdapter, manifest: IngestManifest): Promise
 
 /**
  * The missing-derivative test. The entry says which file, so no candidate is
- * guessed from the stem — that guess is what invariant II removes, and with it
- * the whole class of defects where a neighbour sharing a stem was mistaken for
- * a source's markdown.
+ * guessed from the stem — that guess is what rename invariant II removes, and
+ * with it the whole class of defects where a neighbour sharing a stem was
+ * mistaken for a source's markdown.
  *
  * What the entry cannot say is whether that file is *still* this source's. A
  * user can overwrite a derivative in place, and then a file stands at the

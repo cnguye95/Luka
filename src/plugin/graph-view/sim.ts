@@ -1,5 +1,5 @@
-// The layout: `d3-force` only, "initial positions seeded by hashing page
-// path", "simulation cools to a stop, drag reheats locally".
+// The layout: `d3-force` only. Initial positions are seeded by hashing page
+// path, the simulation cools to a stop, and a drag reheats locally.
 //
 // No DOM and no Obsidian import: this owns positions and nothing else, so the
 // view can be read for lifecycle and this can be read for physics.

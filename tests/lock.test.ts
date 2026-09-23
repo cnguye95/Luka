@@ -1,3 +1,6 @@
+// The operation lock (invariant 2): a second operation is refused with a
+// notice naming the first, and the lock is released even when the operation
+// it holds throws.
 import { describe, expect, it } from "vitest";
 import { BusyError, OperationLock } from "../src/core/lock";
 

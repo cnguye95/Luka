@@ -1,10 +1,10 @@
 // The eval harness.
 //
-// "eval/run.ts — headless over core with node adapters: CI mode seeds by exact
-// title/alias match only (no model), runs both modes' ranking, reports
-// recall@5, recall@10, MRR per query and mean; exits nonzero below a floor
-// recorded in the YAML. `--live` flag: full pipeline with a real key, prints
-// the same metrics; never in CI."
+// `eval/run.ts` runs headless over core with node adapters. CI mode seeds by
+// exact title/alias match only (no model), runs both modes' ranking, reports
+// recall@5, recall@10, MRR per query and mean, and exits nonzero below a floor
+// recorded in the YAML. The `--live` flag runs the full pipeline with a real
+// key and prints the same metrics; never in CI.
 //
 // It ranks through the product's own `rankModeA`/`rankModeB`, not a copy of
 // them. An eval that reimplements the thing it measures reports on the copy.
@@ -120,7 +120,7 @@ function validateFloors(raw: unknown): Record<string, Floor> {
 }
 
 /**
- * CI seeding: "seeds by exact title/alias match only (no model)".
+ * CI seeding: exact title/alias match only, with no model call.
  *
  * That is `forceIncludeSeeds` — the rule retrieval already applies to every
  * query — so CI measures the same seeding the product does, minus the model.

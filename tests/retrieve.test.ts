@@ -1,6 +1,5 @@
-// The retrieval pipeline and the mode predicate. Two of these are in the
-// minimum unit set: "mode predicate boundaries" and "assembly budget and
-// truncation".
+// The retrieval pipeline and the mode predicate: among these are mode
+// predicate boundaries, and assembly budget and truncation.
 import { describe, expect, it } from "vitest";
 import {
   forceIncludeSeeds,

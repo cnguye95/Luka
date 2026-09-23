@@ -1,3 +1,6 @@
+// Two bounds in normalization: the cost of rendering a very wide dataset, and
+// repo identity — path and content framed so two different repos cannot hash
+// alike, with over-cap files covered by the hash but not held in memory.
 import { describe, expect, it } from "vitest";
 import { datasetToMarkdown } from "../src/core/normalize/dataset";
 import { repoContentHash, repoToMarkdown, selectRepoFiles } from "../src/core/normalize/repo";

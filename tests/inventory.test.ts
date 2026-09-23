@@ -1,3 +1,7 @@
+// Call A: the inventory prompt, and what `takeInventory` makes of the reply. A
+// fenced reply parses without spending the one repair retry, and every field
+// that goes on to name a file or sit in frontmatter is flattened first
+// (invariant 5).
 import { describe, expect, it } from "vitest";
 import { bodyOf, takeInventory } from "../src/core/compile/inventory";
 import { MAX_TOKENS_BY_TASK } from "../src/core/provider/types";

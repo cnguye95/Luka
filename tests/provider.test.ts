@@ -1,3 +1,6 @@
+// The provider wrapper: per-task model routing and token caps, the retry
+// ladder, the one JSON repair, and the call counter invariant 12 is measured
+// with. Both transports are also driven end to end over scripted HTTP.
 import { describe, expect, it } from "vitest";
 import { createProvider } from "../src/core/provider/wrapper";
 import {

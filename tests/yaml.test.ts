@@ -1,3 +1,7 @@
+// Frontmatter: reading it, writing it byte-stably, and adding only the missing
+// keys to a user's file under invariant 7. The fence rules are load-bearing —
+// a `derived-from` read out of a block that never closed is how a user's own
+// file gets taken for Luka's.
 import { describe, expect, it } from "vitest";
 import { load } from "js-yaml";
 import {

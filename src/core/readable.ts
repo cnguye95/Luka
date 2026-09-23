@@ -1,14 +1,14 @@
 // Where a source's readable markdown is — one rule, in one place.
 //
-// "The source itself if `.md`/`.txt`, else its derivative." Three functions
-// used to answer that, from three different inputs, and they disagreed on the
-// same case: a converting source with no derivative recorded. Two returned the
-// source path, which for a PDF means handing raw bytes to a model under the
-// label of its extracted text, or making the PDF a graph node when it is not
-// one. The third refused it, with a comment explaining why the other answer
-// was wrong. That is the shape CLAUDE.md's readable/live seam names: local
-// fixes drift the siblings, so the rule has to live somewhere the siblings all
-// read from.
+// A source's readable markdown is the source itself if `.md`/`.txt`, else its
+// derivative. Three functions used to answer that, from three different
+// inputs, and they disagreed on the same case: a converting source with no
+// derivative recorded. Two returned the source path, which for a PDF means
+// handing raw bytes to a model under the label of its extracted text, or
+// making the PDF a graph node when it is not one. The third refused it, with a
+// comment explaining why the other answer was wrong. That is the shape
+// CLAUDE.md's readable/live seam names: local fixes drift the siblings, so the
+// rule has to live somewhere the siblings all read from.
 //
 // Three inputs remain, because the callers genuinely differ — one holds a
 // manifest entry, one holds a normalize outcome, one has to touch the disk —

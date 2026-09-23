@@ -610,8 +610,8 @@ async function runInspect(
 
   if (mode !== "B") {
     const ranked = await rankModeA(deps.fs, candidates, seeds, chosen.keywords);
-    // Mode A overlays "seeds and lexical top-K without a PPR heat ramp": there
-    // is no walk, so there is nothing for a scrubber to step through.
+    // A Mode A overlay is seeds and lexical top-K with no PPR heat ramp:
+    // there is no walk, so there is nothing for a scrubber to step through.
     return { mode, seeds, keywords: chosen.keywords, ranked };
   }
 
@@ -923,8 +923,9 @@ async function runCompile(
   let citations = await readCitations(deps.fs, pages);
 
   // ── Scope preview ─────────────────────────────────────────
-  // "with scope preview when the diff includes deletions or modifications".
-  // This sits inside the lock the façade already holds, so the lock spans
+  // The scope preview is shown when the diff includes deletions or
+  // modifications. It sits inside the lock the façade already holds, so the
+  // lock spans
   // preview → confirm → work exactly as required, and a second invocation
   // during the modal gets invariant 2's busy notice.
   if ((discovery.deleted.length > 0 || discovery.modified.length > 0) && options.confirm) {
@@ -980,10 +981,16 @@ async function runCompile(
   // costs no model call and preserves a hand-repaired extraction, which is
   // the sanctioned repair path.
   //
-  // Every outcome is decided here, in one pass, before any extraction (V).
-  // Nothing is written to the manifest yet: a carry that cannot complete simply
-  // puts its source on the worklist below, and if that fails too the untouched
-  // entry re-presents the whole rename next compile (I).
+  // Roman numerals below cite the rename subsystem's own invariant list,
+  // at the head of `compile/renames.ts`. They are a separate list from the
+  // twelve numbered invariants in design_decisions.md, which are cited as
+  // `invariant 7` and the like.
+  //
+  // Every outcome is decided here, in one pass, before any extraction (rename
+  // invariant V). Nothing is written to the manifest yet: a carry that cannot
+  // complete simply puts its source on the worklist below, and if that fails
+  // too the untouched entry re-presents the whole rename next compile (rename
+  // invariant I).
   const carried = await carryRenames(deps.fs, manifest, discovery.renamed);
   if (carried.wrote) wrote = true;
   const fallbacks = carried.outcomes.filter(
@@ -1003,8 +1010,8 @@ async function runCompile(
     fallbacks.map((outcome) => [outcome.rename.source.path, [outcome.rename.from]]),
   );
   // Where each source's markdown already is, so a re-extraction can continue a
-  // float rather than fail against a stem somebody else holds (VII). A fallback
-  // rename's pointer is filed under the path it came from.
+  // float rather than fail against a stem somebody else holds (rename invariant
+  // VII). A fallback rename's pointer is filed under the path it came from.
   const recordedDerivatives = new Map<string, string>();
   for (const source of [...discovery.added, ...discovery.modified]) {
     const recorded = manifest[source.path]?.derivative;
@@ -1152,12 +1159,12 @@ async function runCompile(
   // have to be re-inventoried to retry it.
   const blockedBy = new Map<string, string[]>();
 
-  // Everything this run knows the readable markdown of (VI). Two sources, not
-  // one: normalization writes it, and a *carry* relocates it without
-  // normalizing — a carried rename produces no normalize outcome by design, and
-  // its new path is an addition, so the manifest as found cannot name it
-  // either. Leaving the carry out is how a renamed source became unreadable to
-  // Call B while its citation block already named the new path.
+  // Everything this run knows the readable markdown of (rename invariant VI).
+  // Two sources, not one: normalization writes it, and a *carry* relocates it
+  // without normalizing — a carried rename produces no normalize outcome by
+  // design, and its new path is an addition, so the manifest as found cannot
+  // name it either. Leaving the carry out is how a renamed source became
+  // unreadable to Call B while its citation block already named the new path.
   //
   // The two loops write disjoint keys — a rename is carried or falls back, and
   // only a fallback reaches the worklist — so the order settles nothing today.
@@ -1178,7 +1185,7 @@ async function runCompile(
     const cached = bodies.get(path);
     if (cached !== undefined) return cached;
     const target = readable.get(path) ?? (await readableFromManifest(deps.fs, manifest, path));
-    // Call B gets "the full normalized bodies of *all* citing sources".
+    // Call B gets the full normalized bodies of *all* citing sources.
     // A citer whose markdown cannot be found is not an empty source: passing
     // "" would have the model write a page grounded in a subset while code
     // wrote a citation block claiming the lot, and `wiki/` is rewritten
@@ -1211,7 +1218,8 @@ async function runCompile(
   //
   // Derived from the manifest this run *found* plus discovery's own sets, not
   // from the one it is about to write: there is no half-built manifest to read
-  // any more (I), and the answer must not depend on how far the run has got.
+  // any more (rename invariant I), and the answer must not depend on how far
+  // the run has got.
   //
   // `Object.hasOwn`, not `manifested[path] !== undefined`: a hand-written
   // citation entry of `constructor` or `toString` would otherwise resolve to an
@@ -1408,7 +1416,7 @@ async function runCompile(
     }
   }
 
-  // ── Manifest — the single commit point (I) ─────────────────────────────
+  // ── Manifest — the single commit point (rename invariant I) ────────────
   // Built here, once, from outcomes that are already complete. Nothing above
   // has touched it, so every failure recovery in this whole compile is the same
   // one thing: the entry that was never rewritten still describes the vault as
@@ -1457,7 +1465,8 @@ async function runCompile(
       delete next[rename.from];
       next[to] = entryFor(rename.source.hash, outcome.derivative);
       // Forward completion: markdown the carry left behind at the old location,
-      // now that the source's own copy is settled elsewhere (III).
+      // now that the source's own copy is settled elsewhere (rename invariant
+      // III).
       const leftover = await removeSupersededDerivative(
         deps.fs,
         rename,
@@ -1512,8 +1521,9 @@ async function runCompile(
 
     // A float that came home leaves the file it vacated behind. Forward
     // completion of a re-extraction that succeeded, behind the same guard as
-    // every other removal (III) — and a no-op for every source that wrote where
-    // its entry already pointed, which is all of them but a returning float.
+    // every other removal (rename invariant III) — and a no-op for every source
+    // that wrote where its entry already pointed, which is all of them but a
+    // returning float.
     const previous = manifest[entry.source.path]?.derivative;
     if (previous === undefined) continue;
     const vacated = await removeSupersededDerivative(

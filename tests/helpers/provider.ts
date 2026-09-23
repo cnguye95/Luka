@@ -1,3 +1,6 @@
+// The model stub, injected at the transport layer so a test runs through the
+// real wrapper — its retry budget, JSON repair and call counter included.
+// Also the two transport errors and the Call A reply shape tests hand back.
 import { createProvider } from "../../src/core/provider/wrapper";
 import {
   ProviderError,

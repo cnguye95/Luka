@@ -1,3 +1,6 @@
+// `renderIndex`, pinned byte for byte, and the link post-pass and citation
+// block composed into a finished page. Both are invariant 5: the model
+// supplies summaries and prose, and neither can inject structure code owns.
 import { describe, expect, it } from "vitest";
 import { withCitationBlock } from "../src/core/compile/citations";
 import { INDEX_PATH, renderIndex } from "../src/core/compile/indexdoc";

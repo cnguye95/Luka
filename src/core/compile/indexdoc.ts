@@ -1,8 +1,8 @@
 // The index document `wiki/_index.md`, regenerated each
 // compile from the in-memory page table.
 //
-// The seed call reuses this exact renderer: "Page table (wiki pages only)
-// renders to the same text as `_index.md`" — the seed call and the file the
+// The seed call reuses this exact renderer: the page table (wiki pages only)
+// renders to the same text as `_index.md`, and the seed call and the file the
 // user reads must never drift apart, so there is one renderer, not two.
 import { comparePaths } from "../paths";
 import type { PageKind, PageMeta } from "../types";

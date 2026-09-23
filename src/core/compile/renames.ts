@@ -4,6 +4,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN INVARIANTS
 //
+// This subsystem's own list, numbered in roman and cited elsewhere as
+// `rename invariant V`. It is separate from the twelve numbered invariants
+// in design_decisions.md, which are cited in arabic as `invariant 7`.
+//
 // The first version of this subsystem was functionally correct and took five
 // review rounds, because each round's fix added another compensation and the
 // compensations interacted.
@@ -234,8 +238,8 @@ async function carryOne(
 
   try {
     // With no pointer there is nothing to carry. Computing `<stem>.md` and
-    // adopting whatever answers to it is the inference invariant II removes —
-    // the fallback re-extracts instead, which needs no guess.
+    // adopting whatever answers to it is the inference rename invariant II
+    // removes — the fallback re-extracts instead, which needs no guess.
     if (recorded !== undefined) {
       if (await isOurs(fs, recorded, rename, recorded)) {
         // Already where the new path wants it: an extension-only rename never

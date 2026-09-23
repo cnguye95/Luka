@@ -1,3 +1,5 @@
+// `src/core/hash`: SHA-256 against known vectors, and the UTF-8 helpers the
+// manifest's hashes are computed over.
 import { describe, expect, it } from "vitest";
 import { concatBytes, decodeUtf8, sha256Hex, utf8 } from "../src/core/hash";
 

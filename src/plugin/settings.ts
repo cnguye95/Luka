@@ -1,3 +1,13 @@
+// The settings tab.
+//
+// It writes straight through to the live settings object the core already
+// holds, so a change takes effect on the next run with no reload — the tab is
+// the only place an API key is ever entered, and there is no environment
+// fallback (invariant 9).
+//
+// What is displayed is read back through `normalizeSettings`, so a
+// hand-edited `data.json` shows the values that will actually be used rather
+// than what it literally contains.
 import { App, PluginSettingTab, Setting } from "obsidian";
 import {
   DEFAULT_OPENAI_BASE_URL,

@@ -1,3 +1,7 @@
+// Settings: the normative defaults, the normalization that keeps a
+// hand-edited data.json from reaching the transport, invariant 9's
+// read-at-call-time rule alongside the per-run snapshot it has to coexist
+// with, and the model ids that follow a provider change.
 import { describe, expect, it } from "vitest";
 import { createProvider } from "../src/core/provider/wrapper";
 import { utf8 } from "../src/core/hash";

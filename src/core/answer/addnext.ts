@@ -1,12 +1,11 @@
 // The answer note's `## Add next` section — what would have made this answer
 // better, drawn beside the answer that lacked it.
 //
-// Not in the original specification; added by decision (design_decisions.md,
-// "Add next lives in the answer, not in a pane"). The first attempt
-// was a vault-wide pane, and the thing wrong with it was that a vault-wide
-// list recommends against material nobody has asked about. A question is a
-// statement of what the user wants the wiki to know, so the gap worth naming
-// is the one that question ran into.
+// Added by decision (design_decisions.md, "Add next lives in the answer, not
+// in a pane"). The first attempt was a vault-wide pane, and the thing wrong
+// with it was that a vault-wide list recommends against material nobody has
+// asked about. A question is a statement of what the user wants the wiki to
+// know, so the gap worth naming is the one that question ran into.
 //
 // Two signals, both already in hand when the note is written, so the section
 // costs no model call (an LLM-driven check is a non-goal, and this is the

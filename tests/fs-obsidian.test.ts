@@ -1,3 +1,6 @@
+// `ObsidianFs`, the plugin's filesystem adapter: deleting goes through
+// Obsidian's trash rather than a permanent unlink, `mkdir` survives the
+// image-fetch race, and listing is ordered by code unit, as core expects.
 import { describe, expect, it } from "vitest";
 import { ObsidianFs } from "../src/plugin/fs-obsidian";
 

@@ -1,3 +1,6 @@
+// `mapWithConcurrency`: results in input order, never more than `limit` in
+// flight, and every item told its own input position — compile numbers its
+// progress notices from that index, not from finishing order.
 import { describe, expect, it, vi } from "vitest";
 import { mapWithConcurrency } from "../src/core/concurrency";
 

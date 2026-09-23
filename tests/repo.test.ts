@@ -1,3 +1,5 @@
+// A directory ingested as one repo source: what marks it as a repo, which
+// files are selected and in what order, its content hash, and its rendering.
 import { describe, expect, it } from "vitest";
 import {
   isRepoDirectory,

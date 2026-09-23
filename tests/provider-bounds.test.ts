@@ -1,3 +1,7 @@
+// Bounds around the provider: a vendor message clipped for display that must
+// still decide the temperature re-run, a retry budget that cannot fall below
+// one attempt or climb past its ceiling, a Retry-After floor, and a reply cut
+// short by max_tokens. Also the inline-image rewriter's link/prose boundary.
 import { describe, expect, it } from "vitest";
 import { createProvider } from "../src/core/provider/wrapper";
 import { ProviderError, type RawRequest } from "../src/core/provider/types";

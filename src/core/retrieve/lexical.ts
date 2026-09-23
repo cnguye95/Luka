@@ -1,14 +1,14 @@
 // Mode A's ranking, and the follow-up round's expansion.
 //
-// Mode A ranking: "wiki pages only; lexical score = title exact 10, alias
+// Mode A ranking: wiki pages only; lexical score = title exact 10, alias
 // exact 8, title/alias substring 4, keyword in summary 2, keyword in body 1
-// (per keyword, body scan affordable because Mode A implies a small vault)."
+// (per keyword, body scan affordable because Mode A implies a small vault).
 //
 // The signature takes keywords and nothing else on purpose. The follow-up
-// round scores the model's `missing_information` strings with this same
-// function — "lexical-score the missing-information strings (as keywords) over
-// wiki pages" — and there is no question to score against there, so a scorer
-// that needed one would have to be two scorers.
+// round lexical-scores the missing-information strings the model returns in
+// `missing_information` (as keywords) over wiki pages with this same
+// function, and there is no question to score against there, so a scorer that
+// needed one would have to be two scorers.
 import { handleOf } from "../compile/pagetable";
 
 /**

@@ -1,9 +1,9 @@
 // Builds `eval/fixture-vault/`.
 //
-// "a committed, pre-built small vault (~20 sources, ~40 wiki pages, realistic
-// links; author it by hand or by one-time generation, then commit; no model
-// calls at eval time), including its own `ingest-manifest.json` so graph
-// construction knows the source set."
+// The vault is committed and pre-built: ~20 sources, ~40 wiki pages, realistic
+// links, authored by hand or by one-time generation and then committed, with no
+// model calls at eval time. It carries its own `ingest-manifest.json` so graph
+// construction knows the source set.
 //
 // The sources under `raw/` are hand-written. Everything else here is produced
 // by running the *real* compile pipeline over them with a scripted provider and

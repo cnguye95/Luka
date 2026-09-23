@@ -1,3 +1,7 @@
+// The title/alias namespace: one page per alias, one canonical handle form,
+// and a filename bound counted in bytes that never doubles as a matching rule.
+// Also two page-writing rules — a failed index write does not discard the run,
+// and a page names every citer the model did not fully receive.
 import { describe, expect, it } from "vitest";
 import { createCore } from "../src/core/index";
 import { DEFAULT_SETTINGS } from "../src/core/types";

@@ -1,6 +1,5 @@
-// The ingest acceptance criterion, automated: demo/raw/ produces the right
-// derivatives, frontmatter and markers, and an immediate second compile is a
-// no-op that does zero work.
+// Ingest, automated: demo/raw/ produces the right derivatives, frontmatter
+// and markers, and an immediate second compile is a no-op that does zero work.
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -61,8 +60,8 @@ describe("demo corpus", { timeout: SLOW }, () => {
   /**
    * The extraction phases are stubbed, but not to silence: every source names
    * one shared concept and one entity of its own, so the demo corpus really
-   * does produce all three page kinds and the compile acceptance criteria can
-   * be asserted on the demo corpus rather than on a stand-in vault.
+   * does produce all three page kinds, and compile behaviour can be asserted
+   * on the demo corpus rather than on a stand-in vault.
    */
   function replyFor(request: CompletionRequest): unknown {
     if (request.task === "vision") return "A generated fixture image, 160 by 120 pixels.";
@@ -233,8 +232,8 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // Acceptance criterion: "demo corpus compiles into a three-kind wiki where
-  // every page has a valid citation block and appears in `_index.md`".
+  // The demo corpus compiles into a three-kind wiki where every page has a
+  // valid citation block and appears in `_index.md`.
   it("compiles into a three-kind wiki, every page cited and indexed", async () => {
     await compile();
     const pages = await loadPageTable(fs);
@@ -255,8 +254,8 @@ describe("demo corpus", { timeout: SLOW }, () => {
     }
   });
 
-  // Acceptance criterion: "re-compile makes zero model calls (assert via a call
-  // counter)" — on the demo corpus, against the provider's own counter.
+  // A re-compile makes zero model calls, asserted via a call counter — on the
+  // demo corpus, against the provider's own counter.
   it("makes zero model calls on a re-compile of the demo corpus", async () => {
     await compile();
 
@@ -269,8 +268,8 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // Acceptance criterion: "deleting a demo source shows the preview then
-  // regenerates/deletes correctly".
+  // Deleting a demo source shows the preview, then regenerates and deletes
+  // correctly.
   it("shows the scope preview for a deleted source, then deletes its page", async () => {
     await compile();
     expect(await fs.exists("wiki/sources/page.md")).toBe(true);
@@ -298,7 +297,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     // Its source page and the entity only it named; the shared concept lives.
     expect(result).toMatchObject({ deleted: 1, pagesDeleted: 2, cancelled: false, failed: [] });
     expect(await fs.exists("wiki/sources/page.md")).toBe(false);
-    // "regenerates … correctly": the surviving concept really was rewritten
+    // Regenerated correctly: the surviving concept really was rewritten
     // from its remaining citers, and no longer names the deleted source.
     const survivor = parseCitationBlock(await read("wiki/concepts/Graph Retrieval.md")).entries;
     expect(survivor).not.toContain("raw/page.html");
@@ -320,7 +319,7 @@ describe("demo corpus", { timeout: SLOW }, () => {
     expect(fs.writes).toBe(0);
   });
 
-  // Acceptance criterion: "modified source reprocesses".
+  // A modified source reprocesses.
   it("reprocesses a modified demo source and only the pages citing it", async () => {
     await compile();
     const note = await read("raw/note.md");

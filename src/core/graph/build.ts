@@ -1,12 +1,12 @@
 // The retrieval graph.
 //
-// "Nodes: every file under `wiki/` (minus `_`-prefixed) plus every manifest
+// Nodes: every file under `wiki/` (minus `_`-prefixed) plus every manifest
 // source's readable markdown (the source itself if `.md`/`.txt`, else its
 // derivative). A raw node's display title is its basename. Edges: every
 // `[[wikilink]]` occurring anywhere in a node's file — body, citation block,
 // frontmatter `source:` — resolved to a node; links that resolve to no node
 // contribute nothing. Undirected, uniform weight, deduplicated per pair;
-// `_` files contribute nothing."
+// `_` files contribute nothing.
 //
 // Built in memory, never cached to disk — by design, and a cache
 // would be a fourth thing that can disagree with the vault.

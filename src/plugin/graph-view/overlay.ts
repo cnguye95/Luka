@@ -1,5 +1,5 @@
-// The overlay: "heat ramp = PPR score, ring = seeds, stroke = top-K,
-// non-neighborhood dimmed."
+// The overlay: heat ramp is the PPR score, the ring is seeds, the stroke is
+// top-K, and the non-neighborhood is dimmed.
 //
 // One shape, three producers. Click-PPR, query inspection and trace replay
 // light the graph for different reasons and from different data, but there is
@@ -124,9 +124,9 @@ export function fromClickPPR(
 /**
  * Query inspection.
  *
- * Mode B ramps from the ranking's own scores. Mode A does not: that
- * overlay is "seeds and lexical top-K without a PPR heat ramp", and the banner
- * is what explains why.
+ * Mode B ramps from the ranking's own scores. Mode A does not: that overlay
+ * is seeds and lexical top-K with no PPR heat ramp, and the banner is what
+ * explains why.
  */
 export function fromInspect(
   result: { mode: RetrievalMode; seeds: readonly string[]; ranked: readonly { path: string; score: number }[] },

@@ -1,4 +1,4 @@
-// The lexical scorer, which the minimum unit set names.
+// The lexical scorer.
 import { describe, expect, it } from "vitest";
 import { lexicalScore, type LexicalPage } from "../src/core/retrieve/lexical";
 

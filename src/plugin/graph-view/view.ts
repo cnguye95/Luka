@@ -265,7 +265,7 @@ export class LukaGraphView extends ItemView {
     });
 
     // A theme switch changes no data, so it schedules a repaint and nothing
-    // else — that is what the dark/light acceptance criterion needs.
+    // else — the pane recolours without rebuilding the graph.
     this.registerEvent(this.app.workspace.on("css-change", () => this.schedule()));
 
     await this.reload();

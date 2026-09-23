@@ -1,3 +1,6 @@
+// The Anthropic transport: the Messages API request it builds, and what it
+// makes of a reply — text blocks, the vendor's error text, and which statuses
+// are retryable. Also `bytesToBase64`, which encodes the images it sends.
 import { describe, expect, it } from "vitest";
 import { decodeUtf8, utf8 } from "../src/core/hash";
 import { bytesToBase64, createAnthropicProvider } from "../src/core/provider/anthropic";

@@ -1,6 +1,6 @@
-// The retrieval trace. The minimum test set names "trace write/parse
-// round-trip"; the pane replays a trace it did not write, so recovering
-// exactly what was rendered is the property that matters.
+// The retrieval trace, including the write/parse round-trip; the pane
+// replays a trace it did not write, so recovering exactly what was rendered
+// is the property that matters.
 import { describe, expect, it } from "vitest";
 import {
   parseTrace,

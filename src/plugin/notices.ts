@@ -1,3 +1,10 @@
+// Every notice Luka shows, and the wording of each.
+//
+// A compile or an ask reports once, here, from the result object the core
+// returned — so what the user is told is derived from what actually happened
+// rather than assembled at the call site. Counts that are zero are left out,
+// and a problem names the file it happened to, because a bare total gives a
+// user nothing to act on.
 import { Notice } from "obsidian";
 import type { AnswerResult, CompileResult } from "../core/index";
 
@@ -32,7 +39,7 @@ export function reportCompile(result: CompileResult): void {
 
   if (result.cancelled) return;
 
-  // "A failed source is skipped with a notice." Not always an ingest —
+  // A failed source is skipped with a notice. Not always an ingest —
   // a source can also fail because a page it cites could not be regenerated or
   // a page it left behind could not be deleted — so the wording names the
   // outcome the two share.

@@ -3,7 +3,9 @@
 Design record: [design_decisions.md](design_decisions.md). Its *Principles*
 section is the twelve invariants the code is built to (code comments cite them
 as `invariant N`), and *Deliberately not built* is the binding list of
-non-goals. The Obsidian surface is checked by hand against
+non-goals. The rename subsystem keeps a second, separate list, numbered in
+roman and cited as `rename invariant N`, defined at the head of
+`src/core/compile/renames.ts`. The Obsidian surface is checked by hand against
 [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md); "checklist item 5.5" in a comment
 means that file's section 5, item 5.
 

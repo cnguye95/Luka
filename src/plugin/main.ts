@@ -1,3 +1,20 @@
+// The plugin entry point: the Obsidian `Plugin` Luka is loaded as.
+//
+// It owns the things only the host can give — the vault and HTTP adapters,
+// the settings store, the command palette, the ribbon icon, the settings tab
+// and the graph view — and builds one `Core` over them at load. Everything
+// that decides anything lives behind that `Core`; this file only hands it the
+// host and reports what comes back.
+//
+// Every command body is the same shape: put a progress notice up, call one
+// `Core` entry point, report the result, and turn a `BusyError` into the
+// "Luka is busy" notice rather than a failure (invariant 2). Nothing here
+// runs on its own — no watcher, no timer (invariant 1). The one unawaited
+// call is the graph build at load, which `getGraph()` joins.
+//
+// `settings` is the live object, passed to `createCore` by reference and
+// mutated in place by the settings tab, so a key typed during a session
+// reaches the next run without a reload (invariant 9).
 import { Notice, Plugin, TFile } from "obsidian";
 import { BusyError, HEALTH_PATH, createCore, type Core, type ProgressEvent } from "../core/index";
 import { askQuestion } from "./ask-modal";

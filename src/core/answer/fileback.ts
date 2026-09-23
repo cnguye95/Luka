@@ -1,9 +1,10 @@
 // Filing an answer back as a source.
 //
-// "Move the note to `raw/answers/<same name>` (on collision, append `-2`,
-// `-3`, …), stripping the trace block (keep sources block). Notice: 'Filed.
-// Run Compile to integrate.' No auto-compile. The next compile treats it as a
-// new source through the normal path — no redundancy gate."
+// The note moves to `raw/answers/<same name>` (on collision, append `-2`,
+// `-3`, …), stripping the trace block and keeping the sources block. The
+// notice is 'Filed. Run Compile to integrate.' There is no auto-compile. The
+// next compile treats it as a new source through the normal path — no
+// redundancy gate.
 //
 // Nothing here teaches compile about answers, and nothing needs to:
 // discovery already walks `raw/` recursively and names `raw/answers/` outright,

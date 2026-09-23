@@ -1,7 +1,6 @@
-// Synthesis and the answer note. The minimum test set names "synthesis
-// JSON-block strip"; the rest here is invariant 5 — code writes the
-// frontmatter, the callout, the sources block and the trace, and the model
-// writes prose only.
+// Synthesis and the answer note, including the synthesis JSON-block strip;
+// the rest here is invariant 5 — code writes the frontmatter, the callout,
+// the sources block and the trace, and the model writes prose only.
 import { describe, expect, it } from "vitest";
 import {
   answerNotePath,

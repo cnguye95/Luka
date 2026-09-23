@@ -60,11 +60,11 @@ pinned by a test or a CI step named in the decisions below.
 
 Four principles that grew out of building to those invariants:
 
-- **Silence is resolved by the smallest option.** Where the specification said
-  nothing, the choice was the smallest one consistent with the invariants —
-  never added scope. A tunable, a sweep, a second pane, or a new file format
-  had to earn its place against this rule, and several did not (see
-  *Deliberately not built*).
+- **Silence is resolved by the smallest option.** Where nothing required a
+  particular answer, the choice was the smallest one consistent with the
+  invariants — never added scope. A tunable, a sweep, a second pane, or a new
+  file format had to earn its place against this rule, and several did not
+  (see *Deliberately not built*).
 - **No destructive operation is ever a failure-recovery step.** Deletes and
   overwrites happen only to complete an outcome that succeeded, and always
   behind an ownership guard. Recovery from failure is "the untouched record
@@ -530,10 +530,10 @@ line, indented under the field name. The parser still reads the original
 comma-separated form, counting what it cannot recover in `Trace.unparsed`,
 because notes written before the change exist.
 
-**Alternatives.** The inline form the specification showed, `[[A]], [[B]]`,
-where both the delimiter and the brackets are legal label content —
-`Newton, Isaac` is a title, `]]` can appear in a raw path — so `[[a]], [[b]]`
-has two readings and no parser over that grammar is correct for every input.
+**Alternatives.** The original inline form, `[[A]], [[B]]`, made both the
+delimiter and the brackets legal label content — `Newton, Isaac` is a title,
+`]]` can appear in a raw path — so `[[a]], [[b]]` has two readings and no
+parser over that grammar is correct for every input.
 Three successive parser fixes each closed one side by opening the other.
 Escaping inside labels would have put a second grammar in front of every
 consumer that reads a link.

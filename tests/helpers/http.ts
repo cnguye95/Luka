@@ -1,3 +1,6 @@
+// HttpAdapter stubs: one routed by URL, recording each URL asked for, and one
+// that replays a scripted sequence of responses in order for retry paths,
+// recording every request it was handed.
 import type { HttpAdapter, HttpRequest, HttpResponse } from "../../src/core/adapters";
 import { utf8 } from "../../src/core/hash";
 

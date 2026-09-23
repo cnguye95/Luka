@@ -1,3 +1,5 @@
+// The normalizers that turn a non-markdown source into markdown: HTML, the
+// delimited-text parser, the dataset descriptor card, and the PDF text layer.
 import { describe, expect, it } from "vitest";
 import { datasetToMarkdown, parseDelimited } from "../src/core/normalize/dataset";
 import { htmlToMarkdown } from "../src/core/normalize/html";

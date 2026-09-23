@@ -169,10 +169,11 @@ retyping the key.
 
 Settings are the only source — the plugin has no `ANTHROPIC_API_KEY` fallback,
 and reads the key live on each run, so a freshly typed one takes effect without
-a reload. (The env var is for the optional live tests above and
-`npm run eval:live`, which run outside Obsidian.)
+a reload. (The env var is for the two opt-in live suites,
+`tests/compile-live.test.ts` and `tests/provider-live.test.ts`, and for
+`npm run eval:live`, all of which run outside Obsidian.)
 
-### Running it against a local model
+### Local Models
 
 Any server speaking the Chat Completions API works. [Ollama](https://ollama.com)
 is the shortest path and needs no key at all.
@@ -328,12 +329,13 @@ PPR_SEEDS=2000 npm test            # PageRank against an independent dense solve
 CHURN_FIRST=<seed> npm test        # pin one churn seed for diagnosis
 ```
 
-Every seed is deterministic, so a failing seed reproduces exactly. The live
-tests under *Status* need `ANTHROPIC_API_KEY` and never run in CI. CI runs the
-boundary check, lint, the build, the unit suite and the eval.
+Every seed is deterministic, so a failing seed reproduces exactly. The two live
+suites, `tests/compile-live.test.ts` and `tests/provider-live.test.ts`, run
+only when Anthropic or OpenAI API key is set and never run in CI. CI runs the boundary
+check, lint, the build, the unit suite and the eval.
 
 The Obsidian surface — the pane, the modals, the settings tab, the trash — is
 checked by hand against [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md): 126 items,
-all walked, the last on 2026-09-12. A failure there is a regression, not an
-unknown. The reasoning behind what the tests pin, and why the tests are shaped
-the way they are, is in [design_decisions.md](design_decisions.md).
+last assessed on 2026-09-13. A failure there is a regression, not an unknown.
+The reasoning behind what the tests pin, and why the tests are shaped the way
+they are, is in [design_decisions.md](design_decisions.md).

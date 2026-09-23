@@ -1,10 +1,10 @@
 // Personalized PageRank over the link graph.
 //
-// "Exact power iteration. Personalization: uniform over seed nodes. Update:
+// Exact power iteration. Personalization: uniform over seed nodes. Update:
 // `v' = α·A·v + (1−α)·p` with α = 0.85, A the degree-normalized undirected
 // adjacency. Degree-0 nodes propagate nothing (zero column) and hold teleport
 // mass only. Converged when L1(v'−v) < 1e-8, max 100 iterations. Determinism:
-// node order lexicographic by path; ties in ranking break lexicographically."
+// node order lexicographic by path; ties in ranking break lexicographically.
 //
 // Pure and synchronous: it is arithmetic over a snapshot, and keeping it free
 // of IO is what lets the instrument compare it against an independent solution
@@ -60,7 +60,7 @@ export interface PPRResult {
    * measurements recorded here, not assertions — treat them as a starting
    * point for a re-measurement, not as a guarantee something still holds.
    *
-   * All of it is spec-compliant ("max 100") and the residual is small, but a
+   * All of it is within the 100-iteration cap and the residual is small, but a
    * caller that could not tell a settled answer from a truncated one has no
    * way to notice a change that made convergence worse. That is what this flag
    * is for.

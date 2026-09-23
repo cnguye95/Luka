@@ -1,13 +1,13 @@
 // The retrieval pipeline, and the mode predicate.
 //
-// "1. Page table (wiki pages only) renders to the same text as `_index.md`.
-//  2. Seed call (strict JSON) … Returned paths are validated against the page
+//  1. Page table (wiki pages only) renders to the same text as `_index.md`.
+//  2. Seed call (strict JSON). Returned paths are validated against the page
 //     table; invalid ones are dropped. Any wiki page whose full title or alias
 //     appears case-insensitively as a substring of the question is
 //     force-included as a seed.
 //  3. Rank. Mode B: PPR over the full graph seeded on (2). Mode A: wiki pages
-//     only; lexical score …
-//  5. Zero seeds and zero lexical candidates → skip retrieval …"
+//     only, by lexical score.
+//  4. Zero seeds and zero lexical candidates skip retrieval.
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { comparePaths } from "../paths";
@@ -76,8 +76,8 @@ export async function selectSeeds(
 }
 
 /**
- * The force-include rule: "Any wiki page whose full title or alias appears
- * case-insensitively as a substring of the question."
+ * The force-include rule: any wiki page whose full title or alias appears
+ * case-insensitively as a substring of the question.
  *
  * Additive and uncapped. The caps bound what the *model* may return; a
  * page the question names outright is not a guess that needs rationing.
@@ -97,8 +97,8 @@ export function forceIncludeSeeds(question: string, pages: readonly PageMeta[]):
 }
 
 /**
- * "Mode B (graph) iff node count ≥ 20 AND (total distinct written link
- * pairs / node count) ≥ 1.5; else Mode A."
+ * Mode B (graph) iff node count ≥ 20 AND (total distinct written link pairs
+ * / node count) ≥ 1.5; else Mode A.
  *
  * `edges` is already deduplicated per pair by the builder, so its length is the
  * "distinct written link pairs" the predicate asks for.

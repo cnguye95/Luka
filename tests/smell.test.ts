@@ -1,3 +1,5 @@
+// The PDF extraction smell heuristics, each threshold pinned at its boundary
+// and the reason list pinned in order, since those strings become marker text.
 import { describe, expect, it } from "vitest";
 import { smellPdfExtraction } from "../src/core/normalize/smell";
 

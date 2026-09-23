@@ -1,3 +1,6 @@
+// Inline image localization: the header-byte dimension sniff, the keep-or-mark
+// decision for a remote image, and the marker idiom, which has to replace
+// itself on a second pass rather than stack.
 import { describe, expect, it, vi } from "vitest";
 import type { HttpAdapter } from "../src/core/adapters";
 import { localizeInlineImages, sniffImageSize } from "../src/core/normalize/image";

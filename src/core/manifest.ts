@@ -120,7 +120,10 @@ export async function saveManifest(
   await fs.write(path, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
-/** Structural, never by reference: entries are rebuilt each run (invariant I). */
+/**
+ * Structural, never by reference: entries are rebuilt each run
+ * (rename invariant I).
+ */
 export function isSameManifest(a: IngestManifest, b: IngestManifest): boolean {
   const keys = Object.keys(a);
   if (keys.length !== Object.keys(b).length) return false;

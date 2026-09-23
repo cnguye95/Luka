@@ -5,5 +5,6 @@
   "minAppVersion": "1.5.0",
   "description": "Compile dropped source documents into a linked wiki, then ask it questions with graph-based retrieval.",
   "author": "cnguye95",
+  "authorUrl": "https://github.com/cnguye95",
   "isDesktopOnly": true
 }

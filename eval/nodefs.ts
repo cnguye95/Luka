@@ -5,9 +5,9 @@ import type { DirEntry, FileStat, FsAdapter } from "../src/core/adapters";
 import { normalizePath } from "../src/core/paths";
 
 /**
- * FsAdapter over node:fs, rooted at a vault directory. It lives here — "eval and
- * tests implement them over node:fs and fetch" — and it also proves src/core
- * runs with no Obsidian at all.
+ * FsAdapter over node:fs, rooted at a vault directory. The eval harness and
+ * the tests implement the adapters over node:fs and fetch, which is why this
+ * lives here — and it also proves src/core runs with no Obsidian at all.
  */
 export class NodeFs implements FsAdapter {
   writes = 0;

@@ -1,3 +1,7 @@
+// `mergeInventories`: which inventory items land on pages that already exist
+// and which become new ones. Matching runs over the title/alias namespace and
+// through the sanitization that names the file, and the work-set must not
+// depend on the order the sources finished in.
 import { describe, expect, it } from "vitest";
 import { mergeInventories, type SourceInventoryEntry } from "../src/core/compile/dedup";
 import type { InventoryItem } from "../src/core/compile/inventory";

@@ -1,3 +1,6 @@
+// The page table: reading it back off disk from wiki/ frontmatter, and the
+// naming functions that put a page there — sanitizing a title, making it
+// unique across wiki/, and filing it under its kind.
 import { describe, expect, it } from "vitest";
 import {
   loadPageTable,

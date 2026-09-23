@@ -1,7 +1,7 @@
-// Assembly: "Assemble top-K whole nodes (wiki or source content) in rank
-// order under the context budget (default 40,000 tokens ≈ chars/4; K cap 12).
-// Never split a page; a single page over the whole budget is tail-truncated
-// with the marker."
+// Assembly: top-K whole nodes (wiki or source content) in rank order under
+// the context budget (default 40,000 tokens ≈ chars/4; K cap 12). A page is
+// never split; a single page over the whole budget is tail-truncated with the
+// marker.
 //
 // Every one of those rules is already `packUnderBudget`'s contract — it stops
 // at the first item that does not fit rather than cherry-picking a later small

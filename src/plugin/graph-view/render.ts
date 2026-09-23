@@ -1,7 +1,7 @@
-// Drawing: Canvas 2D, "colors and fonts from Obsidian CSS variables",
-// "node color by kind (three muted theme-derived colors + one for raw source
+// Drawing: Canvas 2D, with colors and fonts from Obsidian CSS variables. Node
+// color is by kind (three muted theme-derived colors + one for raw source
 // nodes), baseline radius ∝ log(degree+1), labels on hover plus top-10 by
-// current metric", and "degradation: drop labels first".
+// current metric. Degradation drops labels first.
 //
 // Pure: `draw` takes a frame and paints it, `hitTest` reverses the same camera
 // transform. Nothing here reads the vault, the core, or the clock, so what the
@@ -30,7 +30,7 @@ const LABEL_OFFSET = 4;
  * that is visible without competing with the nodes it connects.
  */
 const EDGE_ALPHA = 0.45;
-/** The overlay's "non-neighborhood dimmed", and the filter's "dims non-matches". */
+/** Dimming: the overlay's non-neighborhood, the filter's non-matches. */
 const DIM_OPACITY = 0.15;
 const TOP_K_STROKE = 2;
 const SEED_RING_WIDTH = 2;
@@ -78,9 +78,9 @@ export interface Frame {
  * Reads the pane's colors out of the theme in force.
  *
  * Sampled per redraw rather than cached at open, so switching dark↔light is
- * picked up without reopening the pane, as the acceptance criterion asks.
- * `getComputedStyle` resolves the variable to a concrete color, so canvas gets
- * something it can paint rather than a `var(...)` string it would ignore.
+ * picked up without reopening the pane. `getComputedStyle` resolves the
+ * variable to a concrete color, so canvas gets something it can paint rather
+ * than a `var(...)` string it would ignore.
  */
 export function sampleTheme(el: HTMLElement): Theme {
   const style = getComputedStyle(el);

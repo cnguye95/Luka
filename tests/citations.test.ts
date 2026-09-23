@@ -1,3 +1,6 @@
+// The citation block, which is the only on-disk record of a page's citers.
+// Rendering is pinned byte for byte, and render→parse has to round-trip the
+// paths a real vault produces, or a source is silently dropped next compile.
 import { describe, expect, it } from "vitest";
 import {
   parseCitationBlock,

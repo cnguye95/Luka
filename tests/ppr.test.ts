@@ -1,6 +1,5 @@
-// Personalized PageRank, and the required fixture:
-// "PPR against a hand-computed 5-node fixture, determinism across runs,
-// degree-0 handling."
+// Personalized PageRank against a hand-computed 5-node fixture, determinism
+// across runs, and degree-0 handling.
 import { describe, expect, it } from "vitest";
 import { computePPR } from "../src/core/graph/ppr";
 import type { GraphEdge, GraphSnapshot } from "../src/core/types";
@@ -250,9 +249,9 @@ describe("the caller can tell a settled vector from a truncated one", () => {
     // Measured, a chain of 2 truncates exactly as a chain of 16 does, so this
     // is not a large-vault condition; the shipped configuration truncates on
     // an ordinary topology, a reading path or a chain of prerequisite notes.
-    // Spec-compliant ("max 100") and the residual is ~1e-8, but without this
-    // flag nothing distinguishes it from a settled answer, and a change that
-    // made convergence worse would be invisible.
+    // The 100-iteration cap is respected and the residual is ~1e-8, but
+    // without this flag nothing distinguishes it from a settled answer, and a
+    // change that made convergence worse would be invisible.
     const result = computePPR(chain(12), [N("n00")], { alpha: 0.85, maxIterations: 100 });
 
     expect(result.converged).toBe(false);

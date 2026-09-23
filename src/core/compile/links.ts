@@ -1,9 +1,9 @@
 // The link post-pass.
 //
-// "A code post-pass over every generated body resolves links against the
+// A code post-pass over every generated body resolves links against the
 // title+alias table, rewriting `[[Alias]]` → `[[Title|Alias]]`; links that
 // resolve to nothing are left untouched (they are future-article signals, not
-// errors)."
+// errors).
 import { comparePaths } from "../paths";
 import type { PageMeta } from "../types";
 import { handleOf } from "./pagetable";

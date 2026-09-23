@@ -1,3 +1,7 @@
+// Ingest, through `createCore().compile()`: the manifest's four rules, source
+// discovery, and invariant 7's three sanctioned in-place writes. Most of the
+// file is the rename/derivative carry — where a source's markdown goes when
+// the source moves, and who is allowed to overwrite a file under `raw/`.
 import { describe, expect, it } from "vitest";
 import { createCore } from "../src/core/index";
 import { DEFAULT_SETTINGS, type ManifestEntry } from "../src/core/types";

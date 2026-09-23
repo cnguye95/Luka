@@ -1,3 +1,6 @@
+// The wikilink post-pass: the title/alias index, the rewrite of an alias to
+// `[[Title|Alias]]`, and the exemptions — raw source paths, heading and block
+// references — that have to survive it untouched.
 import { describe, expect, it } from "vitest";
 import { buildTitleIndex, linkTargets, resolveLinks } from "../src/core/compile/links";
 import type { PageMeta } from "../src/core/types";

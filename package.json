@@ -4,6 +4,25 @@
   "description": "Obsidian plugin that compiles dropped source documents into a linked markdown wiki with graph-based retrieval.",
   "private": true,
   "license": "Apache-2.0",
+  "author": "cnguye95",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cnguye95/Luka.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cnguye95/Luka/issues"
+  },
+  "homepage": "https://github.com/cnguye95/Luka#readme",
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "knowledge-base",
+    "wiki",
+    "graph-retrieval",
+    "personalized-pagerank",
+    "citations",
+    "llm"
+  ],
   "engines": {
     "node": ">=20"
   },

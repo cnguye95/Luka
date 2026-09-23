@@ -1,5 +1,5 @@
-// The iteration scrubber: "when an overlay was computed with snapshots, a
-// slider scrubs per-iteration PPR vectors."
+// The iteration scrubber: when an overlay was computed with snapshots, a
+// slider scrubs per-iteration PPR vectors.
 //
 // The arithmetic of that — which stops exist, which vector each one shows, and
 // what the label says — is pure, so it lives here rather than in `view.ts`

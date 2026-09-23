@@ -1,10 +1,11 @@
 // Call A — inventory.
 //
-// "per changed source: input is the normalized markdown (frontmatter stripped;
-// body only); output is strict JSON `{ "source_summary": str, "items":
-// [{ "title": str, "kind": "entity"|"concept", "aliases": [str], "summary":
-// str }] }`. Prompt must instruct: qualified titles for ambiguous names
-// ("Mercury (element)"); aliases include obvious variants; temperature 0."
+// Per changed source, the input is the normalized markdown (frontmatter
+// stripped; body only); the output is strict JSON `{ "source_summary": str,
+// "items": [{ "title": str, "kind": "entity"|"concept", "aliases": [str],
+// "summary": str }] }`. The prompt must instruct: qualified titles for
+// ambiguous names ("Mercury (element)"); aliases include obvious variants;
+// temperature 0.
 //
 // Temperature 0 is not set here: the wrapper fixes it for every `json: true`
 // task, so this module cannot get it wrong.

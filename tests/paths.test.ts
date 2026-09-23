@@ -1,3 +1,5 @@
+// The path primitives every module normalizes and compares through, and the
+// `_`-prefix test invariant 8 is enforced with.
 import { describe, expect, it } from "vitest";
 import {
   basename,

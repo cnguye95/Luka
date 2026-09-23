@@ -1,13 +1,13 @@
 // Call B — page generation, plus the code-written half of every page
 // (invariant 5).
 //
-// "input is title, kind, aliases, and the full normalized bodies of *all*
+// The input is title, kind, aliases, and the full normalized bodies of *all*
 // citing sources (token-budgeted using the same context-budget default as
 // retrieval, whole sources in citation order, truncation marker if the budget
 // forces it); never the old page text. The citation block is the persistent
 // citer record: a page's citing set = surviving entries of its existing block
 // ∪ this run's inventory matches; the block is rewritten from that set
-// afterward. Output is the page body prose with [[wikilinks]]."
+// afterward. The output is the page body prose with [[wikilinks]].
 import type { FsAdapter } from "../adapters";
 import { decodeUtf8 } from "../hash";
 import { sourceWithoutContent, truncatedForContextBudget } from "../markers";

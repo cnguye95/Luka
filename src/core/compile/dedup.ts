@@ -1,9 +1,9 @@
 // Merge — all inventories in the run become one work-set.
 //
-// "Dedup: case-insensitive match of each item's title and aliases against the
-// existing title+alias table (kind ignored). Match → that page gains this
+// Dedup is a case-insensitive match of each item's title and aliases against
+// the existing title+alias table (kind ignored). Match → that page gains this
 // source as a citer and is queued for regeneration. No match → new page
-// queued. Also queued: every page citing a modified/deleted source."
+// queued. Also queued: every page citing a modified/deleted source.
 //
 // The "existing title+alias table" is exactly `buildTitleTable`, which
 // already folds case and Unicode form and already resolves competing aliases

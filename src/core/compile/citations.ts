@@ -1,11 +1,11 @@
 // The citation block: code-written, at page foot,
 // idempotently regenerated. Every wiki page has one.
 //
-// It is load-bearing beyond display: "The citation block is the
-// persistent citer record" — a page's citing set on the next compile is read
-// back out of the block written on this one. Parsing must therefore recover
-// exactly what rendering wrote, for every path a user can create, and a page
-// must never end up with two blocks for the next run to disagree about.
+// It is load-bearing beyond display: the citation block is the persistent
+// citer record — a page's citing set on the next compile is read back out of
+// the block written on this one. Parsing must therefore recover exactly what
+// rendering wrote, for every path a user can create, and a page must never end
+// up with two blocks for the next run to disagree about.
 
 const START = "<!-- citations:start -->";
 const END = "<!-- citations:end -->";

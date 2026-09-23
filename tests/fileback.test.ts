@@ -1,5 +1,4 @@
-// Filing. The minimum test set names "fileback move + trace strip +
-// collision suffix".
+// Filing: fileback move, trace strip and collision suffix.
 import { describe, expect, it } from "vitest";
 import { fileBack } from "../src/core/answer/fileback";
 import { MemFs } from "./helpers/memfs";

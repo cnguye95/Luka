@@ -1,14 +1,14 @@
-// The retrieval, ask and filing acceptance criteria, on the demo corpus.
+// Retrieval, ask and filing, on the demo corpus.
 //
-// "AC: eval CI mode runs and reports; asking on the compiled demo vault yields
-// an answer note whose inline links all validate; filing moves the note and the
-// next compile ingests it (test asserts its source page exists); busy-lock
-// notice verified."
+// Four behaviours: eval CI mode runs and reports; asking on the compiled demo
+// vault yields an answer note whose inline links all validate; filing moves
+// the note and the next compile ingests it (this test asserts its source page
+// exists); the busy-lock notice.
 //
 // The first is `npm run eval` and `tests/eval-*.test.ts`; the last is asserted
 // at core level in `ask.test.ts` and on screen by the manual checklist. The
 // middle two are here, over a real filesystem with real pdf.js, because a
-// stand-in vault would not be the corpus the criterion names.
+// stand-in vault would not be the demo corpus itself.
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";

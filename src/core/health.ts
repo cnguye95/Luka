@@ -1,10 +1,10 @@
 // The health check.
 //
-// "'Luka: Health check' rewrites `wiki/_health.md` wholesale from one vault
-// scan, no model calls: unresolved wikilinks grouped by target (labeled
-// 'article candidates'), orphan pages (no inbound links), citation entries
-// pointing at raw files absent from the manifest, filed answer-sources list
-// with ages, and count summaries."
+// The `Luka: Health check` command rewrites `wiki/_health.md` wholesale from
+// one vault scan, no model calls: unresolved wikilinks grouped by target
+// (labeled 'article candidates'), orphan pages (no inbound links), citation
+// entries pointing at raw files absent from the manifest, filed
+// answer-sources list with ages, and count summaries.
 //
 // Every section is a question about the vault that has a right answer today and
 // a different one tomorrow, which is why the file is rewritten wholesale rather

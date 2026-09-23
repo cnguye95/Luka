@@ -1,3 +1,7 @@
+// Call B and the code that writes around it: the prompt the model is shown,
+// the citer union that decides whether a page still has a reason to exist, and
+// `renderPage`, which composes frontmatter, resolved links and the citation
+// block out of prose the model wrote (invariant 5).
 import { describe, expect, it } from "vitest";
 import { parseCitationBlock } from "../src/core/compile/citations";
 import {

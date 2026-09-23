@@ -1,3 +1,5 @@
+// The marker strings: their fixed wording, and the guard that keeps each one a
+// single HTML comment however hostile the name interpolated into it.
 import { describe, expect, it } from "vitest";
 import {
   imageNotFetched,
