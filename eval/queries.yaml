@@ -17,9 +17,10 @@
 # Each mode carries two sets. The outer three are the mean over all 16 queries.
 # The `ranking` three are the mean over only the queries marked `*` in the
 # harness's output: the ones whose expected pages are not all force-included as
-# seeds by the force-include rule. For the other 8 the answer is already a seed before
-# ranking begins, so they score 1.00/1.00/1.000 whatever the ranker does, and
-# carrying them in the only mean with a floor is what let a PPR regression pass.
+# seeds by the force-include rule. For the other 8 the answer is already a seed
+# before ranking begins, so they score at or near 1.00/1.00/1.000 in both modes
+# and barely move when the ranker changes, and carrying them in the only mean
+# with a floor is what let a PPR regression pass.
 
 # How many of the queries below land in the ranking-only subset. Pinned so a
 # break in the harness's own seeding wiring fails rather than silently

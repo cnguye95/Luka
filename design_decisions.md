@@ -17,10 +17,32 @@ template:
 
 ## Contents
 
+- [How Luka works](#how-luka-works)
 - [Principles](#principles)
 - [Decisions](#decisions)
 - [Deliberately not built](#deliberately-not-built)
 - [Known limitations, accepted](#known-limitations-accepted)
+
+## How Luka works
+
+*** Nothing runs until the user invokes a command. ***
+
+**Compile.** Luka finds the files in `raw/` that changed since the last run,
+gives each non-markdown file a markdown *derivative*, and has the model write
+wiki pages from them. The model writes only prose. Code writes the links,
+frontmatter and citations.
+
+**Ask.** The model picks *seed* pages from the wiki's index, and Luka ranks
+pages outward from them by Personalized PageRank over the wiki's links, or by
+keyword score on a small vault. The model answers from the top pages, and the
+answer is saved as a note with its sources and a retrieval trace.
+
+**See.** The graph pane draws the wiki without ever writing to it, and can
+replay an answer's retrieval or step through the ranking one iteration at a
+time.
+
+**File.** Filing an answer moves it into `raw/answers/`, so the next compile
+ingests it as a source whose links improve later retrieval.
 
 ## Principles
 
@@ -283,8 +305,9 @@ vault.
 **Validation.** Deleting the float branch fails exactly seven tests, and
 deleting the recorded-path fallback exactly one. Those two counts are re-run
 after any change to the page table or the graph builder, because both feed the
-rename path. The churn sweep carries a classifier that fails if anything
-settles into permanent failure while holding intact markdown of its own.
+rename path. The churn sweep also carries a check for the deadlock this
+decision fixes, but it has never fired, even with the float branch deleted, so
+it is no evidence either way; see the Evaluation limitations.
 
 ### 8. User files get three writes, and deletes go to the trash
 
@@ -708,13 +731,14 @@ as seeds, pinned by count and by membership. `--live` runs the real seed call,
 prints the same metrics, applies no floors, and never runs in CI.
 
 **Alternatives.** A hand-authored vault — a second implementation of the
-manifest and citation formats, which drift. A fixture generated once with a
-live key — not reproducible, and every regeneration would move the floors. One
-overall mean — eight of the sixteen queries score 1.0 whatever the ranker does,
-because their answers are seeds before ranking begins, which halves the
-amplitude of any ranking change. Flooring `--live` against floors calibrated
-from the CI-seeded subset — a good model seeds the easy queries out, and the
-hardest few fail floors set from all eight.
+manifest and citation formats, which drift. A fixture generated once with a live
+key — not reproducible, and every regeneration would move the floors. One
+overall mean — eight of the sixteen queries have answers that are seeds before
+ranking begins, so they score at or near 1.0 in both modes and barely move when
+the ranker changes, which roughly halves the amplitude of any ranking change.
+Flooring `--live` against floors calibrated from the CI-seeded subset — a good
+model seeds the easy queries out, and the hardest few fail floors set from all
+eight.
 
 **Result.** CI measures ranking and says so in the README; it says nothing
 about whether the seed call chooses well or synthesis writes a good answer. The
@@ -896,12 +920,17 @@ oversight.
 **Evaluation**
 
 - The first 8 of the 16 eval questions name every page they expect, so those
-  pages are starting points before ranking begins and score well whatever the
-  ranker does. The other 8 exercise the ranker and have their own pass-or-fail
-  floors, but nobody has yet shown those floors catching a regression that the
-  average over all sixteen would miss.
+  pages are starting points before ranking begins and score at or near perfect,
+  barely moving when the ranker changes. The other 8 exercise the ranker and
+  have their own pass-or-fail floors, but nobody has yet shown those floors
+  catching a regression that the average over all sixteen would miss.
 - The churn sweep includes a check for one failure: two sources that swap
   names and are locked out for good. It has never fired. Decision 7's floating
   derivatives prevent that failure, and even with them removed, the
   recorded-path fallback resolves the swap on its own. So the check has never
   been seen to work, and hand-written tests cover the swap directly instead.
+- Both sets of floors sit 5 points below the measured scores, so a smaller
+  regression passes CI, such as one question's first correct page slipping from
+  second to third. With only eight ranking questions each score moves in coarse
+  steps, so a tighter margin would catch little more. More ranking questions
+  would.
